@@ -65,7 +65,7 @@ export async function withRetry<T>(
 
 // ─── String / HTML helpers ────────────────────────────────────────────────────
 
-/** Escape HTML — apply to anything written to innerHTML */
+/** Escape HTML before composing markup strings. */
 export function escapeHtml(s: string): string {
 	return s
 		.replace(/&/g, "&amp;")

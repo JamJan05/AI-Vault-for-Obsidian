@@ -3,6 +3,7 @@ import {
 	ItemView,
 	MarkdownRenderer,
 	Notice,
+	setIcon,
 	WorkspaceLeaf,
 } from "obsidian";
 import type { TFile } from "obsidian";
@@ -19,9 +20,6 @@ import {
 } from "../models";
 import {
 	formatDate,
-	escapeHtml,
-	sanitizeUrl,
-	utf8ToBase64,
 	base64ToUtf8,
 } from "../utils";
 import { callOpenAI }  from "../api/openai";
@@ -35,25 +33,6 @@ import type { HistoryManager } from "../history/HistoryManager";
 import type { ProjectManager } from "../history/ProjectManager";
 import type { PluginSettings } from "../settings";
 import type { StreamUsage }    from "../api/streaming";
-
-// ─── SVG icons ────────────────────────────────────────────────────────────────
-
-const SVG = {
-	history:  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-	folder:   `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`,
-	arrow:    `<svg class="gpt-ms-arrow" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>`,
-	regen:    `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`,
-	export:   `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>`,
-	copy:     `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
-	check:    `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10a37f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
-	rag:      `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>`,
-	reindex:  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`,
-	attach:   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`,
-	web:      `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
-	learn:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`,
-	code:     `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
-	globe:    `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>`,
-};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -227,6 +206,12 @@ export class GPTChatView extends ItemView {
 		this.buildInputArea(root);
 	}
 
+	private setButtonIcon(button: HTMLElement, icon: string, label?: string): void {
+		button.empty();
+		setIcon(button, icon);
+		if (label) button.createEl("span", { text: label });
+	}
+
 	private buildHeader(root: HTMLElement): void {
 		const header = root.createEl("div", { cls: "gpt-header" });
 		header.createEl("span", { cls: "gpt-header-icon", text: "✦" });
@@ -246,11 +231,11 @@ export class GPTChatView extends ItemView {
 		this.updateProviderSwitch();
 
 		const histBtn = header.createEl("button", { cls: "gpt-icon-btn", attr: { "aria-label": t("cmd_open_history") } });
-		histBtn.innerHTML = SVG.history;
+		this.setButtonIcon(histBtn, "history");
 		histBtn.onclick   = () => void this.plugin.activateHistoryView();
 
 		const projBtn = header.createEl("button", { cls: "gpt-icon-btn", attr: { "aria-label": t("chat_projects") } });
-		projBtn.innerHTML = SVG.folder;
+		this.setButtonIcon(projBtn, "folder");
 		projBtn.onclick   = () => void this.plugin.activateProjectsView();
 
 		const clearBtn = header.createEl("button", { cls: "gpt-clear-btn", text: t("chat_new") });
@@ -305,32 +290,32 @@ export class GPTChatView extends ItemView {
 			cls:  "gpt-tool-btn" + (this.settings.ragEnabled ? " gpt-rag-btn--active" : ""),
 			attr: { title: t("chat_title_rag") },
 		});
-		this.ragToggleBtn.innerHTML = `${SVG.rag} ${t("chat_btn_rag")}`;
+		this.setButtonIcon(this.ragToggleBtn, "database", t("chat_btn_rag"));
 		this.ragToggleBtn.onclick   = () => this.toggleRag();
 
 		// Re-index
 		const reindexBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_index") } });
-		reindexBtn.innerHTML = `${SVG.reindex} ${t("chat_btn_index")}`;
+		this.setButtonIcon(reindexBtn, "refresh-cw", t("chat_btn_index"));
 		reindexBtn.onclick   = async () => { reindexBtn.disabled = true; await this.startIndexing(); reindexBtn.disabled = false; };
 
 		// Note picker
 		const pickBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_notes") } });
-		pickBtn.innerHTML = `${SVG.attach} ${t("chat_btn_notes")}`;
+		this.setButtonIcon(pickBtn, "paperclip", t("chat_btn_notes"));
 		pickBtn.onclick   = () => this.openNotePicker();
 
 		// Web search
 		this.webSearchBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_internet") } });
-		this.webSearchBtn.innerHTML = `${SVG.web} ${t("chat_btn_internet")}`;
+		this.setButtonIcon(this.webSearchBtn, "globe", t("chat_btn_internet"));
 		this.webSearchBtn.onclick   = () => this.toggleWebSearch();
 
 		// Learn mode
 		this.learnBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_learn") } });
-		this.learnBtn.innerHTML = `${SVG.learn} ${t("chat_btn_learn")}`;
+		this.setButtonIcon(this.learnBtn, "book-open", t("chat_btn_learn"));
 		this.learnBtn.onclick   = () => this.toggleLearnMode();
 
 		// Code mode
 		this.codeBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_code") } });
-		this.codeBtn.innerHTML = `${SVG.code} ${t("chat_btn_code")}`;
+		this.setButtonIcon(this.codeBtn, "code", t("chat_btn_code"));
 		this.codeBtn.onclick   = () => this.toggleCodeMode();
 
 		// Textarea
@@ -350,11 +335,11 @@ export class GPTChatView extends ItemView {
 		this.updateModeLabel();
 
 		const regenBtn = btnRow.createEl("button", { cls: "gpt-action-btn", attr: { title: t("chat_regen_tooltip") } });
-		regenBtn.innerHTML = SVG.regen;
+		this.setButtonIcon(regenBtn, "refresh-cw");
 		regenBtn.onclick   = () => void this.regenerateLastMessage();
 
 		const exportBtn = btnRow.createEl("button", { cls: "gpt-action-btn", attr: { title: t("chat_export_tooltip") } });
-		exportBtn.innerHTML = SVG.export;
+		this.setButtonIcon(exportBtn, "file-up");
 		exportBtn.onclick   = () => void this.exportToNote();
 
 		this.sendBtn = btnRow.createEl("button", { cls: "gpt-send-btn", text: t("chat_send") });
@@ -571,10 +556,11 @@ export class GPTChatView extends ItemView {
 			.replace("gpt-", "GPT-")
 			.replace("-search-api", " Search");
 
-		this.modelSelectorBtn.innerHTML =
-			`<span class="gpt-ms-icon">${icon}</span>` +
-			`<span class="gpt-ms-label">${label}</span>` +
-			SVG.arrow;
+		this.modelSelectorBtn.empty();
+		this.modelSelectorBtn.createEl("span", { cls: "gpt-ms-icon", text: icon });
+		this.modelSelectorBtn.createEl("span", { cls: "gpt-ms-label", text: label });
+		const arrow = this.modelSelectorBtn.createEl("span", { cls: "gpt-ms-arrow" });
+		setIcon(arrow, "chevron-down");
 		this.modelSelectorBtn.title = t("chat_model_tooltip", model);
 	}
 
@@ -738,7 +724,7 @@ export class GPTChatView extends ItemView {
 				if (now - lastRenderTime < RENDER_INTERVAL_MS) return;
 				lastRenderTime = now;
 				if (contentEl) {
-					contentEl.innerHTML = this.renderMarkdownFast(partial) + '<span class="gpt-cursor">▋</span>';
+					this.renderPlainTextContent(contentEl, partial, true);
 				}
 				this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
 			};
@@ -952,11 +938,11 @@ export class GPTChatView extends ItemView {
 		footer.createEl("span", { cls: "gpt-msg-label", text: role === "user" ? "You" : assistLabel });
 
 		const copyBtn = footer.createEl("button", { cls: "gpt-copy-btn", attr: { title: "Copy", "aria-label": "Copy" } });
-		copyBtn.innerHTML = SVG.copy;
+		this.setButtonIcon(copyBtn, "copy");
 		copyBtn.onclick   = async () => {
 			await navigator.clipboard.writeText(bubble.dataset.raw ?? contentEl.innerText);
-			copyBtn.innerHTML = SVG.check;
-			setTimeout(() => { copyBtn.innerHTML = SVG.copy; }, 2000);
+			this.setButtonIcon(copyBtn, "check");
+			setTimeout(() => { this.setButtonIcon(copyBtn, "copy"); }, 2000);
 		};
 
 		if (content) bubble.dataset.raw = content;
@@ -973,7 +959,8 @@ export class GPTChatView extends ItemView {
 			dots.createEl("span"); dots.createEl("span"); dots.createEl("span");
 			if (webSearch) {
 				const ind = bubble.createEl("div", { cls: "gpt-websearch-indicator" });
-				ind.innerHTML = `${SVG.globe} ${t("ws_searching_label")}`;
+				setIcon(ind, "globe");
+				ind.createEl("span", { text: t("ws_searching_label") });
 			}
 		} else {
 			bubble.removeClass("gpt-loading");
@@ -1092,58 +1079,19 @@ export class GPTChatView extends ItemView {
 			this.addCodeCopyButtons(el);
 		} catch (e) {
 			console.warn("[AI-Vault] native renderer failed, using fallback:", (e as Error)?.message);
-			el.innerHTML = this.renderMarkdownFast(text);
+			this.renderPlainTextContent(el, text);
 			this.addCodeCopyButtons(el);
 		}
 	}
 
-	/** Fast markdown parser — used ONLY during streaming (~12 times/s) */
-	private renderMarkdownFast(text: string): string {
-		const codeBlocks: { lang: string; code: string }[] = [];
-		const links:      { label: string; url: string }[] = [];
-
-		let p = text.replace(/```([\w]*)\r?\n?([\s\S]*?)```/g, (_, lang: string, code: string) => {
-			codeBlocks.push({ lang: lang || "", code });
-			return `\x00CODE${codeBlocks.length - 1}\x00`;
+	private renderPlainTextContent(el: HTMLElement, text: string, withCursor = false): void {
+		el.empty();
+		const lines = text.split("\n");
+		lines.forEach((line, idx) => {
+			if (idx > 0) el.createEl("br");
+			if (line) el.appendChild(document.createTextNode(line));
 		});
-
-		p = p.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, (_, label: string, url: string) => {
-			links.push({ label, url });
-			return `\x00LINK${links.length - 1}\x00`;
-		});
-
-		p = p.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-		p = p
-			.replace(/`([^`]+)`/g, "<code>$1</code>")
-			.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-			.replace(/\*(.+?)\*/g, "<em>$1</em>")
-			.replace(/~~(.+?)~~/g, "<s>$1</s>")
-			.replace(/^### (.+)$/gm, "<h3>$1</h3>")
-			.replace(/^## (.+)$/gm, "<h2>$1</h2>")
-			.replace(/^# (.+)$/gm, "<h1>$1</h1>")
-			.replace(/^- (.+)$/gm, "<li>$1</li>")
-			.replace(/((?:<li>[\s\S]*?<\/li>\n?)+)/g, "<ul>$1</ul>")
-			.replace(/^\d+\.\s+(.+)$/gm, "<oli>$1</oli>")
-			.replace(/((?:<oli>[\s\S]*?<\/oli>\n?)+)/g, (m) =>
-				"<ol>" + m.replace(/<\/?oli>/g, (tag) => tag.replace("oli", "li")) + "</ol>",
-			)
-			.replace(/\n{2,}/g, "<br><br>")
-			.replace(/\n/g, "<br>");
-
-		p = p.replace(/\x00LINK(\d+)\x00/g, (_, i: string) => {
-			const { label, url } = links[+i];
-			return `<a href="${escapeHtml(sanitizeUrl(url))}" target="_blank" rel="noopener noreferrer" class="gpt-link">${escapeHtml(label)}</a>`;
-		});
-
-		p = p.replace(/\x00CODE(\d+)\x00/g, (_, i: string) => {
-			const { lang, code } = codeBlocks[+i];
-			const b64      = utf8ToBase64(code);
-			const langAttr = lang ? ` data-lang="${escapeHtml(lang)}"` : "";
-			return `<div class="gpt-code-block"><pre${langAttr} data-rawcode="${b64}"><code>${escapeHtml(code)}</code></pre></div>`;
-		});
-
-		return p;
+		if (withCursor) el.createEl("span", { cls: "gpt-cursor", text: "▋" });
 	}
 
 	private addCodeCopyButtons(container: HTMLElement): void {
@@ -1165,14 +1113,14 @@ export class GPTChatView extends ItemView {
 			const copyBtn = document.createElement("button");
 			copyBtn.className = "gpt-code-copy";
 			copyBtn.title     = "Copy code";
-			copyBtn.innerHTML = `${SVG.copy} Copy`;
+			this.setButtonIcon(copyBtn, "copy", "Copy");
 			copyBtn.onclick   = async () => {
 				try {
 					await navigator.clipboard.writeText(base64ToUtf8(b64));
-					copyBtn.innerHTML = `${SVG.check} Copied!`;
+					this.setButtonIcon(copyBtn, "check", "Copied!");
 					copyBtn.classList.add("gpt-code-copy--ok");
 					setTimeout(() => {
-						copyBtn.innerHTML = `${SVG.copy} Copy`;
+						this.setButtonIcon(copyBtn, "copy", "Copy");
 						copyBtn.classList.remove("gpt-code-copy--ok");
 					}, 2000);
 				} catch (e) { console.warn("[AI-Vault] copy failed:", e); }

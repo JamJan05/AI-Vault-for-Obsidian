@@ -49,6 +49,37 @@ export class GPTSettingsTab extends PluginSettingTab {
 		this.renderStorage(containerEl);
 	}
 
+	private renderSafeInlineMarkup(el: HTMLElement, markup: string): void {
+		el.empty();
+		const stack: HTMLElement[] = [el];
+		const tokens = markup.split(/(<\/?(?:strong|em|code|br)\b[^>]*>|&nbsp;)/gi);
+
+		for (const token of tokens) {
+			if (!token) continue;
+			const parent = stack[stack.length - 1];
+			const tagMatch = token.match(/^<\/?(strong|em|code|br)\b[^>]*>$/i);
+
+			if (tagMatch) {
+				const tag = tagMatch[1].toLowerCase();
+				const isClosing = token.startsWith("</");
+				if (tag === "br") {
+					parent.createEl("br");
+				} else if (isClosing) {
+					if (stack.length > 1) stack.pop();
+				} else if (tag === "strong") {
+					stack.push(parent.createEl("strong"));
+				} else if (tag === "em") {
+					stack.push(parent.createEl("em"));
+				} else {
+					stack.push(parent.createEl("code"));
+				}
+				continue;
+			}
+
+			parent.appendChild(document.createTextNode(token === "&nbsp;" ? "\u00a0" : token));
+		}
+	}
+
 	// ── Sections ───────────────────────────────────────────────────────────────
 
 	private renderLanguage(el: HTMLElement): void {
@@ -71,7 +102,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 
 	private renderKeyWarning(el: HTMLElement): void {
 		const warning = el.createEl("div", { cls: "gpt-settings-warning" });
-		warning.innerHTML = t("settings_keys_local_warning_html");
+		this.renderSafeInlineMarkup(warning, t("settings_keys_local_warning_html"));
 	}
 
 	private renderApiKeySync(el: HTMLElement): void {
@@ -334,10 +365,10 @@ export class GPTSettingsTab extends PluginSettingTab {
 		// Status RAG
 		const s   = this.plugin.rag.stats;
 		const info = el.createEl("div", { cls: "gpt-settings-rag-status" });
-		info.innerHTML = t("rag_status",
+		this.renderSafeInlineMarkup(info, t("rag_status",
 			this.plugin.rag.indexed ? t("rag_indexed") : t("rag_not_indexed"),
 			s.files, s.chunks, s.embeddings,
-		);
+		));
 
 		new Setting(el)
 			.setName(t("settings_rag_reindex_name"))
@@ -366,15 +397,21 @@ export class GPTSettingsTab extends PluginSettingTab {
 		// Status bar
 		const info = el.createEl("div", { cls: "gpt-settings-storage-info" });
 		if (!isDesktop) {
-			info.innerHTML = t("settings_storage_mobile_full");
+			this.renderSafeInlineMarkup(info, t("settings_storage_mobile_full"));
 		} else if (isActive) {
-			info.innerHTML =
-				`✅ <strong>${t("settings_storage_active")}</strong><br>` +
-				`Obsidian Sync does not sync this data.<br><br>` +
-				`<strong>Location:</strong><br>` +
-				`<code style="font-size:11px;word-break:break-all">${currentPath}</code>`;
+			info.empty();
+			info.createEl("strong", { text: t("settings_storage_active") });
+			info.createEl("br");
+			info.appendChild(document.createTextNode("Obsidian Sync does not sync this data."));
+			info.createEl("br");
+			info.createEl("br");
+			info.createEl("strong", { text: "Location:" });
+			info.createEl("br");
+			const pathEl = info.createEl("code", { text: currentPath });
+			pathEl.style.fontSize = "11px";
+			pathEl.style.wordBreak = "break-all";
 		} else {
-			info.innerHTML = t("settings_storage_inactive_html");
+			this.renderSafeInlineMarkup(info, t("settings_storage_inactive_html"));
 		}
 
 		new Setting(el)
