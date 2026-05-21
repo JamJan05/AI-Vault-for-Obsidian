@@ -75,6 +75,7 @@ Full interface in **English** and **Polish**.
 |macOS   |✅ Supported                           |
 |Linux   |✅ Supported                           |
 
+
 -----
 
 ## 🚀 Installation
