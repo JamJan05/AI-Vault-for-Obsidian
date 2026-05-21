@@ -36,7 +36,9 @@ export class GPTSettingsTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
-		containerEl.createEl("h2", { text: t("settings_title") });
+		new Setting(containerEl)
+			.setName(t("settings_title"))
+			.setHeading();
 
 		this.renderLanguage(containerEl);
 		this.renderKeyWarning(containerEl);
@@ -156,7 +158,9 @@ export class GPTSettingsTab extends PluginSettingTab {
 		const keysStoredLocal = !keysInSync && extEnabled;
 		const keysLocation    = keysStoredLocal ? t("settings_key_local") : t("settings_key_sync");
 
-		el.createEl("h3", { text: t("settings_openai_title") });
+		new Setting(el)
+			.setName(t("settings_openai_title"))
+			.setHeading();
 
 		new Setting(el)
 			.setName(t("settings_openai_key_name"))
@@ -190,7 +194,9 @@ export class GPTSettingsTab extends PluginSettingTab {
 	}
 
 	private renderOpenAISettings(el: HTMLElement): void {
-		el.createEl("h3", { text: "⚙️ " + t("settings_openai_title") + " — " + t("settings_thinking_name") });
+		new Setting(el)
+			.setName("⚙️ " + t("settings_openai_title") + " — " + t("settings_thinking_name"))
+			.setHeading();
 
 		new Setting(el)
 			.setName(t("settings_thinking_name"))
@@ -205,7 +211,9 @@ export class GPTSettingsTab extends PluginSettingTab {
 				}),
 			);
 
-		el.createEl("h4", { text: t("settings_max_tokens_title") });
+		new Setting(el)
+			.setName(t("settings_max_tokens_title"))
+			.setHeading();
 
 		new Setting(el)
 			.setName(t("settings_max_tokens_fast_name"))
@@ -213,7 +221,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 			.addText(txt => {
 				txt.inputEl.type = "number";
 				txt.inputEl.min  = "256";
-				txt.inputEl.style.width = "90px";
+				txt.inputEl.addClass("gpt-settings-input-compact");
 				txt.setValue(String(this.plugin.settings.maxTokensFast ?? 4096))
 					.onChange(async (v: string) => {
 						const n = parseInt(v, 10);
@@ -230,7 +238,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 			.addText(txt => {
 				txt.inputEl.type = "number";
 				txt.inputEl.min  = "256";
-				txt.inputEl.style.width = "90px";
+				txt.inputEl.addClass("gpt-settings-input-compact");
 				txt.setValue(String(this.plugin.settings.maxTokensNormal ?? 8192))
 					.onChange(async (v: string) => {
 						const n = parseInt(v, 10);
@@ -247,7 +255,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 			.addText(txt => {
 				txt.inputEl.type = "number";
 				txt.inputEl.min  = "256";
-				txt.inputEl.style.width = "90px";
+				txt.inputEl.addClass("gpt-settings-input-compact");
 				txt.setValue(String(this.plugin.settings.maxTokensThink ?? 16000))
 					.onChange(async (v: string) => {
 						const n = parseInt(v, 10);
@@ -282,7 +290,9 @@ export class GPTSettingsTab extends PluginSettingTab {
 	}
 
 	private renderContext(el: HTMLElement): void {
-		el.createEl("h3", { text: "💬 " + t("settings_context_title") });
+		new Setting(el)
+			.setName("💬 " + t("settings_context_title"))
+			.setHeading();
 
 		new Setting(el)
 			.setName(t("settings_context_name"))
@@ -290,7 +300,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 			.addText(txt => {
 				txt.inputEl.type = "number";
 				txt.inputEl.min  = "0";
-				txt.inputEl.style.width = "90px";
+				txt.inputEl.addClass("gpt-settings-input-compact");
 				txt.setValue(String(this.plugin.settings.maxContextMessages ?? 0))
 					.onChange(async (v: string) => {
 						const n = parseInt(v, 10);
@@ -308,7 +318,9 @@ export class GPTSettingsTab extends PluginSettingTab {
 		const keysStoredLocal = !keysInSync && extEnabled;
 		const keysLocation    = keysStoredLocal ? t("settings_key_local") : t("settings_key_sync");
 
-		el.createEl("h3", { text: t("settings_claude_title") });
+		new Setting(el)
+			.setName(t("settings_claude_title"))
+			.setHeading();
 
 		new Setting(el)
 			.setName(t("settings_claude_key_name"))
@@ -338,7 +350,9 @@ export class GPTSettingsTab extends PluginSettingTab {
 	}
 
 	private renderRAG(el: HTMLElement): void {
-		el.createEl("h3", { text: t("settings_rag_title") });
+		new Setting(el)
+			.setName(t("settings_rag_title"))
+			.setHeading();
 
 		new Setting(el)
 			.setName(t("settings_rag_enable_name"))
@@ -387,7 +401,9 @@ export class GPTSettingsTab extends PluginSettingTab {
 	}
 
 	private renderStorage(el: HTMLElement): void {
-		el.createEl("h3", { text: t("settings_storage_title") });
+		new Setting(el)
+			.setName(t("settings_storage_title"))
+			.setHeading();
 
 		const isDesktop   = this.plugin.externalStorage.isDesktop;
 		const isActive    = this.plugin.externalStorage.isEnabled;
@@ -408,8 +424,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 			info.createEl("strong", { text: "Location:" });
 			info.createEl("br");
 			const pathEl = info.createEl("code", { text: currentPath });
-			pathEl.style.fontSize = "11px";
-			pathEl.style.wordBreak = "break-all";
+			pathEl.addClass("gpt-settings-storage-path");
 		} else {
 			this.renderSafeInlineMarkup(info, t("settings_storage_inactive_html"));
 		}
@@ -438,7 +453,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 				txt.setPlaceholder("/path/to/folder (empty = auto)")
 					.setValue(this.plugin.settings.externalStoragePath ?? "")
 					.setDisabled(!isDesktop);
-				txt.inputEl.style.width = "100%";
+				txt.inputEl.addClass("gpt-settings-input-full");
 				txt.onChange(async (v: string) => {
 					this.plugin.settings.externalStoragePath = v.trim();
 					await this.plugin.saveSettings();

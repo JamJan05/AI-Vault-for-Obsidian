@@ -98,11 +98,10 @@ export class GPTProjectsView extends ItemView {
 		if (!proj) return;
 
 		const bar = root.createEl("div", { cls: "gpt-projects-active-bar" });
-		bar.style.background        = `color-mix(in srgb,${proj.color} 12%,var(--background-secondary))`;
-		bar.style.borderBottomColor = `color-mix(in srgb,${proj.color} 25%,transparent)`;
+		bar.setCssProps({ "--gpt-project-color": proj.color });
 
 		const dot = bar.createEl("span", { cls: "gpt-projects-active-dot" });
-		dot.style.background = proj.color;
+		dot.setCssProps({ "--gpt-project-color": proj.color });
 
 		bar.createEl("span", {
 			cls:  "gpt-projects-active-name",
@@ -137,16 +136,16 @@ export class GPTProjectsView extends ItemView {
 		const isActive = this.plugin.activeProjectId === proj.id;
 
 		const card = list.createEl("div", { cls: "gpt-projects-card" });
+		card.setCssProps({ "--gpt-project-color": proj.color });
 		if (isActive) {
-			card.style.borderColor  = proj.color;
-			card.style.background   = `color-mix(in srgb,${proj.color} 8%,var(--background-secondary))`;
+			card.addClass("gpt-projects-card--active");
 		}
 
 		// ── Card header ─────────────────────────────────────────────────────────
 		const top = card.createEl("div", { cls: "gpt-projects-card-top" });
 
 		const dot = top.createEl("span", { cls: "gpt-projects-card-dot" });
-		dot.style.background = proj.color;
+		dot.setCssProps({ "--gpt-project-color": proj.color });
 
 		top.createEl("span", { cls: "gpt-projects-card-name", text: proj.name });
 
@@ -154,8 +153,7 @@ export class GPTProjectsView extends ItemView {
 			cls:  "gpt-projects-card-badge",
 			text: t("projects_chat_count", sessions.length),
 		});
-		badge.style.background = `color-mix(in srgb,${proj.color} 15%,var(--background-primary))`;
-		badge.style.color      = proj.color;
+		badge.setCssProps({ "--gpt-project-color": proj.color });
 
 		// Edit button
 		const editBtn = top.createEl("button", {
@@ -182,9 +180,7 @@ export class GPTProjectsView extends ItemView {
 		// Custom prompt — badge
 		if (proj.systemPrompt) {
 			const tag = card.createEl("div", { cls: "gpt-projects-card-prompt-tag" });
-			tag.style.background   = `color-mix(in srgb,${proj.color} 10%,var(--background-primary))`;
-			tag.style.color        = proj.color;
-			tag.style.borderColor  = `color-mix(in srgb,${proj.color} 20%,transparent)`;
+			tag.setCssProps({ "--gpt-project-color": proj.color });
 			this.setIconText(tag, "pencil", t("projects_own_prompt_btn"));
 		}
 
@@ -272,8 +268,9 @@ export class GPTProjectsView extends ItemView {
 			cls:  "gpt-modal-ok",
 			text: isEdit ? "Zapisz" : t("projects_create_btn"),
 		});
-		ok.onclick = async () => {			const name = nameInput.value.trim();
-			if (!name) { nameInput.style.borderColor = "var(--color-red)"; return; }
+		ok.onclick = async () => {
+			const name = nameInput.value.trim();
+			if (!name) { nameInput.addClass("gpt-modal-input-error"); return; }
 
 			if (isEdit) {
 				await this.plugin.projects.updateProject(editProject!.id, {
@@ -299,6 +296,7 @@ export class GPTProjectsView extends ItemView {
 		nameInput.addEventListener("keydown", (e: KeyboardEvent) => {
 			if (e.key === "Enter") void (ok.onclick as (() => Promise<void>) | null)?.();
 		});
+		nameInput.addEventListener("input", () => nameInput.removeClass("gpt-modal-input-error"));
 
 		overlay.appendChild(box);
 		this.containerEl.appendChild(overlay);

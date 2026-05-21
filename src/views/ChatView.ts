@@ -183,11 +183,11 @@ export class GPTChatView extends ItemView {
 		if (!this.ragStatusEl) return;
 		this.ragStatusEl.textContent = text;
 		this.ragStatusEl.className   = `gpt-rag-status gpt-rag-${state}`;
-		this.ragStatusEl.style.display = "block";
+		this.ragStatusEl.removeClass("gpt-ctx-hidden");
 	}
 
 	private hideRagStatus(): void {
-		if (this.ragStatusEl) this.ragStatusEl.style.display = "none";
+		if (this.ragStatusEl) this.ragStatusEl.addClass("gpt-ctx-hidden");
 	}
 
 	// ── Build UI ────────────────────────────────────────────────────────────────
@@ -265,8 +265,7 @@ export class GPTChatView extends ItemView {
 	}
 
 	private buildRagStatus(root: HTMLElement): void {
-		this.ragStatusEl = root.createEl("div", { cls: "gpt-rag-status" });
-		this.ragStatusEl.style.display = "none";
+		this.ragStatusEl = root.createEl("div", { cls: "gpt-rag-status gpt-ctx-hidden" });
 	}
 
 	private buildManualBar(root: HTMLElement): void {
@@ -375,7 +374,7 @@ export class GPTChatView extends ItemView {
 				const row = list.createEl("label", { cls: "gpt-modal-row" });
 				const cb  = row.createEl("input", { attr: { type: "checkbox" } }) as HTMLInputElement;
 				cb.checked        = selected.has(f.path);
-				cb.style.accentColor = "var(--interactive-accent)";
+				cb.setCssProps({ "accent-color": "var(--interactive-accent)" });
 				cb.onchange = () => { selected.has(f.path) ? selected.delete(f.path) : selected.add(f.path); };
 				const icon = f.extension === "canvas" ? "🗂️ " : "";
 				row.createEl("span", { cls: "gpt-modal-row-label", text: icon + f.basename });
@@ -431,7 +430,11 @@ export class GPTChatView extends ItemView {
 	updateRagBadge(): void {
 		if (!this.ragBadge) return;
 		this.ragBadge.textContent   = this.settings.ragEnabled ? "RAG" : "";
-		this.ragBadge.style.display = this.settings.ragEnabled ? "inline-block" : "none";
+		if (this.settings.ragEnabled) {
+			this.ragBadge.removeClass("gpt-ctx-hidden");
+		} else {
+			this.ragBadge.addClass("gpt-ctx-hidden");
+		}
 	}
 
 	updateProjectBar(): void {
@@ -446,8 +449,10 @@ export class GPTChatView extends ItemView {
 		if (!proj) { this.projectBar.addClass("gpt-ctx-hidden"); return; }
 
 		this.projectBar.removeClass("gpt-ctx-hidden");
-		this.projectBar.style.background        = `color-mix(in srgb,${proj.color} 10%,var(--background-secondary))`;
-		this.projectBar.style.borderBottomColor = `color-mix(in srgb,${proj.color} 25%,transparent)`;
+		this.projectBar.setCssProps({
+			background:            `color-mix(in srgb,${proj.color} 10%,var(--background-secondary))`,
+			"border-bottom-color": `color-mix(in srgb,${proj.color} 25%,transparent)`,
+		});
 
 		const sessions    = this.plugin.projects.getProjectSessions(proj.id);
 		const promptBadge = proj.systemPrompt ? " " + t("projects_custom_prompt_badge") : "";
@@ -639,8 +644,10 @@ export class GPTChatView extends ItemView {
 		// Attach to document.body — avoids CSS transform issues on Obsidian panels
 		document.body.appendChild(picker);
 		const rect = this.modelSelectorBtn.getBoundingClientRect();
-		picker.style.top  = `${rect.bottom + 4}px`;
-		picker.style.left = `${rect.left}px`;
+		picker.setCssProps({
+			top:  `${rect.bottom + 4}px`,
+			left: `${rect.left}px`,
+		});
 
 		// Close on click outside the picker
 		this.pickerCloseHandler = (e: MouseEvent): void => {
@@ -978,11 +985,11 @@ export class GPTChatView extends ItemView {
 				this.abortController?.abort();
 				new Notice("⏹ Generation stopped");
 			};
-			this.sendBtn.style.display = "none";
+			this.sendBtn.addClass("gpt-ctx-hidden");
 		} else {
 			this.stopBtn?.remove();
 			this.stopBtn = null;
-			this.sendBtn.style.display = "";
+			this.sendBtn.removeClass("gpt-ctx-hidden");
 		}
 	}
 
