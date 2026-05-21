@@ -78,7 +78,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 				continue;
 			}
 
-			parent.appendChild(document.createTextNode(token === "&nbsp;" ? "\u00a0" : token));
+			parent.appendChild(parent.ownerDocument.createTextNode(token === "&nbsp;" ? "\u00a0" : token));
 		}
 	}
 
@@ -418,7 +418,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 			info.empty();
 			info.createEl("strong", { text: t("settings_storage_active") });
 			info.createEl("br");
-			info.appendChild(document.createTextNode("Obsidian Sync does not sync this data."));
+			info.appendChild(info.ownerDocument.createTextNode("Obsidian Sync does not sync this data."));
 			info.createEl("br");
 			info.createEl("br");
 			info.createEl("strong", { text: "Location:" });
