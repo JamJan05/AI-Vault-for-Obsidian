@@ -2,6 +2,7 @@ import { ItemView, setIcon, WorkspaceLeaf } from "obsidian";
 import { HISTORY_VIEW_TYPE, PROJECTS_VIEW_TYPE } from "../constants";
 import { t } from "../i18n";
 import { formatDate } from "../utils";
+import { ConfirmModal } from "./ConfirmModal";
 import type { HistoryManager } from "../history/HistoryManager";
 import type { ProjectManager } from "../history/ProjectManager";
 
@@ -108,12 +109,19 @@ export class GPTHistoryView extends ItemView {
 				attr: { "aria-label": t("history_delete_btn") },
 			});
 			this.setIconOnly(delBtn, "trash-2");
-			delBtn.onclick   = async (e: MouseEvent) => {
+			delBtn.onclick   = (e: MouseEvent) => {
 				e.stopPropagation();
-				if (!confirm(t("history_delete_chat_confirm", session.title.slice(0, 40)))) return;
-				await this.plugin.history.deleteSession(session.id);
-				if (this.plugin.currentSessionId === session.id) this.plugin.newChat();
-				this.render();
+				new ConfirmModal(
+					this.plugin.app,
+					t("history_delete_chat_confirm", session.title.slice(0, 40)),
+					async () => {
+						await this.plugin.history.deleteSession(session.id);
+						if (this.plugin.currentSessionId === session.id) this.plugin.newChat();
+						this.render();
+					},
+					t("history_delete_btn"),
+					t("chat_notes_cancel"),
+				).open();
 			};
 
 			item.createEl("div", { cls: "gpt-history-item-date",    text: formatDate(session.updatedAt) });

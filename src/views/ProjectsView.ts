@@ -2,6 +2,7 @@ import { ItemView, Notice, setIcon, WorkspaceLeaf } from "obsidian";
 import { PROJECTS_VIEW_TYPE } from "../constants";
 import { t } from "../i18n";
 import { formatDate } from "../utils";
+import { ConfirmModal } from "./ConfirmModal";
 import type { Project } from "../types";
 import type { HistoryManager } from "../history/HistoryManager";
 import type { ProjectManager } from "../history/ProjectManager";
@@ -169,12 +170,19 @@ export class GPTProjectsView extends ItemView {
 			attr: { "aria-label": t("history_delete_btn") },
 		});
 		this.setIconOnly(delBtn, "trash-2");
-		delBtn.onclick   = async (e: MouseEvent) => {
+		delBtn.onclick   = (e: MouseEvent) => {
 			e.stopPropagation();
-			if (!confirm(t("projects_delete_with_count", proj.name, sessions.length))) return;
-			if (this.plugin.activeProjectId === proj.id) this.plugin.setActiveProject(null);
-			await this.plugin.projects.deleteProject(proj.id);
-			this.render();
+			new ConfirmModal(
+				this.plugin.app,
+				t("projects_delete_with_count", proj.name, sessions.length),
+				async () => {
+					if (this.plugin.activeProjectId === proj.id) this.plugin.setActiveProject(null);
+					await this.plugin.projects.deleteProject(proj.id);
+					this.render();
+				},
+				t("history_delete_btn"),
+				t("chat_notes_cancel"),
+			).open();
 		};
 
 		// Custom prompt — badge
@@ -199,12 +207,19 @@ export class GPTProjectsView extends ItemView {
 					attr: { "aria-label": t("history_delete_btn") },
 				});
 				this.setIconOnly(chatDel, "trash-2");
-				chatDel.onclick   = async (e: MouseEvent) => {
+				chatDel.onclick   = (e: MouseEvent) => {
 					e.stopPropagation();
-					if (!confirm(t("projects_chat_delete_confirm", s.title.slice(0, 40)))) return;
-					await this.plugin.history.deleteSession(s.id);
-					if (this.plugin.currentSessionId === s.id) this.plugin.newChat();
-					this.render();
+					new ConfirmModal(
+						this.plugin.app,
+						t("projects_chat_delete_confirm", s.title.slice(0, 40)),
+						async () => {
+							await this.plugin.history.deleteSession(s.id);
+							if (this.plugin.currentSessionId === s.id) this.plugin.newChat();
+							this.render();
+						},
+						t("history_delete_btn"),
+						t("chat_notes_cancel"),
+					).open();
 				};
 
 				row.onclick = (e: MouseEvent) => {

@@ -40,6 +40,8 @@ export class ExternalStorage {
 		private readonly fallback: PluginStorage,
 	) {
 		// Detect desktop — Obsidian on desktop exposes Node via require()
+		// NOTE: Using Node.js fs/path for external storage outside the vault.
+		// This requires desktop Obsidian. See manifest.json: isDesktopOnly = true.
 		try {
 			if (
 				typeof process !== "undefined" &&
