@@ -1,0 +1,10 @@
+{
+  "id": "ai-vault",
+  "name": "AI-Vault",
+  "version": "1.0.1",
+  "minAppVersion": "1.4.0",
+  "description": "Chat with GPT and Claude directly inside your notes — RAG from your vault, history, projects and smart modes.",
+  "author": "JamJan05",
+  "authorUrl": "https://github.com/JamJan05",
+  "isDesktopOnly": false
+}

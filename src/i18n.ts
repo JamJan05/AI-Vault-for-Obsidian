@@ -1,0 +1,598 @@
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type TranslationValue = string | ((...args: any[]) => string);
+
+interface TranslationDict {
+	[key: string]: TranslationValue;
+}
+
+// ─── Translations ─────────────────────────────────────────────────────────────
+
+const en: TranslationDict = {
+	// Settings
+	settings_title:              "AI-Vault — Settings",
+	settings_keys_sync_name:     "Sync API keys via Obsidian Sync",
+	settings_keys_sync_desc_on:  "⚠️ API keys are stored in data.json — synced via Obsidian Sync. Convenient across devices, but keys reach Obsidian servers.",
+	settings_keys_sync_desc_off: "🔒 API keys stored locally (outside vault) — Obsidian Sync does not synchronize them. You need to enter the key once on each new device.",
+	settings_keys_mobile_note:   "ℹ️ Toggle unavailable on mobile — keys always stored in data.json.",
+	settings_key_local:          "🔒 Stored locally outside vault — Obsidian Sync does not synchronize it.",
+	settings_key_sync:           "☁️ Stored in data.json — synced via Obsidian Sync.",
+	settings_openai_title:       "🤖 OpenAI",
+	settings_openai_key_name:    "OpenAI API Key",
+	settings_openai_model_name:  "OpenAI Model",
+	settings_thinking_name:      "Default thinking mode",
+	settings_max_tokens_title:   "Max tokens per mode",
+	settings_max_tokens_fast_name:   "⚡ Fast — max tokens",
+	settings_max_tokens_fast_desc:   "Maximum output tokens for Fast mode (default: 4096)",
+	settings_max_tokens_normal_name: "⚖️ Normal — max tokens",
+	settings_max_tokens_normal_desc: "Maximum output tokens for Normal mode (default: 8192)",
+	settings_max_tokens_think_name:  "🧠 Think — max tokens",
+	settings_max_tokens_think_desc:  "Maximum output tokens for Think mode (default: 16000). For Claude, thinking budget = this value; actual max_tokens = this + 8000.",
+	settings_system_prompt_name: "System prompt",
+	settings_system_prompt_desc: "Global prompt. Projects with their own prompt override this one.",
+	settings_system_prompt_reset:     "Reset to default",
+	settings_system_prompt_reset_tip: "Restore the default system prompt for the current language",
+	settings_claude_title:       "🟣 Claude (Anthropic)",
+	settings_claude_key_name:    "Claude API Key",
+	settings_claude_model_name:  "Claude Model",
+	settings_context_title:      "Context window",
+	settings_context_name:       "Max messages in context",
+	settings_context_desc:       "Number of previous messages sent to the model. 0 = unlimited (current default).",
+	settings_rag_title:          "🗃️ RAG — Vault Search",
+	settings_rag_enable_name:    "Enable RAG",
+	settings_rag_enable_desc:    "Automatically search matching notes for each message.",
+	settings_rag_auto_name:      "Auto-index on startup",
+	settings_rag_auto_desc:      "Index new and changed notes when opening the chat panel.",
+	settings_rag_reindex_name:   "Re-index vault",
+	settings_rag_reindex_btn:    "Index now",
+	settings_rag_indexing:       "Indexing…",
+	settings_storage_title:      "💾 Local storage (outside vault)",
+	settings_storage_name:       "Save outside vault",
+	settings_storage_desc:       "Chat history, projects and RAG index saved in a local folder next to the vault — Obsidian Sync does not synchronize them. Desktop only.",
+	settings_storage_path_name:  "Folder path (optional)",
+	settings_storage_path_desc:  (p: string) => `Full system path. Empty = default folder next to vault. Default: ${p}`,
+	settings_storage_migrate_name: "Migrate history from vault",
+	settings_storage_migrate_desc: "Manually move existing history from the plugin folder in the vault to the external folder. Safe — files are moved, not copied.",
+	settings_storage_migrate_btn:  "Migrate now",
+	settings_storage_migrating:    "Migrating…",
+	settings_storage_open_name:  "Open folder in explorer",
+	settings_storage_open_btn:   "Open folder",
+	settings_storage_open_desc:  "Shows the history folder in the system file manager.",
+	settings_storage_active:     "✅ Active — history saved OUTSIDE vault",
+	settings_storage_inactive:   "⚠️ Disabled — history saved inside vault",
+	settings_storage_inactive_html: "⚠️ <strong>Disabled — history saved inside vault</strong><br>Obsidian Sync may synchronize chat history (uses up your GB limit).",
+	settings_storage_mobile:     "📱 Mobile device detected",
+	settings_storage_mobile_desc:"External storage outside vault works on desktop only. On mobile, data is saved in the plugin folder inside the vault.",
+	settings_storage_mobile_full:"📱 <strong>Mobile device detected</strong><br>External storage outside vault works on desktop only. On mobile, data is saved in the plugin folder inside the vault.<br><br>💡 <em>Tip:</em> To limit Obsidian Sync, disable configuration file sync (<code>.obsidian</code>) or add the plugin folder to exclusions.",
+	settings_storage_mobile_na:  "(unavailable on mobile)",
+	settings_keys_local_warning_html: "🔒 <strong>API keys are stored locally</strong> in the plugin folder inside your vault (plain text). If you sync your vault — keys are synced too.",
+	settings_lang_name:          "Language",
+	settings_lang_desc:          "Interface language for the plugin.",
+
+	// Chat view
+	chat_new:                    "New",
+	chat_history:                "History",
+	chat_projects:               "Projects",
+	chat_welcome_rag:            "RAG active — I'll automatically find matching notes.",
+	chat_welcome_hint:           "Use 📎 Notes to manually select context.",
+	chat_placeholder:            "Type a message… (Enter = send)",
+	chat_placeholder_claude:     "Type a message to Claude… (Enter = send)",
+	chat_placeholder_code:       "Describe what you want to code…",
+	chat_placeholder_learn:      "Enter a topic or type 'make a test'…",
+	chat_notes_btn:              "Notes",
+	chat_notes_title:            "Select notes for context:",
+	chat_notes_search:           "Search note or canvas…",
+	chat_notes_add:              "Add to context",
+	chat_notes_cancel:           "Cancel",
+	chat_notes_added:            (n: number) => `📎 Added ${n} file(s) to context`,
+	chat_notes_more:             (n: number) => `…and ${n} more. Narrow your search.`,
+	chat_send:                   "Send",
+	chat_stop:                   "Stop",
+	chat_copy:                   "Copy",
+	chat_copied:                 "Copied!",
+	chat_interrupted:            "⏹ Interrupted by user",
+	chat_btn_rag:                "RAG",
+	chat_btn_index:              "Index",
+	chat_btn_notes:              "Notes",
+	chat_btn_internet:           "Internet",
+	chat_btn_learn:              "Learn",
+	chat_btn_code:               "Code",
+	chat_title_rag:              "Enable/disable auto-RAG",
+	chat_title_index:            "Re-index vault",
+	chat_title_notes:            "Select notes for context (alongside RAG)",
+	chat_title_internet:         "Web search",
+	chat_title_learn:            "Learn mode — model asks questions, generates quizzes",
+	chat_title_code:             "Code mode — model as expert programmer",
+	chat_section_rag:            "🗄️ RAG (vault context)",
+	chat_model_tooltip:          (m: string) => `Current model: ${m}\nClick to change`,
+	chat_model_session_tooltip:  (title: string, model: string) => `${title}\nModel: ${model}\nClick to change`,
+	chat_mode_fast:              "⚡ Fast",
+	chat_mode_fast_desc:         "Quick response",
+	chat_mode_normal:            "⚖️ Normal",
+	chat_mode_normal_desc:       "Balanced (default)",
+	chat_mode_think:             "🧠 Thinking",
+	chat_mode_think_desc:        "Deep analysis",
+	chat_picker_openai:          "🤖 Select OpenAI model",
+	chat_picker_claude:          "🟣 Select Claude model",
+	chat_regen_tooltip:          "Regenerate last response",
+	chat_export_tooltip:         "Export conversation to note",
+	model_desc_gpt5:             "Reasoning, best",
+	model_desc_gpt5mini:         "Reasoning, faster",
+	model_desc_gpt5nano:         "Reasoning, cheapest",
+	model_desc_gpt5search:       "Web search built-in",
+	model_desc_gpt4o:            "Web search ✓",
+	model_desc_gpt4omini:        "Web search ✓, cheaper",
+	model_desc_gpt4turbo:        "Classic",
+	model_desc_opus:             "Best Claude",
+	model_desc_sonnet:           "Recommended",
+	model_desc_haiku:            "Fast, cheap",
+	model_gpt5nano_label:        "GPT-5 Nano",
+
+	// Web search
+	ws_enabled:              (m: string) => `🌐 Internet ON (${m})`,
+	ws_disabled:             "🌐 Internet OFF",
+	ws_claude_enabled:       (m: string) => `🌐 Internet ON — Claude will decide when to search (${m})`,
+	ws_gpt5search_always:    "ℹ️ GPT-5 Search has web search built-in — always active regardless of toggle.",
+	ws_unsupported:          (m: string) => `⚠️ Model ${m} does not support web search. Choose GPT-5 Search, GPT-4o or GPT-4o Mini.`,
+	ws_searching_label:      "Searching the web…",
+
+	// Modes
+	mode_code_on:            (p: string) => `💻 Code mode ON — ${p} as expert programmer`,
+	mode_code_off:           "💻 Code mode OFF",
+	mode_learn_on:           "🎓 Learn mode ON",
+	mode_learn_off:          "🎓 Learn mode OFF",
+
+	// History view
+	history_title:               "Chat History",
+	history_btn_new:             "+ New",
+	history_empty:               "No standalone chats yet",
+	history_empty_hint:          "Start a new chat in the chat panel.",
+	history_delete_confirm:      (t: string) => `Delete chat "${t}"?`,
+	history_chats_in_projects:   "Chats assigned to projects\ncan be found in the Projects tab",
+	history_delete_chat_confirm: (t: string) => `Delete chat "${t}"?`,
+	history_delete_btn:          "Delete",
+
+	// Projects view
+	projects_title:              "Projects",
+	projects_btn_back:           "← History",
+	projects_btn_new:            "+ New",
+	projects_chat_count:         (n: number) => `${n} chat${n === 1 ? "" : "s"}`,
+	projects_bar_label:          (name: string, n: number) => `📁 ${name} — ${n} chat${n === 1 ? "" : "s"} with shared context`,
+	projects_new:                "New project",
+	projects_empty:              "No projects yet",
+	projects_empty_hint:         "Create your first project to organize chats by topic.",
+	projects_empty_hint_long:    "Create a project to group related chats with shared context.",
+	projects_delete_confirm:     (n: string) => `Delete project "${n}" and all its chats?`,
+	projects_delete_with_count:  (n: string, c: number) => `Delete project "${n}"${c ? ` and unlink ${c} chats` : ""}?`,
+	projects_created:            (n: string) => `📁 Project "${n}" created`,
+	projects_updated:            (n: string) => `📁 Project "${n}" updated`,
+	projects_chat_delete_confirm:(t: string) => `Delete chat "${t}"?`,
+	projects_active:             "Active project:",
+	projects_no_chats:           "No chats yet",
+	projects_leave_btn:          "Leave",
+	projects_own_prompt_btn:     "Custom prompt",
+	projects_more_chats:         (n: number) => `…and ${n} more`,
+	projects_prompt_label:       "Project prompt (independent of global)",
+	projects_prompt_placeholder: 'E.g. "You are a marketing expert. All answers relate to our brand X strategy…"',
+	projects_prompt_hint:        "If set, this prompt REPLACES the global system prompt. Leave empty to use the global prompt.",
+	projects_create_btn:         "Create",
+	projects_custom_prompt_badge:"· ✏️ custom prompt",
+
+	// RAG
+	rag_ready_short:         (f: number, e: number) => `🗄️ RAG ready — ${f} notes (${e} embeddings)`,
+	rag_ready_full:          (f: number, e: number) => `✅ RAG ready — ${f} notes, ${e} embeddings`,
+	rag_on_notice:           "🗄️ RAG ON",
+	rag_off_notice:          "🗄️ RAG OFF",
+	rag_manual_ctx_header:   "NOTES SELECTED BY USER (+ linked via [[links]]):",
+	rag_project_ctx_header:  (n: string) => `CONTEXT FROM PROJECT "${n}" (other chats in this project — you know their content):`,
+	rag_ctx_truncated:       "[…context truncated due to limit]",
+	rag_sources_label:       "Sources:",
+	rag_indexed:             "✅ ready",
+	rag_not_indexed:         "⏳ not indexed",
+	rag_status:              (indexed: string, files: number, chunks: number, embs: number) =>
+		`<strong>Status:</strong> ${indexed} &nbsp;|&nbsp; <strong>Notes:</strong> ${files} &nbsp;|&nbsp; <strong>Chunks:</strong> ${chunks} &nbsp;|&nbsp; <strong>Embeddings:</strong> ${embs}`,
+	rag_done:                (n: number) => `✅ RAG: ${n} notes`,
+
+	// Tokens / cost
+	tokens_label:            (n: number) => `~${n} tokens`,
+	tokens_session_cost:     (v: string) => `\nSession total: ${v}`,
+
+	// Notices
+	notice_model_changed:        (m: string) => `✓ Model: ${m}`,
+	notice_keys_moved_local:     "🔒 API keys moved outside vault.",
+	notice_keys_moved_sync:      "☁️ API keys will be synced via Obsidian Sync.",
+	notice_keys_migrated:        "🔑 API keys moved outside vault.",
+	notice_fallback_switched:    (m: string) => `✅ Switched to ${m}. Retrying message…`,
+	notice_fallback_return:      (m: string) => `↩ Returned to ${m}`,
+	notice_migration_done:       (n: number, p: string) => `✅ AI-Vault: Chat history moved outside vault (${n} files).\nLocation: ${p}`,
+	notice_migration_partial:    (n: number) => `⚠️ AI-Vault: Migration partially failed — ${n} errors. Check console.`,
+	notice_migration_partial_short: (m: number, e: number) => `⚠️ Moved ${m}, errors: ${e}. Console: F12.`,
+	notice_migrated_manual:      (n: number, s: number) => `✅ Moved ${n} files (skipped ${s}).`,
+	notice_migration_failed:     (e: string) => `❌ Migration failed: ${e}`,
+	notice_export_done:          (f: string) => `📝 Exported to: ${f}`,
+	notice_export_fail:          (e: string) => `❌ Export error: ${e}`,
+	notice_manual_notes:         (n: number) => `📎 Added ${n} note(s) to context`,
+	notice_restart_required:     "⏳ Change requires plugin restart (disable/enable in Community Plugins).",
+	notice_storage_open_fail:    (e: string) => `Could not open: ${e}`,
+
+	// Fallback modal
+	fallback_title:          "⚠️ Model unavailable",
+	fallback_unavailable:    (m: string) => `Model ${m} is unavailable for your OpenAI account.`,
+	fallback_tier1:          "Most common cause: GPT-5 models require an API account with minimal spending history (Tier 1, ~$5).",
+	fallback_api_error:      "API error: ",
+	fallback_suggest:        (m: string) => `I can switch the conversation to ${m} (always works) and retry the message.`,
+	fallback_save_default:   (m: string) => ` Set ${m} as default model (you can change this in settings)`,
+	fallback_cancel:         "Cancel",
+	fallback_accept:         (m: string) => `Switch to ${m} and retry`,
+
+	// Errors
+	err_no_openai_key:       "⚠️ Set your OpenAI API key in settings.",
+	err_no_claude_key:       "⚠️ Set your Claude API key in settings.",
+	err_empty_response:      "Model returned an empty response. Please try again.",
+	err_stream:              "Streaming error",
+	err_stream_responses:    "Responses API streaming error",
+
+	// Canvas
+	canvas_parse_error:      (b: string) => `[Canvas: ${b} — JSON parse error]`,
+	canvas_no_nodes:         (b: string) => `[Canvas: ${b} — no nodes]`,
+	canvas_flow_header:      "## Flow\n",
+	canvas_content_header:   "## Content\n",
+
+	// Export
+	export_role_user:        "User",
+	export_role_assistant:   "Assistant",
+	export_no_messages:      "No messages to export.",
+	export_header:           (title: string, model: string, date: string) => `# ${title}\n\n> Model: ${model} | Date: ${date}\n\n---\n\n`,
+	export_user:             "**You:**",
+	export_assistant:        "**Assistant:**",
+
+	// Provider
+	provider_switched_gpt:   "🤖 Switched to GPT",
+	provider_switched_claude:"🟣 Switched to Claude",
+
+	// Commands
+	cmd_open_chat:           "Open AI-Vault chat panel",
+	cmd_open_history:        "Open chat history",
+	cmd_open_projects:       "Open projects",
+	cmd_summarize:           "AI-Vault: Summarize current note",
+
+	// Quiz
+	quiz_error:              "Error!",
+	quiz_no_question:        "(no question text)",
+	quiz_wrong_prefix:       "❌ Wrong. Correct answer: ",
+	quiz_correct_prefix:     "❌ Correct answer: ",
+	quiz_check_btn:          "Check",
+	quiz_eval_error:         "Evaluation error. Please try again.",
+	quiz_true_option:        "True",
+	quiz_false_option:       "False",
+	quiz_fill_placeholder:   "Type the missing word…",
+	quiz_open_placeholder:   "Type your answer…",
+	quiz_eval_prompt:        (q: string, a: string, u: string) => `Evaluate the student's answer. Question: "${q}". Model answer: "${a}". Student's answer: "${u}". Reply ONLY in JSON format: {"correct": true/false, "feedback": "brief explanation max 2 sentences"}`,
+	quiz_instruction:        "\n\nYOU ARE IN LEARN MODE. Your only task is to test the user's knowledge through tests and quizzes. When the user provides a topic or asks for a test, ALWAYS reply ONLY in JSON format (no text before or after):\n```json\n{\"title\": \"Test title\", \"questions\": [{\"type\": \"choice\", \"question\": \"Question text\", \"options\": [\"A\",\"B\",\"C\",\"D\"], \"correct\": 0, \"explanation\": \"Explanation\"}]}\n```\nQuestion types: choice (A/B/C/D), truefalse (options: [\"True\",\"False\"], correct: 0 or 1), open (open answer, answer field with model answer), fill (fill in the blank, answer field with answer). Generate 5–10 questions unless specified otherwise.",
+
+	// Code mode prompts
+	code_system_prompt_intro:   "You are an expert programmer and software architect. Your answers focus EXCLUSIVELY on coding.\n\n",
+	code_rule_1:                "- Always provide complete, ready-to-use code (not fragments)\n",
+	code_rule_2:                "- Use best practices and design patterns\n",
+	code_rule_3:                "- Explain architectural decisions briefly and concisely\n",
+	code_rule_4:                "- If the user did not specify a language, ask or choose the best one\n",
+	code_rule_4_lang:           "language\n...",
+	code_rule_5:                "- Reply in the user's language (code comments in English)\n\n",
+	code_system_prompt_closing: "Do not answer questions unrelated to programming — politely redirect to the topic of coding.",
+
+	// Storage
+	storage_save_error:      (f: string) => `Failed to save ${f}`,
+	default_system_prompt:   "You are a helpful assistant integrated with Obsidian. Reply in the user's language. Be concise, specific and helpful.",
+};
+
+const pl: TranslationDict = {
+	// Settings
+	settings_title:              "AI-Vault — Ustawienia",
+	settings_keys_sync_name:     "Synchronizuj klucze API przez Obsidian Sync",
+	settings_keys_sync_desc_on:  "⚠️ Klucze API są zapisywane w data.json — synchronizowane przez Obsidian Sync. Wygodne między urządzeniami, ale klucze trafiają na serwery Obsidian.",
+	settings_keys_sync_desc_off: "🔒 Klucze API przechowywane lokalnie (poza vaultem) — Obsidian Sync ich nie synchronizuje. Musisz wpisać klucz raz na każdym nowym urządzeniu.",
+	settings_keys_mobile_note:   "ℹ️ Przełącznik niedostępny na mobile — klucze zawsze w data.json.",
+	settings_key_local:          "🔒 Przechowywany lokalnie poza vaultem — Obsidian Sync go nie synchronizuje.",
+	settings_key_sync:           "☁️ Przechowywany w data.json — synchronizowany przez Obsidian Sync.",
+	settings_openai_title:       "🤖 OpenAI",
+	settings_openai_key_name:    "Klucz API OpenAI",
+	settings_openai_model_name:  "Model OpenAI",
+	settings_thinking_name:      "Domyślny tryb myślenia",
+	settings_max_tokens_title:   "Maks. tokeny na tryb",
+	settings_max_tokens_fast_name:   "⚡ Szybki — maks. tokeny",
+	settings_max_tokens_fast_desc:   "Maksymalna liczba tokenów wyjściowych dla trybu Szybki (domyślnie: 4096)",
+	settings_max_tokens_normal_name: "⚖️ Normalny — maks. tokeny",
+	settings_max_tokens_normal_desc: "Maksymalna liczba tokenów wyjściowych dla trybu Normalny (domyślnie: 8192)",
+	settings_max_tokens_think_name:  "🧠 Myślący — maks. tokeny",
+	settings_max_tokens_think_desc:  "Maksymalna liczba tokenów wyjściowych dla trybu Myślący (domyślnie: 16000). Dla Claude: budżet myślenia = ta wartość; rzeczywiste max_tokens = ta wartość + 8000.",
+	settings_system_prompt_name: "Prompt systemowy",
+	settings_system_prompt_desc: "Globalny prompt. Projekty z własnym promptem nadpisują ten.",
+	settings_system_prompt_reset:     "Resetuj do domyślnego",
+	settings_system_prompt_reset_tip: "Przywróć domyślny prompt systemowy dla bieżącego języka",
+	settings_claude_title:       "🟣 Claude (Anthropic)",
+	settings_claude_key_name:    "Klucz API Claude",
+	settings_claude_model_name:  "Model Claude",
+	settings_context_title:      "Okno kontekstu",
+	settings_context_name:       "Maks. wiadomości w kontekście",
+	settings_context_desc:       "Liczba poprzednich wiadomości wysyłanych do modelu. 0 = bez limitu (obecny domyślny).",
+	settings_rag_title:          "🗃️ RAG — Przeszukiwanie notatek",
+	settings_rag_enable_name:    "Włącz RAG",
+	settings_rag_enable_desc:    "Automatyczne wyszukiwanie pasujących notatek do każdej wiadomości.",
+	settings_rag_auto_name:      "Auto-indeksowanie przy starcie",
+	settings_rag_auto_desc:      "Indeksuj nowe i zmienione notatki gdy otwierasz panel chatu.",
+	settings_rag_reindex_name:   "Przeindeksuj vault",
+	settings_rag_reindex_btn:    "Indeksuj teraz",
+	settings_rag_indexing:       "Indeksowanie…",
+	settings_storage_title:      "💾 Lokalny zapis (poza vaultem)",
+	settings_storage_name:       "Zapis poza vaultem",
+	settings_storage_desc:       "Historia rozmów, projekty i indeks RAG zapisywane w lokalnym folderze obok vaultu — Obsidian Sync ich nie synchronizuje. Działa tylko na desktopie.",
+	settings_storage_path_name:  "Ścieżka folderu (opcjonalnie)",
+	settings_storage_path_desc:  (p: string) => `Pełna ścieżka systemowa. Pusta = domyślny folder obok vaultu. Domyślnie: ${p}`,
+	settings_storage_migrate_name: "Migruj historię z vaultu",
+	settings_storage_migrate_desc: "Ręcznie przenieś istniejącą historię z folderu pluginu w vaulcie do folderu zewnętrznego. Bezpieczne — pliki są przenoszone, nie kopiowane.",
+	settings_storage_migrate_btn:  "Migruj teraz",
+	settings_storage_migrating:    "Migrowanie…",
+	settings_storage_open_name:  "Otwórz folder w eksploratorze",
+	settings_storage_open_btn:   "Otwórz folder",
+	settings_storage_open_desc:  "Pokazuje folder z historią w systemowym menedżerze plików.",
+	settings_storage_active:     "✅ Aktywny — historia zapisywana POZA vaultem",
+	settings_storage_inactive:   "⚠️ Wyłączony — historia zapisywana w vaulcie",
+	settings_storage_inactive_html: "⚠️ <strong>Wyłączony — historia zapisywana w vaulcie</strong><br>Obsidian Sync może synchronizować historię rozmów (zjada limit GB).",
+	settings_storage_mobile:     "📱 Wykryto urządzenie mobilne",
+	settings_storage_mobile_desc:"Zewnętrzny zapis poza vaultem działa tylko na desktopie. Na mobile dane są zapisywane w folderze pluginu w vaulcie.",
+	settings_storage_mobile_full:"📱 <strong>Wykryto urządzenie mobilne</strong><br>Zewnętrzny zapis poza vaultem działa tylko na desktopie. Na mobile dane są zapisywane w folderze pluginu w vaulcie.<br><br>💡 <em>Tip:</em> Aby ograniczyć Obsidian Sync, w ustawieniach Sync wyłącz synchronizację plików konfiguracyjnych (<code>.obsidian</code>) lub dodaj folder pluginu do wyjątków.",
+	settings_storage_mobile_na:  "(niedostępne na mobile)",
+	settings_keys_local_warning_html: "🔒 <strong>Klucze API są zapisywane lokalnie</strong> w folderze pluginu wewnątrz Twojego vaulta (plain text). Jeśli synchronizujesz vault — klucze też się synchronizują.",
+	settings_lang_name:          "Język / Language",
+	settings_lang_desc:          "Język interfejsu wtyczki.",
+
+	// Chat view
+	chat_new:                    "Nowa",
+	chat_history:                "Historia",
+	chat_projects:               "Projekty",
+	chat_welcome_rag:            "RAG aktywny — automatycznie znajdę pasujące notatki.",
+	chat_welcome_hint:           "Użyj 📎 Notatki, aby ręcznie wybrać kontekst.",
+	chat_placeholder:            "Napisz wiadomość… (Enter = wyślij)",
+	chat_placeholder_claude:     "Napisz wiadomość do Claude… (Enter = wyślij)",
+	chat_placeholder_code:       "Opisz co chcesz zakodować…",
+	chat_placeholder_learn:      "Podaj temat lub napisz 'zrób test'…",
+	chat_notes_btn:              "Notatki",
+	chat_notes_title:            "Wybierz notatki do kontekstu:",
+	chat_notes_search:           "Szukaj notatki lub canvas…",
+	chat_notes_add:              "Dodaj do kontekstu",
+	chat_notes_cancel:           "Anuluj",
+	chat_notes_added:            (n: number) => `📎 Dodano ${n} plików do kontekstu`,
+	chat_notes_more:             (n: number) => `…i ${n} więcej. Zawęź wyszukiwanie.`,
+	chat_send:                   "Wyślij",
+	chat_stop:                   "Stop",
+	chat_copy:                   "Kopiuj",
+	chat_copied:                 "Skopiowano!",
+	chat_interrupted:            "⏹ Przerwane przez użytkownika",
+	chat_btn_rag:                "RAG",
+	chat_btn_index:              "Indeksuj",
+	chat_btn_notes:              "Notatki",
+	chat_btn_internet:           "Internet",
+	chat_btn_learn:              "Nauka",
+	chat_btn_code:               "Kodowanie",
+	chat_title_rag:              "Włącz/wyłącz auto-RAG",
+	chat_title_index:            "Przeindeksuj vault",
+	chat_title_notes:            "Wybierz notatki do kontekstu (obok RAG)",
+	chat_title_internet:         "Wyszukiwanie internetu",
+	chat_title_learn:            "Tryb nauki — model pyta, generuje quizy",
+	chat_title_code:             "Tryb kodowania — model jako ekspert programista",
+	chat_section_rag:            "🗄️ RAG (kontekst z vault)",
+	chat_model_tooltip:          (m: string) => `Aktualny model: ${m}\nKliknij aby zmienić`,
+	chat_model_session_tooltip:  (title: string, model: string) => `${title}\nModel: ${model}\nKliknij aby zmienić`,
+	chat_mode_fast:              "⚡ Szybki",
+	chat_mode_fast_desc:         "Szybka odpowiedź",
+	chat_mode_normal:            "⚖️ Normalny",
+	chat_mode_normal_desc:       "Zbalansowany (domyślny)",
+	chat_mode_think:             "🧠 Myślący",
+	chat_mode_think_desc:        "Głęboka analiza",
+	chat_picker_openai:          "🤖 Wybierz model OpenAI",
+	chat_picker_claude:          "🟣 Wybierz model Claude",
+	chat_regen_tooltip:          "Regeneruj ostatnią odpowiedź",
+	chat_export_tooltip:         "Eksportuj rozmowę do notatki",
+	model_desc_gpt5:             "Reasoning, najlepszy",
+	model_desc_gpt5mini:         "Reasoning, szybszy",
+	model_desc_gpt5nano:         "Reasoning, najtańszy",
+	model_desc_gpt5search:       "Web search wbudowany",
+	model_desc_gpt4o:            "Web search ✓",
+	model_desc_gpt4omini:        "Web search ✓, tańszy",
+	model_desc_gpt4turbo:        "Klasyczny",
+	model_desc_opus:             "Najlepszy Claude",
+	model_desc_sonnet:           "Polecany",
+	model_desc_haiku:            "Szybki, tani",
+	model_gpt5nano_label:        "GPT-5 Nano",
+
+	// Web search
+	ws_enabled:              (m: string) => `🌐 Internet WŁĄCZONY (${m})`,
+	ws_disabled:             "🌐 Internet WYŁĄCZONY",
+	ws_claude_enabled:       (m: string) => `🌐 Internet WŁĄCZONY — Claude sam zdecyduje kiedy szukać (${m})`,
+	ws_gpt5search_always:    "ℹ️ GPT-5 Search ma web search wbudowany — zawsze aktywny, niezależnie od przełącznika.",
+	ws_unsupported:          (m: string) => `⚠️ Model ${m} nie wspiera web search. Wybierz GPT-5 Search, GPT-4o lub GPT-4o Mini.`,
+	ws_searching_label:      "Przeszukuję internet…",
+
+	// Modes
+	mode_code_on:            (p: string) => `💻 Tryb kodowania WŁĄCZONY — ${p} jako ekspert programista`,
+	mode_code_off:           "💻 Tryb kodowania WYŁĄCZONY",
+	mode_learn_on:           "🎓 Tryb nauki WŁĄCZONY",
+	mode_learn_off:          "🎓 Tryb nauki WYŁĄCZONY",
+
+	// History view
+	history_title:               "Historia rozmów",
+	history_btn_new:             "+ Nowa",
+	history_empty:               "Brak luźnych rozmów",
+	history_empty_hint:          "Zacznij nową rozmowę w panelu czatu.",
+	history_delete_confirm:      (t: string) => `Usunąć czat "${t}"?`,
+	history_chats_in_projects:   "Chaty przypisane do projektów\nznajdziesz w zakładce Projekty",
+	history_delete_chat_confirm: (t: string) => `Usunąć rozmowę "${t}"?`,
+	history_delete_btn:          "Usuń",
+
+	// Projects view
+	projects_title:              "Projekty",
+	projects_btn_back:           "← Historia",
+	projects_btn_new:            "+ Nowy",
+	projects_chat_count:         (n: number) => `${n} chat${n === 1 ? "" : "ów"}`,
+	projects_bar_label:          (name: string, n: number) => `📁 ${name} — ${n} chat${n === 1 ? "" : "ów"} ze wspólnym kontekstem`,
+	projects_new:                "Nowy projekt",
+	projects_empty:              "Brak projektów",
+	projects_empty_hint:         "Utwórz pierwszy projekt aby organizować rozmowy tematycznie.",
+	projects_empty_hint_long:    "Utwórz projekt, aby grupować powiązane chaty ze wspólnym kontekstem.",
+	projects_delete_confirm:     (n: string) => `Usunąć projekt "${n}" i wszystkie jego rozmowy?`,
+	projects_delete_with_count:  (n: string, c: number) => `Usunąć projekt "${n}"${c ? ` i odłączyć ${c} rozmów` : ""}?`,
+	projects_created:            (n: string) => `📁 Projekt "${n}" utworzony`,
+	projects_updated:            (n: string) => `📁 Projekt "${n}" zaktualizowany`,
+	projects_chat_delete_confirm:(t: string) => `Usunąć czat "${t}"?`,
+	projects_active:             "Aktywny projekt:",
+	projects_no_chats:           "Brak rozmów",
+	projects_leave_btn:          "Opuść",
+	projects_own_prompt_btn:     "Własny prompt",
+	projects_more_chats:         (n: number) => `…i ${n} więcej`,
+	projects_prompt_label:       "Prompt projektu (niezależny od globalnego)",
+	projects_prompt_placeholder: 'Np. „Jesteś ekspertem od marketingu. Wszystkie odpowiedzi dotyczą strategii naszej marki X…"',
+	projects_prompt_hint:        "Gdy ustawisz ten prompt, ZASTĄPI on globalny prompt systemowy. Jeśli zostawisz puste — użyty będzie domyślny prompt.",
+	projects_create_btn:         "Utwórz",
+	projects_custom_prompt_badge:"· ✏️ własny prompt",
+
+	// RAG
+	rag_ready_short:         (f: number, e: number) => `🗄️ RAG gotowy — ${f} notatek (${e} embeddingów)`,
+	rag_ready_full:          (f: number, e: number) => `✅ RAG gotowy — ${f} notatek, ${e} embeddingów`,
+	rag_on_notice:           "🗄️ RAG WŁĄCZONY",
+	rag_off_notice:          "🗄️ RAG WYŁĄCZONY",
+	rag_manual_ctx_header:   "NOTATKI WYBRANE PRZEZ UŻYTKOWNIKA (+ powiązane przez [[linki]]):",
+	rag_project_ctx_header:  (n: string) => `KONTEKST Z PROJEKTU "${n}" (inne rozmowy w tym projekcie — znasz ich treść):`,
+	rag_ctx_truncated:       "[…kontekst obcięty ze względu na limit]",
+	rag_sources_label:       "Źródła:",
+	rag_indexed:             "✅ gotowy",
+	rag_not_indexed:         "⏳ nieindeksowany",
+	rag_status:              (indexed: string, files: number, chunks: number, embs: number) =>
+		`<strong>Status:</strong> ${indexed} &nbsp;|&nbsp; <strong>Notatki:</strong> ${files} &nbsp;|&nbsp; <strong>Chunki:</strong> ${chunks} &nbsp;|&nbsp; <strong>Embeddingi:</strong> ${embs}`,
+	rag_done:                (n: number) => `✅ RAG: ${n} notatek`,
+
+	// Tokens / cost
+	tokens_label:            (n: number) => `~${n} tokenów`,
+	tokens_session_cost:     (v: string) => `\nSesja łącznie: ${v}`,
+
+	// Notices
+	notice_model_changed:        (m: string) => `✓ Model: ${m}`,
+	notice_keys_moved_local:     "🔒 Klucze API przeniesione poza vault.",
+	notice_keys_moved_sync:      "☁️ Klucze API będą synchronizowane przez Obsidian Sync.",
+	notice_keys_migrated:        "🔑 Klucze API przeniesione poza vault.",
+	notice_fallback_switched:    (m: string) => `✅ Przełączono na ${m}. Ponawiam wiadomość…`,
+	notice_fallback_return:      (m: string) => `↩ Powrót do ${m}`,
+	notice_migration_done:       (n: number, p: string) => `✅ AI-Vault: Historia rozmów przeniesiona poza vault (${n} plików).\nLokalizacja: ${p}`,
+	notice_migration_partial:    (n: number) => `⚠️ AI-Vault: Migracja częściowo nieudana — ${n} błędów. Sprawdź konsolę.`,
+	notice_migration_partial_short: (m: number, e: number) => `⚠️ Przeniesiono ${m}, błędów: ${e}. Konsola: F12.`,
+	notice_migrated_manual:      (n: number, s: number) => `✅ Przeniesiono ${n} plików (pominięto ${s}).`,
+	notice_migration_failed:     (e: string) => `❌ Migracja nieudana: ${e}`,
+	notice_export_done:          (f: string) => `📝 Wyeksportowano do: ${f}`,
+	notice_export_fail:          (e: string) => `❌ Błąd eksportu: ${e}`,
+	notice_manual_notes:         (n: number) => `📎 Dodano ${n} notatek do kontekstu`,
+	notice_restart_required:     "⏳ Zmiana wymaga restartu pluginu (wyłącz/włącz w Community Plugins).",
+	notice_storage_open_fail:    (e: string) => `Nie udało się otworzyć: ${e}`,
+
+	// Fallback modal
+	fallback_title:          "⚠️ Model niedostępny",
+	fallback_unavailable:    (m: string) => `Model ${m} jest niedostępny dla Twojego konta OpenAI.`,
+	fallback_tier1:          "Najczęstsza przyczyna: modele GPT-5 wymagają konta API z minimalnymi wydatkami (Tier 1, ok. $5 historii płatności).",
+	fallback_api_error:      "Błąd API: ",
+	fallback_suggest:        (m: string) => `Mogę przełączyć rozmowę na ${m} (działa zawsze) i ponowić wiadomość.`,
+	fallback_save_default:   (m: string) => ` Ustaw ${m} jako domyślny model (możesz zmienić w ustawieniach)`,
+	fallback_cancel:         "Anuluj",
+	fallback_accept:         (m: string) => `Przełącz na ${m} i ponów`,
+
+	// Errors
+	err_no_openai_key:       "⚠️ Ustaw klucz API OpenAI w ustawieniach.",
+	err_no_claude_key:       "⚠️ Ustaw klucz API Claude w ustawieniach.",
+	err_empty_response:      "Model zwrócił pustą odpowiedź. Spróbuj ponownie.",
+	err_stream:              "Błąd streamingu",
+	err_stream_responses:    "Błąd streamingu Responses API",
+
+	// Canvas
+	canvas_parse_error:      (b: string) => `[Canvas: ${b} — błąd parsowania JSON]`,
+	canvas_no_nodes:         (b: string) => `[Canvas: ${b} — brak węzłów]`,
+	canvas_flow_header:      "## Przepływ\n",
+	canvas_content_header:   "## Zawartość\n",
+
+	// Export
+	export_role_user:        "Użytkownik",
+	export_role_assistant:   "Asystent",
+	export_no_messages:      "Brak wiadomości do eksportu.",
+	export_header:           (title: string, model: string, date: string) => `# ${title}\n\n> Model: ${model} | Data: ${date}\n\n---\n\n`,
+	export_user:             "**Ty:**",
+	export_assistant:        "**Asystent:**",
+
+	// Provider
+	provider_switched_gpt:   "🤖 Przełączono na GPT",
+	provider_switched_claude:"🟣 Przełączono na Claude",
+
+	// Commands
+	cmd_open_chat:           "Otwórz panel czatu AI-Vault",
+	cmd_open_history:        "Otwórz historię rozmów",
+	cmd_open_projects:       "Otwórz projekty",
+	cmd_summarize:           "AI-Vault: Podsumuj aktualną notatkę",
+
+	// Quiz
+	quiz_error:              "Błąd!",
+	quiz_no_question:        "(brak treści pytania)",
+	quiz_wrong_prefix:       "❌ Źle. Poprawna odpowiedź: ",
+	quiz_correct_prefix:     "❌ Poprawna odpowiedź: ",
+	quiz_check_btn:          "Sprawdź",
+	quiz_eval_error:         "Błąd oceniania. Spróbuj ponownie.",
+	quiz_true_option:        "Prawda",
+	quiz_false_option:       "Fałsz",
+	quiz_fill_placeholder:   "Wpisz brakujące słowo…",
+	quiz_open_placeholder:   "Wpisz odpowiedź…",
+	quiz_eval_prompt:        (q: string, a: string, u: string) => `Oceń odpowiedź ucznia. Pytanie: "${q}". Wzorcowa odpowiedź: "${a}". Odpowiedź ucznia: "${u}". Odpowiedz TYLKO w formacie JSON: {"correct": true/false, "feedback": "krótkie wyjaśnienie max 2 zdania"}`,
+	quiz_instruction:        "\n\nJESTEŚ W TRYBIE NAUKI. Twoim jedynym zadaniem jest sprawdzanie wiedzy użytkownika przez testy i quizy. Gdy użytkownik poda temat lub poprosi o test, ZAWSZE zwróć odpowiedź WYŁĄCZNIE w formacie JSON (bez żadnego tekstu przed ani po):\n```json\n{\"title\": \"Tytuł testu\", \"questions\": [{\"type\": \"choice\", \"question\": \"Treść pytania\", \"options\": [\"A\",\"B\",\"C\",\"D\"], \"correct\": 0, \"explanation\": \"Wyjaśnienie\"}]}\n```\nTypy pytań: choice (A/B/C/D), truefalse (options: [\"Prawda\",\"Fałsz\"], correct: 0 lub 1), open (odpowiedź otwarta, pole answer z wzorcową odpowiedzią), fill (uzupełnij lukę, pole answer z odpowiedzią). Generuj 5–10 pytań jeśli nie podano inaczej.",
+
+	// Code mode prompts
+	code_system_prompt_intro:   "Jesteś ekspertem programistą i architektem oprogramowania. Twoje odpowiedzi skupiają się WYŁĄCZNIE na kodowaniu.\n\n",
+	code_rule_1:                "- Zawsze podawaj pełny, gotowy do użycia kod (nie fragmenty)\n",
+	code_rule_2:                "- Używaj najlepszych praktyk i wzorców projektowych\n",
+	code_rule_3:                "- Wyjaśniaj decyzje architektoniczne krótko i konkretnie\n",
+	code_rule_4:                "- Jeśli użytkownik nie podał języka, zapytaj lub dobierz najlepszy\n",
+	code_rule_4_lang:           "język\n...",
+	code_rule_5:                "- Odpowiadaj w języku polskim (komentarze w kodzie po angielsku)\n\n",
+	code_system_prompt_closing: "Nie odpowiadaj na pytania niezwiązane z programowaniem — grzecznie przekieruj na temat kodowania.",
+
+	// Storage
+	storage_save_error:      (f: string) => `Nie udało się zapisać ${f}`,
+	default_system_prompt:   "Jesteś pomocnym asystentem zintegrowanym z Obsidian. Odpowiadaj w języku użytkownika. Bądź zwięzły, konkretny i pomocny.",
+};
+
+// ─── Runtime ──────────────────────────────────────────────────────────────────
+
+let _lang: "en" | "pl" = "en";
+
+/**
+ * Translation function.
+ * Usage: t("chat_new") or t("chat_notes_added", 3)
+ */
+export function t(key: string, ...args: unknown[]): string {
+	const dict  = _lang === "pl" ? pl : en;
+	const val   = dict[key] ?? en[key] ?? key;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	return typeof val === "function" ? (val as (...a: any[]) => string)(...args) : (val as string);
+}
+
+/**
+ * Sets the active language and updates the default system prompt if it is still the default.
+ */
+export function setLanguage(lang: string, plugin?: { settings: { systemPrompt: string } }): void {
+	_lang = lang === "pl" ? "pl" : "en";
+
+	if (plugin) {
+		const allDefaults = [en.default_system_prompt as string, pl.default_system_prompt as string];
+		const current = plugin.settings.systemPrompt || "";
+		if (!current || allDefaults.includes(current)) {
+			plugin.settings.systemPrompt = t("default_system_prompt");
+		}
+	}
+}
+
+export function getCurrentLang(): "en" | "pl" {
+	return _lang;
+}
