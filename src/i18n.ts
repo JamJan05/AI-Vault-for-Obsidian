@@ -251,10 +251,10 @@ const en: TranslationDict = {
 	provider_switched_claude:"🟣 Switched to Claude",
 
 	// Commands
-	cmd_open_chat:           "Open AI-Vault chat panel",
+	cmd_open_chat:           "Open chat panel",
 	cmd_open_history:        "Open chat history",
 	cmd_open_projects:       "Open projects",
-	cmd_summarize:           "AI-Vault: Summarize current note",
+	cmd_summarize:           "Summarize current note",
 
 	// Quiz
 	quiz_error:              "Error!",
@@ -528,10 +528,10 @@ const pl: TranslationDict = {
 	provider_switched_claude:"🟣 Przełączono na Claude",
 
 	// Commands
-	cmd_open_chat:           "Otwórz panel czatu AI-Vault",
+	cmd_open_chat:           "Otwórz panel czatu",
 	cmd_open_history:        "Otwórz historię rozmów",
 	cmd_open_projects:       "Otwórz projekty",
-	cmd_summarize:           "AI-Vault: Podsumuj aktualną notatkę",
+	cmd_summarize:           "Podsumuj aktualną notatkę",
 
 	// Quiz
 	quiz_error:              "Błąd!",
