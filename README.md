@@ -74,8 +74,6 @@ Full interface in **English** and **Polish**.
 |Windows |✅ Supported                           |
 |macOS   |✅ Supported                           |
 |Linux   |✅ Supported                           |
-|iOS     |✅ Supported                           |
-|Android |⚠️ Should work (not extensively tested)|
 
 The plugin is **not desktop-only** — it runs on mobile devices as well.
 
