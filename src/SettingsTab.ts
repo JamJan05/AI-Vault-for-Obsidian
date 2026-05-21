@@ -413,7 +413,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 		// Status bar
 		const info = el.createEl("div", { cls: "gpt-settings-storage-info" });
 		if (!isDesktop) {
-			this.renderSafeInlineMarkup(info, t("settings_storage_mobile_full"));
+			this.renderSafeInlineMarkup(info, t("settings_storage_mobile_full", this.app.vault.configDir));
 		} else if (isActive) {
 			info.empty();
 			info.createEl("strong", { text: t("settings_storage_active") });

@@ -16,7 +16,7 @@ export class PluginStorage {
 		this.adapter = plugin.app.vault.adapter;
 	}
 
-	/** Plugin folder inside the vault config (.obsidian/plugins/<id>) */
+	/** Plugin folder inside the vault config directory. */
 	get baseDir(): string {
 		return (
 			this.plugin.manifest.dir ||

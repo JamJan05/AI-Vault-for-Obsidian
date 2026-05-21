@@ -3,7 +3,7 @@ import { RAG_CHUNK_OVERLAP, RAG_CHUNK_SIZE } from "./constants";
 // ─── Async helpers ────────────────────────────────────────────────────────────
 
 export function sleep(ms: number): Promise<void> {
-	return new Promise(r => setTimeout(r, ms));
+	return new Promise(r => window.setTimeout(r, ms));
 }
 
 // ─── Debounce ─────────────────────────────────────────────────────────────────
@@ -14,15 +14,15 @@ interface DebouncedFn<T extends unknown[]> {
 }
 
 export function debounce<T extends unknown[]>(fn: (...args: T) => void, delay: number): DebouncedFn<T> {
-	let timer: ReturnType<typeof setTimeout> | null = null;
+	let timer: number | null = null;
 
 	const debounced = (...args: T): void => {
-		if (timer) clearTimeout(timer);
-		timer = setTimeout(() => { timer = null; fn(...args); }, delay);
+		if (timer) window.clearTimeout(timer);
+		timer = window.setTimeout(() => { timer = null; fn(...args); }, delay);
 	};
 
 	debounced.cancel = (): void => {
-		if (timer) { clearTimeout(timer); timer = null; }
+		if (timer) { window.clearTimeout(timer); timer = null; }
 	};
 
 	return debounced;

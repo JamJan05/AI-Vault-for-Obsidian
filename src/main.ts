@@ -91,7 +91,7 @@ export default class GPTPlugin extends Plugin {
 				const sel = editor.getSelection();
 				if (!sel) { new Notice("Select text first."); return; }
 				const view = await this.activateChatView();
-				await new Promise(r => setTimeout(r, 300));
+				await new Promise(r => window.setTimeout(r, 300));
 				void view?.sendMessage(`Analyze:\n\n${sel}`);
 			},
 		});
@@ -103,7 +103,7 @@ export default class GPTPlugin extends Plugin {
 				const c = editor.getValue();
 				if (!c.trim()) { new Notice("Note is empty."); return; }
 				const view = await this.activateChatView();
-				await new Promise(r => setTimeout(r, 300));
+				await new Promise(r => window.setTimeout(r, 300));
 				void view?.sendMessage(`Summarize in 5 points:\n\n${c.slice(0, 8000)}`);
 			},
 		});
@@ -142,12 +142,12 @@ export default class GPTPlugin extends Plugin {
 			if (!sel) return;
 			menu.addItem(i => i.setTitle("✦ AI-Vault: Analyze").setIcon("message-square").onClick(async () => {
 				const v = await this.activateChatView();
-				await new Promise(r => setTimeout(r, 300));
+				await new Promise(r => window.setTimeout(r, 300));
 				void v?.sendMessage(`Analyze:\n\n${sel}`);
 			}));
 			menu.addItem(i => i.setTitle("✦ AI-Vault: Summarize").setIcon("list").onClick(async () => {
 				const v = await this.activateChatView();
-				await new Promise(r => setTimeout(r, 300));
+				await new Promise(r => window.setTimeout(r, 300));
 				void v?.sendMessage(`Summarize in 3 points:\n\n${sel}`);
 			}));
 		}));

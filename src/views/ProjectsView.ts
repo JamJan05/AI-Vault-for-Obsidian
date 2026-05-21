@@ -228,10 +228,11 @@ export class GPTProjectsView extends ItemView {
 
 	showCreateDialog(editProject?: Project): void {
 		const isEdit  = !!editProject;
-		const overlay = document.createElement("div");
+		const doc     = this.containerEl.ownerDocument;
+		const overlay = doc.createElement("div");
 		overlay.className = "gpt-modal-overlay";
 
-		const box = document.createElement("div");
+		const box = doc.createElement("div");
 		box.className = "gpt-modal-box";
 
 		box.createEl("p", {
@@ -300,6 +301,6 @@ export class GPTProjectsView extends ItemView {
 
 		overlay.appendChild(box);
 		this.containerEl.appendChild(overlay);
-		setTimeout(() => nameInput.focus(), 50);
+		window.setTimeout(() => nameInput.focus(), 50);
 	}
 }

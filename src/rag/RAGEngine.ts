@@ -55,7 +55,7 @@ export class RAGEngine {
 	private index:       RAGEntry[] = [];
 	private fileHashes:  Record<string, string> = {};
 	private cachedAvgLen = 0;
-	private saveTimer:   ReturnType<typeof setTimeout> | null = null;
+	private saveTimer:   number | null = null;
 
 	indexed  = false;
 	indexing = false;
@@ -117,15 +117,15 @@ export class RAGEngine {
 	}
 
 	scheduleSave(): void {
-		if (this.saveTimer) clearTimeout(this.saveTimer);
-		this.saveTimer = setTimeout(() => {
+		if (this.saveTimer) window.clearTimeout(this.saveTimer);
+		this.saveTimer = window.setTimeout(() => {
 			this.saveTimer = null;
 			void this.saveIndex();
 		}, SAVE_DELAY_MS);
 	}
 
 	async saveIndexNow(): Promise<void> {
-		if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
+		if (this.saveTimer) { window.clearTimeout(this.saveTimer); this.saveTimer = null; }
 		await this.saveIndex();
 	}
 

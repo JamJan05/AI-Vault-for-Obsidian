@@ -147,7 +147,8 @@ export class GPTChatView extends ItemView {
 		this.abortController = null;
 
 		if (this.pickerCloseHandler) {
-			document.removeEventListener("mousedown", this.pickerCloseHandler);
+			const doc = this.currentPicker?.ownerDocument ?? this.containerEl.ownerDocument;
+			doc.removeEventListener("mousedown", this.pickerCloseHandler);
 			this.pickerCloseHandler = null;
 		}
 		this.currentPicker?.remove();
@@ -164,7 +165,7 @@ export class GPTChatView extends ItemView {
 		} else {
 			const s = this.rag.stats;
 			this.showRagStatus(t("rag_ready_short", s.files, s.embeddings), "ready");
-			setTimeout(() => this.hideRagStatus(), 3500);
+			window.setTimeout(() => this.hideRagStatus(), 3500);
 		}
 	}
 
@@ -176,7 +177,7 @@ export class GPTChatView extends ItemView {
 		});
 		const s = this.rag.stats;
 		this.showRagStatus(t("rag_ready_full", s.files, s.embeddings), "ready");
-		setTimeout(() => this.hideRagStatus(), 4000);
+		window.setTimeout(() => this.hideRagStatus(), 4000);
 	}
 
 	private showRagStatus(text: string, state: "indexing" | "ready"): void {
@@ -351,10 +352,11 @@ export class GPTChatView extends ItemView {
 		const mdFiles     = this.plugin.app.vault.getMarkdownFiles();
 		const canvasFiles = this.plugin.app.vault.getFiles().filter((f: TFile) => f.extension === "canvas");
 		const files       = [...mdFiles, ...canvasFiles].sort((a, b) => a.basename.localeCompare(b.basename));
+		const doc         = this.containerEl.ownerDocument;
 
-		const overlay = document.createElement("div");
+		const overlay = doc.createElement("div");
 		overlay.className = "gpt-modal-overlay";
-		const box = document.createElement("div");
+		const box = doc.createElement("div");
 		box.className = "gpt-modal-box";
 
 		box.createEl("p", { cls: "gpt-modal-title", text: t("chat_notes_title") });
@@ -403,7 +405,7 @@ export class GPTChatView extends ItemView {
 
 		overlay.appendChild(box);
 		this.containerEl.appendChild(overlay);
-		setTimeout(() => searchInput.focus(), 50);
+		window.setTimeout(() => searchInput.focus(), 50);
 	}
 
 	updateManualBar(): void {
@@ -571,7 +573,8 @@ export class GPTChatView extends ItemView {
 
 	private closePicker(): void {
 		if (this.pickerCloseHandler) {
-			document.removeEventListener("mousedown", this.pickerCloseHandler);
+			const doc = this.currentPicker?.ownerDocument ?? this.containerEl.ownerDocument;
+			doc.removeEventListener("mousedown", this.pickerCloseHandler);
 			this.pickerCloseHandler = null;
 		}
 		this.currentPicker?.remove();
@@ -587,30 +590,31 @@ export class GPTChatView extends ItemView {
 		const activeId = isOpenAI
 			? (this.settings.model       ?? "gpt-4o")
 			: (this.settings.claudeModel ?? "claude-sonnet-4-5");
+		const doc = this.containerEl.ownerDocument;
 
-		const picker = document.createElement("div");
+		const picker = doc.createElement("div");
 		picker.className = "gpt-model-picker";
 		this.currentPicker = picker;
 
-		const hdr = document.createElement("div");
+		const hdr = doc.createElement("div");
 		hdr.className   = "gpt-mp-header";
 		hdr.textContent = isOpenAI ? t("chat_picker_openai") : t("chat_picker_claude");
 		picker.appendChild(hdr);
 
 		for (const m of models) {
 			const isActive = m.id === activeId;
-			const row = document.createElement("button");
+			const row = doc.createElement("button");
 			row.className = "gpt-mp-row" + (isActive ? " gpt-mp-row--active" : "");
 			row.type = "button";
 
-			const left = document.createElement("span");
+			const left = doc.createElement("span");
 			left.className = "gpt-mp-row-left";
 
-			const name = document.createElement("span");
+			const name = doc.createElement("span");
 			name.className   = "gpt-mp-row-name";
 			name.textContent = m.label;
 
-			const desc = document.createElement("span");
+			const desc = doc.createElement("span");
 			desc.className   = "gpt-mp-row-desc";
 			desc.textContent = m.desc();
 
@@ -619,7 +623,7 @@ export class GPTChatView extends ItemView {
 			row.appendChild(left);
 
 			if (isActive) {
-				const check = document.createElement("span");
+				const check = doc.createElement("span");
 				check.className   = "gpt-mp-row-check";
 				check.textContent = "✓";
 				row.appendChild(check);
@@ -641,8 +645,8 @@ export class GPTChatView extends ItemView {
 			picker.appendChild(row);
 		}
 
-		// Attach to document.body — avoids CSS transform issues on Obsidian panels
-		document.body.appendChild(picker);
+		// Attach to the view document body — avoids CSS transform issues on Obsidian panels
+		doc.body.appendChild(picker);
 		const rect = this.modelSelectorBtn.getBoundingClientRect();
 		picker.setCssProps({
 			top:  `${rect.bottom + 4}px`,
@@ -656,9 +660,9 @@ export class GPTChatView extends ItemView {
 			const inside = picker.contains(target) || (this.modelSelectorBtn?.contains(target) ?? false);
 			if (!inside) this.closePicker();
 		};
-		setTimeout(() => {
+		window.setTimeout(() => {
 			if (this.pickerCloseHandler) {
-				document.addEventListener("mousedown", this.pickerCloseHandler);
+				doc.addEventListener("mousedown", this.pickerCloseHandler);
 			}
 		}, 0);
 	}
@@ -949,7 +953,7 @@ export class GPTChatView extends ItemView {
 		copyBtn.onclick   = async () => {
 			await navigator.clipboard.writeText(bubble.dataset.raw ?? contentEl.innerText);
 			this.setButtonIcon(copyBtn, "check");
-			setTimeout(() => { this.setButtonIcon(copyBtn, "copy"); }, 2000);
+			window.setTimeout(() => { this.setButtonIcon(copyBtn, "copy"); }, 2000);
 		};
 
 		if (content) bubble.dataset.raw = content;
@@ -1096,28 +1100,29 @@ export class GPTChatView extends ItemView {
 		const lines = text.split("\n");
 		lines.forEach((line, idx) => {
 			if (idx > 0) el.createEl("br");
-			if (line) el.appendChild(document.createTextNode(line));
+			if (line) el.appendChild(el.ownerDocument.createTextNode(line));
 		});
 		if (withCursor) el.createEl("span", { cls: "gpt-cursor", text: "▋" });
 	}
 
 	private addCodeCopyButtons(container: HTMLElement): void {
+		const doc = container.ownerDocument;
 		container.querySelectorAll<HTMLElement>(".gpt-code-block pre[data-rawcode]").forEach(pre => {
 			if (pre.parentElement?.querySelector(".gpt-code-header")) return;
 			const lang = pre.getAttribute("data-lang") ?? "";
 			const b64  = pre.getAttribute("data-rawcode") ?? "";
 
-			const header = document.createElement("div");
+			const header = doc.createElement("div");
 			header.className = "gpt-code-header";
 
 			if (lang) {
-				const langEl = document.createElement("span");
+				const langEl = doc.createElement("span");
 				langEl.className   = "gpt-code-lang";
 				langEl.textContent = lang;
 				header.appendChild(langEl);
 			}
 
-			const copyBtn = document.createElement("button");
+			const copyBtn = doc.createElement("button");
 			copyBtn.className = "gpt-code-copy";
 			copyBtn.title     = "Copy code";
 			this.setButtonIcon(copyBtn, "copy", "Copy");
@@ -1126,7 +1131,7 @@ export class GPTChatView extends ItemView {
 					await navigator.clipboard.writeText(base64ToUtf8(b64));
 					this.setButtonIcon(copyBtn, "check", "Copied!");
 					copyBtn.classList.add("gpt-code-copy--ok");
-					setTimeout(() => {
+					window.setTimeout(() => {
 						this.setButtonIcon(copyBtn, "copy", "Copy");
 						copyBtn.classList.remove("gpt-code-copy--ok");
 					}, 2000);
@@ -1160,6 +1165,7 @@ export class GPTChatView extends ItemView {
 
 		if (!quiz || !Array.isArray(quiz.questions)) return false;
 
+		const doc = container.ownerDocument;
 		container.empty();
 		if (quiz.title) container.createEl("div", { cls: "gpt-quiz-title", text: quiz.title });
 
@@ -1191,12 +1197,12 @@ export class GPTChatView extends ItemView {
 						});
 						if (correct) {
 							fb.textContent = "✅ Correct! ";
-							if (q.explanation) fb.appendChild(document.createTextNode(q.explanation));
+							if (q.explanation) fb.appendChild(doc.createTextNode(q.explanation));
 						} else {
 							const corrPrefix = q.type === "truefalse" ? "" : String.fromCharCode(65 + (q.correct ?? 0)) + ". ";
-							fb.appendChild(document.createTextNode(t("quiz_wrong_prefix")));
+							fb.appendChild(doc.createTextNode(t("quiz_wrong_prefix")));
 							fb.createEl("strong", { text: corrPrefix + (q.options?.[q.correct ?? 0] ?? "") });
-							if (q.explanation) { fb.createEl("br"); fb.appendChild(document.createTextNode(q.explanation)); }
+							if (q.explanation) { fb.createEl("br"); fb.appendChild(doc.createTextNode(q.explanation)); }
 						}
 					};
 				});
@@ -1217,7 +1223,7 @@ export class GPTChatView extends ItemView {
 						const ok = ans.toLowerCase() === String(q.answer ?? "").toLowerCase().trim();
 						const fb = card.createEl("div", { cls: ok ? "gpt-quiz-fb gpt-quiz-fb--ok" : "gpt-quiz-fb gpt-quiz-fb--err" });
 						if (ok) { fb.textContent = "✅ Correct!"; }
-						else { fb.appendChild(document.createTextNode(t("quiz_correct_prefix"))); fb.createEl("strong", { text: String(q.answer ?? "") }); }
+						else { fb.appendChild(doc.createTextNode(t("quiz_correct_prefix"))); fb.createEl("strong", { text: String(q.answer ?? "") }); }
 					} else {
 						try {
 							const prompt = t("quiz_eval_prompt", q.question, q.answer, ans);
