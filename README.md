@@ -75,7 +75,6 @@ Full interface in **English** and **Polish**.
 |macOS   |✅ Supported                           |
 |Linux   |✅ Supported                           |
 
-The plugin is **not desktop-only** — it runs on mobile devices as well.
 
 -----
 
