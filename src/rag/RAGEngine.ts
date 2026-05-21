@@ -1,5 +1,4 @@
-import { requestUrl } from "obsidian";
-import type { TFile } from "obsidian";
+import { requestUrl, TFile } from "obsidian";
 import { RAG_TOP_K } from "../constants";
 import {
 	tokenize, buildTermFreq, chunkText,
@@ -228,32 +227,39 @@ export class RAGEngine {
 				pendingChunks = [];
 			};
 
-			for (const file of files) {
+			for (const abstractFile of files) {
+				if (!(abstractFile instanceof TFile)) {
+					done++;
+					onProgress?.(done, files.length);
+					continue;
+				}
+
+				const file = abstractFile;
 				try {
-					const raw     = await this.plugin.app.vault.cachedRead(file as TFile);
-					const content = (file as TFile).extension === "canvas"
-						? parseCanvasToText(raw, (file as TFile).basename)
+					const raw     = await this.plugin.app.vault.cachedRead(file);
+					const content = file.extension === "canvas"
+						? parseCanvasToText(raw, file.basename)
 						: raw;
 					const hash    = contentHash(content);
-					newHashes[(file as TFile).path] = hash;
+					newHashes[file.path] = hash;
 
 					// Skip files that have not changed
-					if (this.fileHashes[(file as TFile).path] === hash) {
+					if (this.fileHashes[file.path] === hash) {
 						skipped++;
 						done++;
 						onProgress?.(done, files.length);
 						continue;
 					}
 
-					this.index = this.index.filter(e => e.path !== (file as TFile).path);
+					this.index = this.index.filter(e => e.path !== file.path);
 					if (!content.trim()) { done++; continue; }
 					reindexed++;
 
 					for (const chunk of chunkText(content)) {
 						const tokens = tokenize(chunk);
 						const entry: RAGEntry = {
-							path:      (file as TFile).path,
-							basename:  (file as TFile).basename,
+							path:      file.path,
+							basename:  file.basename,
 							chunk,
 							tokens,
 							embedding: null,
@@ -267,7 +273,7 @@ export class RAGEngine {
 						}
 					}
 				} catch (e) {
-					console.warn("[GPT RAG] file failed:", (file as TFile).path, (e as Error)?.message);
+					console.warn("[GPT RAG] file failed:", file.path, (e as Error)?.message);
 				}
 
 				done++;

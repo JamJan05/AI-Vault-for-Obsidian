@@ -499,7 +499,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 				.setDisabled(!isActive)
 				.onClick(() => {
 					try {
-						// eslint-disable-next-line @typescript-eslint/no-require-imports
+						// eslint-disable-next-line @typescript-eslint/no-require-imports -- Electron shell is only available at runtime in Obsidian desktop.
 						const { shell } = require("electron") as { shell: { openPath: (p: string) => void } };
 						shell.openPath(this.plugin.externalStorage.baseDir ?? "");
 					} catch (e) {

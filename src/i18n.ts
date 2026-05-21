@@ -1,7 +1,6 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type TranslationValue = string | ((...args: any[]) => string);
+type TranslationValue = string | ((...args: never[]) => string);
 
 interface TranslationDict {
 	[key: string]: TranslationValue;
@@ -574,8 +573,9 @@ let _lang: "en" | "pl" = "en";
 export function t(key: string, ...args: unknown[]): string {
 	const dict  = _lang === "pl" ? pl : en;
 	const val   = dict[key] ?? en[key] ?? key;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	return typeof val === "function" ? (val as (...a: any[]) => string)(...args) : (val as string);
+	return typeof val === "function"
+		? (val as unknown as (...a: unknown[]) => string)(...args)
+		: val;
 }
 
 /**
