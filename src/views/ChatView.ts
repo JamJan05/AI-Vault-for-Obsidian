@@ -13,7 +13,6 @@ import { t } from "../i18n";
 import {
 	THINKING_MODES,
 	WEB_SEARCH_CAPABLE,
-	MODEL_PRICING,
 	ModelAccessError,
 	isGPT5,
 	isGPT5Search,
@@ -99,9 +98,7 @@ export class GPTChatView extends ItemView {
 	private currentPicker:       HTMLElement | null = null;
 	private pickerCloseHandler: ((e: MouseEvent) => void) | null = null;
 
-	// Session cost
-	private sessionCostUsd = 0;
-	private lastUsage:     StreamUsage | null = null;
+	private lastUsage: StreamUsage | null = null;
 
 	// Component for MarkdownRenderer — released automatically in onClose()
 	private readonly renderComponent: Component;
@@ -670,9 +667,8 @@ export class GPTChatView extends ItemView {
 	// ── Sessions ────────────────────────────────────────────────────────────────
 
 	loadSession(session: { title: string; messages: ChatMessage[]; model?: string }): void {
-		this.messages      = [...session.messages];
-		this.sessionCostUsd = 0;
-		this.lastUsage     = null;
+		this.messages  = [...session.messages];
+		this.lastUsage = null;
 		this.chatContainer.empty();
 
 		if (!this.messages.length) { this.renderWelcome(); return; }
@@ -684,10 +680,9 @@ export class GPTChatView extends ItemView {
 	}
 
 	clearAndNew(): void {
-		this.messages       = [];
-		this.manualNotes    = [];
-		this.sessionCostUsd = 0;
-		this.lastUsage      = null;
+		this.messages    = [];
+		this.manualNotes = [];
+		this.lastUsage   = null;
 		this.updateManualBar();
 		this.chatContainer.empty();
 		this.renderWelcome();
@@ -778,18 +773,13 @@ export class GPTChatView extends ItemView {
 
 			this.messages.push({ role: "assistant", content: reply });
 
-			// Cost and tokens
-			const modelName = isClaude
-				? (this.settings.claudeModel ?? "claude-sonnet-4-5")
-				: this.settings.model;
+			// Token stats
 			this.lastUsage = usage;
-			this.accumulateCost(modelName, usage);
-
 			if (usage) {
-				this.updateTokenCounter(usage.input + usage.output, { usage, model: modelName });
+				this.updateTokenCounter(usage.input + usage.output, usage);
 			} else {
 				const totalChars = this.messages.reduce((s, m) => s + m.content.length, 0) + systemMsg.length;
-				this.updateTokenCounter(Math.round(totalChars / 4), { model: modelName });
+				this.updateTokenCounter(Math.round(totalChars / 4), null);
 			}
 
 			await this.plugin.autoSaveSession(this.messages);
@@ -997,39 +987,28 @@ export class GPTChatView extends ItemView {
 		}
 	}
 
-	private updateTokenCounter(
-		tokens: number,
-		opts: { usage?: StreamUsage | null; model?: string } = {},
-	): void {
+	private updateTokenCounter(tokens: number, usage: StreamUsage | null): void {
 		if (!this.modeLabel) return;
-		const m       = THINKING_MODES[this.currentMode ?? ""];
-		const tokStr  = tokens > 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens);
-		const parts   = [m ? m.label : "", t("tokens_label", tokStr)];
+		const m   = THINKING_MODES[this.currentMode ?? ""];
+		const fmt = (n: number): string => n > 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+		const parts: string[] = [m ? m.label : ""];
 
-		if (this.sessionCostUsd > 0) {
-			const c = this.sessionCostUsd;
-			parts.push(c < 0.0001 ? "<$0.0001" : c < 0.01 ? `$${c.toFixed(4)}` : `$${c.toFixed(3)}`);
+		if (usage) {
+			parts.push(`${fmt(usage.input + usage.output)} total`);
+			parts.push(`${fmt(usage.input)} in`);
+			parts.push(`${fmt(usage.output)} out`);
+			if (usage.reasoning > 0) parts.push(`${fmt(usage.reasoning)} reasoning`);
+		} else {
+			parts.push(`${fmt(tokens)} total`);
 		}
-		if (opts.usage?.reasoning && opts.usage.reasoning > 0) {
-			const r = opts.usage.reasoning;
-			parts.push(`🧠 ${r > 1000 ? `${(r / 1000).toFixed(1)}k` : r} reasoning`);
-		}
 
-		this.modeLabel.textContent = parts.join("  ·  ");
+		this.modeLabel.textContent = parts.join(" · ");
 
-		if (opts.usage) {
+		if (usage) {
 			this.modeLabel.title =
-				`Last request:\nInput: ${opts.usage.input} tok\nOutput: ${opts.usage.output} tok\n` +
-				(opts.usage.reasoning ? `Reasoning: ${opts.usage.reasoning} tok\n` : "") +
-				`\n${t("tokens_session_cost", this.sessionCostUsd > 0 ? "$" + this.sessionCostUsd.toFixed(4) : "—")}`;
+				`Input: ${usage.input} tok\nOutput: ${usage.output} tok` +
+				(usage.reasoning > 0 ? `\nReasoning: ${usage.reasoning} tok` : "");
 		}
-	}
-
-	private accumulateCost(model: string, usage: StreamUsage | null): void {
-		if (!usage) return;
-		const p = MODEL_PRICING[model];
-		if (!p) return;
-		this.sessionCostUsd += (usage.input * p.input + usage.output * p.output) / 1_000_000;
 	}
 
 	async regenerateLastMessage(): Promise<void> {
