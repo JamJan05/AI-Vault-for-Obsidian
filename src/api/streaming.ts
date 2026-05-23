@@ -73,6 +73,8 @@ export async function streamSSE(
 	onChunk:       ((fullText: string) => void) | null,
 	signal?:       AbortSignal | null,
 ): Promise<StreamResult> {
+	// NOTE: Using fetch() for SSE streaming as requestUrl() doesn't support streaming.
+	// This requires isDesktopOnly: true in manifest.json.
 	const response = await fetch(url, {
 		method:  "POST",
 		headers: { "Content-Type": "application/json", ...headers },

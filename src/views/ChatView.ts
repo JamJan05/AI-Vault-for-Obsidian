@@ -3,6 +3,7 @@ import {
 	ItemView,
 	MarkdownRenderer,
 	Notice,
+	setIcon,
 	WorkspaceLeaf,
 } from "obsidian";
 import type { TFile } from "obsidian";
@@ -12,16 +13,12 @@ import { t } from "../i18n";
 import {
 	THINKING_MODES,
 	WEB_SEARCH_CAPABLE,
-	MODEL_PRICING,
 	ModelAccessError,
 	isGPT5,
 	isGPT5Search,
 } from "../models";
 import {
 	formatDate,
-	escapeHtml,
-	sanitizeUrl,
-	utf8ToBase64,
 	base64ToUtf8,
 } from "../utils";
 import { callOpenAI }  from "../api/openai";
@@ -35,25 +32,6 @@ import type { HistoryManager } from "../history/HistoryManager";
 import type { ProjectManager } from "../history/ProjectManager";
 import type { PluginSettings } from "../settings";
 import type { StreamUsage }    from "../api/streaming";
-
-// ─── SVG icons ────────────────────────────────────────────────────────────────
-
-const SVG = {
-	history:  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-	folder:   `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`,
-	arrow:    `<svg class="gpt-ms-arrow" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>`,
-	regen:    `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`,
-	export:   `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>`,
-	copy:     `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
-	check:    `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10a37f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
-	rag:      `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>`,
-	reindex:  `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`,
-	attach:   `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`,
-	web:      `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
-	learn:    `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>`,
-	code:     `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
-	globe:    `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/></svg>`,
-};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -120,9 +98,7 @@ export class GPTChatView extends ItemView {
 	private currentPicker:       HTMLElement | null = null;
 	private pickerCloseHandler: ((e: MouseEvent) => void) | null = null;
 
-	// Session cost
-	private sessionCostUsd = 0;
-	private lastUsage:     StreamUsage | null = null;
+	private lastUsage: StreamUsage | null = null;
 
 	// Component for MarkdownRenderer — released automatically in onClose()
 	private readonly renderComponent: Component;
@@ -168,7 +144,8 @@ export class GPTChatView extends ItemView {
 		this.abortController = null;
 
 		if (this.pickerCloseHandler) {
-			document.removeEventListener("mousedown", this.pickerCloseHandler);
+			const doc = this.currentPicker?.ownerDocument ?? this.containerEl.ownerDocument;
+			doc.removeEventListener("mousedown", this.pickerCloseHandler);
 			this.pickerCloseHandler = null;
 		}
 		this.currentPicker?.remove();
@@ -185,7 +162,7 @@ export class GPTChatView extends ItemView {
 		} else {
 			const s = this.rag.stats;
 			this.showRagStatus(t("rag_ready_short", s.files, s.embeddings), "ready");
-			setTimeout(() => this.hideRagStatus(), 3500);
+			window.setTimeout(() => this.hideRagStatus(), 3500);
 		}
 	}
 
@@ -197,18 +174,18 @@ export class GPTChatView extends ItemView {
 		});
 		const s = this.rag.stats;
 		this.showRagStatus(t("rag_ready_full", s.files, s.embeddings), "ready");
-		setTimeout(() => this.hideRagStatus(), 4000);
+		window.setTimeout(() => this.hideRagStatus(), 4000);
 	}
 
 	private showRagStatus(text: string, state: "indexing" | "ready"): void {
 		if (!this.ragStatusEl) return;
 		this.ragStatusEl.textContent = text;
 		this.ragStatusEl.className   = `gpt-rag-status gpt-rag-${state}`;
-		this.ragStatusEl.style.display = "block";
+		this.ragStatusEl.removeClass("gpt-ctx-hidden");
 	}
 
 	private hideRagStatus(): void {
-		if (this.ragStatusEl) this.ragStatusEl.style.display = "none";
+		if (this.ragStatusEl) this.ragStatusEl.addClass("gpt-ctx-hidden");
 	}
 
 	// ── Build UI ────────────────────────────────────────────────────────────────
@@ -225,6 +202,12 @@ export class GPTChatView extends ItemView {
 		this.buildManualBar(root);
 		this.buildChatArea(root);
 		this.buildInputArea(root);
+	}
+
+	private setButtonIcon(button: HTMLElement, icon: string, label?: string): void {
+		button.empty();
+		setIcon(button, icon);
+		if (label) button.createEl("span", { text: label });
 	}
 
 	private buildHeader(root: HTMLElement): void {
@@ -246,11 +229,11 @@ export class GPTChatView extends ItemView {
 		this.updateProviderSwitch();
 
 		const histBtn = header.createEl("button", { cls: "gpt-icon-btn", attr: { "aria-label": t("cmd_open_history") } });
-		histBtn.innerHTML = SVG.history;
+		this.setButtonIcon(histBtn, "history");
 		histBtn.onclick   = () => void this.plugin.activateHistoryView();
 
 		const projBtn = header.createEl("button", { cls: "gpt-icon-btn", attr: { "aria-label": t("chat_projects") } });
-		projBtn.innerHTML = SVG.folder;
+		this.setButtonIcon(projBtn, "folder");
 		projBtn.onclick   = () => void this.plugin.activateProjectsView();
 
 		const clearBtn = header.createEl("button", { cls: "gpt-clear-btn", text: t("chat_new") });
@@ -280,8 +263,7 @@ export class GPTChatView extends ItemView {
 	}
 
 	private buildRagStatus(root: HTMLElement): void {
-		this.ragStatusEl = root.createEl("div", { cls: "gpt-rag-status" });
-		this.ragStatusEl.style.display = "none";
+		this.ragStatusEl = root.createEl("div", { cls: "gpt-rag-status gpt-ctx-hidden" });
 	}
 
 	private buildManualBar(root: HTMLElement): void {
@@ -305,32 +287,32 @@ export class GPTChatView extends ItemView {
 			cls:  "gpt-tool-btn" + (this.settings.ragEnabled ? " gpt-rag-btn--active" : ""),
 			attr: { title: t("chat_title_rag") },
 		});
-		this.ragToggleBtn.innerHTML = `${SVG.rag} ${t("chat_btn_rag")}`;
+		this.setButtonIcon(this.ragToggleBtn, "database", t("chat_btn_rag"));
 		this.ragToggleBtn.onclick   = () => this.toggleRag();
 
 		// Re-index
 		const reindexBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_index") } });
-		reindexBtn.innerHTML = `${SVG.reindex} ${t("chat_btn_index")}`;
+		this.setButtonIcon(reindexBtn, "refresh-cw", t("chat_btn_index"));
 		reindexBtn.onclick   = async () => { reindexBtn.disabled = true; await this.startIndexing(); reindexBtn.disabled = false; };
 
 		// Note picker
 		const pickBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_notes") } });
-		pickBtn.innerHTML = `${SVG.attach} ${t("chat_btn_notes")}`;
+		this.setButtonIcon(pickBtn, "paperclip", t("chat_btn_notes"));
 		pickBtn.onclick   = () => this.openNotePicker();
 
 		// Web search
 		this.webSearchBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_internet") } });
-		this.webSearchBtn.innerHTML = `${SVG.web} ${t("chat_btn_internet")}`;
+		this.setButtonIcon(this.webSearchBtn, "globe", t("chat_btn_internet"));
 		this.webSearchBtn.onclick   = () => this.toggleWebSearch();
 
 		// Learn mode
 		this.learnBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_learn") } });
-		this.learnBtn.innerHTML = `${SVG.learn} ${t("chat_btn_learn")}`;
+		this.setButtonIcon(this.learnBtn, "book-open", t("chat_btn_learn"));
 		this.learnBtn.onclick   = () => this.toggleLearnMode();
 
 		// Code mode
 		this.codeBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_code") } });
-		this.codeBtn.innerHTML = `${SVG.code} ${t("chat_btn_code")}`;
+		this.setButtonIcon(this.codeBtn, "code", t("chat_btn_code"));
 		this.codeBtn.onclick   = () => this.toggleCodeMode();
 
 		// Textarea
@@ -350,11 +332,11 @@ export class GPTChatView extends ItemView {
 		this.updateModeLabel();
 
 		const regenBtn = btnRow.createEl("button", { cls: "gpt-action-btn", attr: { title: t("chat_regen_tooltip") } });
-		regenBtn.innerHTML = SVG.regen;
+		this.setButtonIcon(regenBtn, "refresh-cw");
 		regenBtn.onclick   = () => void this.regenerateLastMessage();
 
 		const exportBtn = btnRow.createEl("button", { cls: "gpt-action-btn", attr: { title: t("chat_export_tooltip") } });
-		exportBtn.innerHTML = SVG.export;
+		this.setButtonIcon(exportBtn, "file-up");
 		exportBtn.onclick   = () => void this.exportToNote();
 
 		this.sendBtn = btnRow.createEl("button", { cls: "gpt-send-btn", text: t("chat_send") });
@@ -367,10 +349,11 @@ export class GPTChatView extends ItemView {
 		const mdFiles     = this.plugin.app.vault.getMarkdownFiles();
 		const canvasFiles = this.plugin.app.vault.getFiles().filter((f: TFile) => f.extension === "canvas");
 		const files       = [...mdFiles, ...canvasFiles].sort((a, b) => a.basename.localeCompare(b.basename));
+		const doc         = this.containerEl.ownerDocument;
 
-		const overlay = document.createElement("div");
+		const overlay = doc.createElement("div");
 		overlay.className = "gpt-modal-overlay";
-		const box = document.createElement("div");
+		const box = doc.createElement("div");
 		box.className = "gpt-modal-box";
 
 		box.createEl("p", { cls: "gpt-modal-title", text: t("chat_notes_title") });
@@ -390,7 +373,7 @@ export class GPTChatView extends ItemView {
 				const row = list.createEl("label", { cls: "gpt-modal-row" });
 				const cb  = row.createEl("input", { attr: { type: "checkbox" } }) as HTMLInputElement;
 				cb.checked        = selected.has(f.path);
-				cb.style.accentColor = "var(--interactive-accent)";
+				cb.setCssProps({ "accent-color": "var(--interactive-accent)" });
 				cb.onchange = () => { selected.has(f.path) ? selected.delete(f.path) : selected.add(f.path); };
 				const icon = f.extension === "canvas" ? "🗂️ " : "";
 				row.createEl("span", { cls: "gpt-modal-row-label", text: icon + f.basename });
@@ -419,7 +402,7 @@ export class GPTChatView extends ItemView {
 
 		overlay.appendChild(box);
 		this.containerEl.appendChild(overlay);
-		setTimeout(() => searchInput.focus(), 50);
+		window.setTimeout(() => searchInput.focus(), 50);
 	}
 
 	updateManualBar(): void {
@@ -446,7 +429,11 @@ export class GPTChatView extends ItemView {
 	updateRagBadge(): void {
 		if (!this.ragBadge) return;
 		this.ragBadge.textContent   = this.settings.ragEnabled ? "RAG" : "";
-		this.ragBadge.style.display = this.settings.ragEnabled ? "inline-block" : "none";
+		if (this.settings.ragEnabled) {
+			this.ragBadge.removeClass("gpt-ctx-hidden");
+		} else {
+			this.ragBadge.addClass("gpt-ctx-hidden");
+		}
 	}
 
 	updateProjectBar(): void {
@@ -461,8 +448,10 @@ export class GPTChatView extends ItemView {
 		if (!proj) { this.projectBar.addClass("gpt-ctx-hidden"); return; }
 
 		this.projectBar.removeClass("gpt-ctx-hidden");
-		this.projectBar.style.background        = `color-mix(in srgb,${proj.color} 10%,var(--background-secondary))`;
-		this.projectBar.style.borderBottomColor = `color-mix(in srgb,${proj.color} 25%,transparent)`;
+		this.projectBar.setCssProps({
+			background:            `color-mix(in srgb,${proj.color} 10%,var(--background-secondary))`,
+			"border-bottom-color": `color-mix(in srgb,${proj.color} 25%,transparent)`,
+		});
 
 		const sessions    = this.plugin.projects.getProjectSessions(proj.id);
 		const promptBadge = proj.systemPrompt ? " " + t("projects_custom_prompt_badge") : "";
@@ -571,16 +560,18 @@ export class GPTChatView extends ItemView {
 			.replace("gpt-", "GPT-")
 			.replace("-search-api", " Search");
 
-		this.modelSelectorBtn.innerHTML =
-			`<span class="gpt-ms-icon">${icon}</span>` +
-			`<span class="gpt-ms-label">${label}</span>` +
-			SVG.arrow;
+		this.modelSelectorBtn.empty();
+		this.modelSelectorBtn.createEl("span", { cls: "gpt-ms-icon", text: icon });
+		this.modelSelectorBtn.createEl("span", { cls: "gpt-ms-label", text: label });
+		const arrow = this.modelSelectorBtn.createEl("span", { cls: "gpt-ms-arrow" });
+		setIcon(arrow, "chevron-down");
 		this.modelSelectorBtn.title = t("chat_model_tooltip", model);
 	}
 
 	private closePicker(): void {
 		if (this.pickerCloseHandler) {
-			document.removeEventListener("mousedown", this.pickerCloseHandler);
+			const doc = this.currentPicker?.ownerDocument ?? this.containerEl.ownerDocument;
+			doc.removeEventListener("mousedown", this.pickerCloseHandler);
 			this.pickerCloseHandler = null;
 		}
 		this.currentPicker?.remove();
@@ -596,30 +587,31 @@ export class GPTChatView extends ItemView {
 		const activeId = isOpenAI
 			? (this.settings.model       ?? "gpt-4o")
 			: (this.settings.claudeModel ?? "claude-sonnet-4-5");
+		const doc = this.containerEl.ownerDocument;
 
-		const picker = document.createElement("div");
+		const picker = doc.createElement("div");
 		picker.className = "gpt-model-picker";
 		this.currentPicker = picker;
 
-		const hdr = document.createElement("div");
+		const hdr = doc.createElement("div");
 		hdr.className   = "gpt-mp-header";
 		hdr.textContent = isOpenAI ? t("chat_picker_openai") : t("chat_picker_claude");
 		picker.appendChild(hdr);
 
 		for (const m of models) {
 			const isActive = m.id === activeId;
-			const row = document.createElement("button");
+			const row = doc.createElement("button");
 			row.className = "gpt-mp-row" + (isActive ? " gpt-mp-row--active" : "");
 			row.type = "button";
 
-			const left = document.createElement("span");
+			const left = doc.createElement("span");
 			left.className = "gpt-mp-row-left";
 
-			const name = document.createElement("span");
+			const name = doc.createElement("span");
 			name.className   = "gpt-mp-row-name";
 			name.textContent = m.label;
 
-			const desc = document.createElement("span");
+			const desc = doc.createElement("span");
 			desc.className   = "gpt-mp-row-desc";
 			desc.textContent = m.desc();
 
@@ -628,7 +620,7 @@ export class GPTChatView extends ItemView {
 			row.appendChild(left);
 
 			if (isActive) {
-				const check = document.createElement("span");
+				const check = doc.createElement("span");
 				check.className   = "gpt-mp-row-check";
 				check.textContent = "✓";
 				row.appendChild(check);
@@ -650,11 +642,13 @@ export class GPTChatView extends ItemView {
 			picker.appendChild(row);
 		}
 
-		// Attach to document.body — avoids CSS transform issues on Obsidian panels
-		document.body.appendChild(picker);
+		// Attach to the view document body — avoids CSS transform issues on Obsidian panels
+		doc.body.appendChild(picker);
 		const rect = this.modelSelectorBtn.getBoundingClientRect();
-		picker.style.top  = `${rect.bottom + 4}px`;
-		picker.style.left = `${rect.left}px`;
+		picker.setCssProps({
+			top:  `${rect.bottom + 4}px`,
+			left: `${rect.left}px`,
+		});
 
 		// Close on click outside the picker
 		this.pickerCloseHandler = (e: MouseEvent): void => {
@@ -663,9 +657,9 @@ export class GPTChatView extends ItemView {
 			const inside = picker.contains(target) || (this.modelSelectorBtn?.contains(target) ?? false);
 			if (!inside) this.closePicker();
 		};
-		setTimeout(() => {
+		window.setTimeout(() => {
 			if (this.pickerCloseHandler) {
-				document.addEventListener("mousedown", this.pickerCloseHandler);
+				doc.addEventListener("mousedown", this.pickerCloseHandler);
 			}
 		}, 0);
 	}
@@ -673,9 +667,8 @@ export class GPTChatView extends ItemView {
 	// ── Sessions ────────────────────────────────────────────────────────────────
 
 	loadSession(session: { title: string; messages: ChatMessage[]; model?: string }): void {
-		this.messages      = [...session.messages];
-		this.sessionCostUsd = 0;
-		this.lastUsage     = null;
+		this.messages  = [...session.messages];
+		this.lastUsage = null;
 		this.chatContainer.empty();
 
 		if (!this.messages.length) { this.renderWelcome(); return; }
@@ -687,10 +680,9 @@ export class GPTChatView extends ItemView {
 	}
 
 	clearAndNew(): void {
-		this.messages       = [];
-		this.manualNotes    = [];
-		this.sessionCostUsd = 0;
-		this.lastUsage      = null;
+		this.messages    = [];
+		this.manualNotes = [];
+		this.lastUsage   = null;
 		this.updateManualBar();
 		this.chatContainer.empty();
 		this.renderWelcome();
@@ -738,7 +730,7 @@ export class GPTChatView extends ItemView {
 				if (now - lastRenderTime < RENDER_INTERVAL_MS) return;
 				lastRenderTime = now;
 				if (contentEl) {
-					contentEl.innerHTML = this.renderMarkdownFast(partial) + '<span class="gpt-cursor">▋</span>';
+					this.renderPlainTextContent(contentEl, partial, true);
 				}
 				this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
 			};
@@ -781,18 +773,13 @@ export class GPTChatView extends ItemView {
 
 			this.messages.push({ role: "assistant", content: reply });
 
-			// Cost and tokens
-			const modelName = isClaude
-				? (this.settings.claudeModel ?? "claude-sonnet-4-5")
-				: this.settings.model;
+			// Token stats
 			this.lastUsage = usage;
-			this.accumulateCost(modelName, usage);
-
 			if (usage) {
-				this.updateTokenCounter(usage.input + usage.output, { usage, model: modelName });
+				this.updateTokenCounter(usage.input + usage.output, usage);
 			} else {
 				const totalChars = this.messages.reduce((s, m) => s + m.content.length, 0) + systemMsg.length;
-				this.updateTokenCounter(Math.round(totalChars / 4), { model: modelName });
+				this.updateTokenCounter(Math.round(totalChars / 4), null);
 			}
 
 			await this.plugin.autoSaveSession(this.messages);
@@ -952,11 +939,11 @@ export class GPTChatView extends ItemView {
 		footer.createEl("span", { cls: "gpt-msg-label", text: role === "user" ? "You" : assistLabel });
 
 		const copyBtn = footer.createEl("button", { cls: "gpt-copy-btn", attr: { title: "Copy", "aria-label": "Copy" } });
-		copyBtn.innerHTML = SVG.copy;
+		this.setButtonIcon(copyBtn, "copy");
 		copyBtn.onclick   = async () => {
 			await navigator.clipboard.writeText(bubble.dataset.raw ?? contentEl.innerText);
-			copyBtn.innerHTML = SVG.check;
-			setTimeout(() => { copyBtn.innerHTML = SVG.copy; }, 2000);
+			this.setButtonIcon(copyBtn, "check");
+			window.setTimeout(() => { this.setButtonIcon(copyBtn, "copy"); }, 2000);
 		};
 
 		if (content) bubble.dataset.raw = content;
@@ -973,7 +960,8 @@ export class GPTChatView extends ItemView {
 			dots.createEl("span"); dots.createEl("span"); dots.createEl("span");
 			if (webSearch) {
 				const ind = bubble.createEl("div", { cls: "gpt-websearch-indicator" });
-				ind.innerHTML = `${SVG.globe} ${t("ws_searching_label")}`;
+				setIcon(ind, "globe");
+				ind.createEl("span", { text: t("ws_searching_label") });
 			}
 		} else {
 			bubble.removeClass("gpt-loading");
@@ -991,47 +979,36 @@ export class GPTChatView extends ItemView {
 				this.abortController?.abort();
 				new Notice("⏹ Generation stopped");
 			};
-			this.sendBtn.style.display = "none";
+			this.sendBtn.addClass("gpt-ctx-hidden");
 		} else {
 			this.stopBtn?.remove();
 			this.stopBtn = null;
-			this.sendBtn.style.display = "";
+			this.sendBtn.removeClass("gpt-ctx-hidden");
 		}
 	}
 
-	private updateTokenCounter(
-		tokens: number,
-		opts: { usage?: StreamUsage | null; model?: string } = {},
-	): void {
+	private updateTokenCounter(tokens: number, usage: StreamUsage | null): void {
 		if (!this.modeLabel) return;
-		const m       = THINKING_MODES[this.currentMode ?? ""];
-		const tokStr  = tokens > 1000 ? `${(tokens / 1000).toFixed(1)}k` : String(tokens);
-		const parts   = [m ? m.label : "", t("tokens_label", tokStr)];
+		const m   = THINKING_MODES[this.currentMode ?? ""];
+		const fmt = (n: number): string => n > 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+		const parts: string[] = [m ? m.label : ""];
 
-		if (this.sessionCostUsd > 0) {
-			const c = this.sessionCostUsd;
-			parts.push(c < 0.0001 ? "<$0.0001" : c < 0.01 ? `$${c.toFixed(4)}` : `$${c.toFixed(3)}`);
+		if (usage) {
+			parts.push(`${fmt(usage.input + usage.output)} total`);
+			parts.push(`${fmt(usage.input)} in`);
+			parts.push(`${fmt(usage.output)} out`);
+			if (usage.reasoning > 0) parts.push(`${fmt(usage.reasoning)} reasoning`);
+		} else {
+			parts.push(`${fmt(tokens)} total`);
 		}
-		if (opts.usage?.reasoning && opts.usage.reasoning > 0) {
-			const r = opts.usage.reasoning;
-			parts.push(`🧠 ${r > 1000 ? `${(r / 1000).toFixed(1)}k` : r} reasoning`);
-		}
 
-		this.modeLabel.textContent = parts.join("  ·  ");
+		this.modeLabel.textContent = parts.join(" · ");
 
-		if (opts.usage) {
+		if (usage) {
 			this.modeLabel.title =
-				`Last request:\nInput: ${opts.usage.input} tok\nOutput: ${opts.usage.output} tok\n` +
-				(opts.usage.reasoning ? `Reasoning: ${opts.usage.reasoning} tok\n` : "") +
-				`\n${t("tokens_session_cost", this.sessionCostUsd > 0 ? "$" + this.sessionCostUsd.toFixed(4) : "—")}`;
+				`Input: ${usage.input} tok\nOutput: ${usage.output} tok` +
+				(usage.reasoning > 0 ? `\nReasoning: ${usage.reasoning} tok` : "");
 		}
-	}
-
-	private accumulateCost(model: string, usage: StreamUsage | null): void {
-		if (!usage) return;
-		const p = MODEL_PRICING[model];
-		if (!p) return;
-		this.sessionCostUsd += (usage.input * p.input + usage.output * p.output) / 1_000_000;
 	}
 
 	async regenerateLastMessage(): Promise<void> {
@@ -1092,87 +1069,49 @@ export class GPTChatView extends ItemView {
 			this.addCodeCopyButtons(el);
 		} catch (e) {
 			console.warn("[AI-Vault] native renderer failed, using fallback:", (e as Error)?.message);
-			el.innerHTML = this.renderMarkdownFast(text);
+			this.renderPlainTextContent(el, text);
 			this.addCodeCopyButtons(el);
 		}
 	}
 
-	/** Fast markdown parser — used ONLY during streaming (~12 times/s) */
-	private renderMarkdownFast(text: string): string {
-		const codeBlocks: { lang: string; code: string }[] = [];
-		const links:      { label: string; url: string }[] = [];
-
-		let p = text.replace(/```([\w]*)\r?\n?([\s\S]*?)```/g, (_, lang: string, code: string) => {
-			codeBlocks.push({ lang: lang || "", code });
-			return `\x00CODE${codeBlocks.length - 1}\x00`;
+	private renderPlainTextContent(el: HTMLElement, text: string, withCursor = false): void {
+		el.empty();
+		const lines = text.split("\n");
+		lines.forEach((line, idx) => {
+			if (idx > 0) el.createEl("br");
+			if (line) el.appendChild(el.ownerDocument.createTextNode(line));
 		});
-
-		p = p.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|mailto:[^\s)]+)\)/g, (_, label: string, url: string) => {
-			links.push({ label, url });
-			return `\x00LINK${links.length - 1}\x00`;
-		});
-
-		p = p.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-		p = p
-			.replace(/`([^`]+)`/g, "<code>$1</code>")
-			.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-			.replace(/\*(.+?)\*/g, "<em>$1</em>")
-			.replace(/~~(.+?)~~/g, "<s>$1</s>")
-			.replace(/^### (.+)$/gm, "<h3>$1</h3>")
-			.replace(/^## (.+)$/gm, "<h2>$1</h2>")
-			.replace(/^# (.+)$/gm, "<h1>$1</h1>")
-			.replace(/^- (.+)$/gm, "<li>$1</li>")
-			.replace(/((?:<li>[\s\S]*?<\/li>\n?)+)/g, "<ul>$1</ul>")
-			.replace(/^\d+\.\s+(.+)$/gm, "<oli>$1</oli>")
-			.replace(/((?:<oli>[\s\S]*?<\/oli>\n?)+)/g, (m) =>
-				"<ol>" + m.replace(/<\/?oli>/g, (tag) => tag.replace("oli", "li")) + "</ol>",
-			)
-			.replace(/\n{2,}/g, "<br><br>")
-			.replace(/\n/g, "<br>");
-
-		p = p.replace(/\x00LINK(\d+)\x00/g, (_, i: string) => {
-			const { label, url } = links[+i];
-			return `<a href="${escapeHtml(sanitizeUrl(url))}" target="_blank" rel="noopener noreferrer" class="gpt-link">${escapeHtml(label)}</a>`;
-		});
-
-		p = p.replace(/\x00CODE(\d+)\x00/g, (_, i: string) => {
-			const { lang, code } = codeBlocks[+i];
-			const b64      = utf8ToBase64(code);
-			const langAttr = lang ? ` data-lang="${escapeHtml(lang)}"` : "";
-			return `<div class="gpt-code-block"><pre${langAttr} data-rawcode="${b64}"><code>${escapeHtml(code)}</code></pre></div>`;
-		});
-
-		return p;
+		if (withCursor) el.createEl("span", { cls: "gpt-cursor", text: "▋" });
 	}
 
 	private addCodeCopyButtons(container: HTMLElement): void {
+		const doc = container.ownerDocument;
 		container.querySelectorAll<HTMLElement>(".gpt-code-block pre[data-rawcode]").forEach(pre => {
 			if (pre.parentElement?.querySelector(".gpt-code-header")) return;
 			const lang = pre.getAttribute("data-lang") ?? "";
 			const b64  = pre.getAttribute("data-rawcode") ?? "";
 
-			const header = document.createElement("div");
+			const header = doc.createElement("div");
 			header.className = "gpt-code-header";
 
 			if (lang) {
-				const langEl = document.createElement("span");
+				const langEl = doc.createElement("span");
 				langEl.className   = "gpt-code-lang";
 				langEl.textContent = lang;
 				header.appendChild(langEl);
 			}
 
-			const copyBtn = document.createElement("button");
+			const copyBtn = doc.createElement("button");
 			copyBtn.className = "gpt-code-copy";
 			copyBtn.title     = "Copy code";
-			copyBtn.innerHTML = `${SVG.copy} Copy`;
+			this.setButtonIcon(copyBtn, "copy", "Copy");
 			copyBtn.onclick   = async () => {
 				try {
 					await navigator.clipboard.writeText(base64ToUtf8(b64));
-					copyBtn.innerHTML = `${SVG.check} Copied!`;
+					this.setButtonIcon(copyBtn, "check", "Copied!");
 					copyBtn.classList.add("gpt-code-copy--ok");
-					setTimeout(() => {
-						copyBtn.innerHTML = `${SVG.copy} Copy`;
+					window.setTimeout(() => {
+						this.setButtonIcon(copyBtn, "copy", "Copy");
 						copyBtn.classList.remove("gpt-code-copy--ok");
 					}, 2000);
 				} catch (e) { console.warn("[AI-Vault] copy failed:", e); }
@@ -1205,6 +1144,7 @@ export class GPTChatView extends ItemView {
 
 		if (!quiz || !Array.isArray(quiz.questions)) return false;
 
+		const doc = container.ownerDocument;
 		container.empty();
 		if (quiz.title) container.createEl("div", { cls: "gpt-quiz-title", text: quiz.title });
 
@@ -1236,12 +1176,12 @@ export class GPTChatView extends ItemView {
 						});
 						if (correct) {
 							fb.textContent = "✅ Correct! ";
-							if (q.explanation) fb.appendChild(document.createTextNode(q.explanation));
+							if (q.explanation) fb.appendChild(doc.createTextNode(q.explanation));
 						} else {
 							const corrPrefix = q.type === "truefalse" ? "" : String.fromCharCode(65 + (q.correct ?? 0)) + ". ";
-							fb.appendChild(document.createTextNode(t("quiz_wrong_prefix")));
+							fb.appendChild(doc.createTextNode(t("quiz_wrong_prefix")));
 							fb.createEl("strong", { text: corrPrefix + (q.options?.[q.correct ?? 0] ?? "") });
-							if (q.explanation) { fb.createEl("br"); fb.appendChild(document.createTextNode(q.explanation)); }
+							if (q.explanation) { fb.createEl("br"); fb.appendChild(doc.createTextNode(q.explanation)); }
 						}
 					};
 				});
@@ -1262,7 +1202,7 @@ export class GPTChatView extends ItemView {
 						const ok = ans.toLowerCase() === String(q.answer ?? "").toLowerCase().trim();
 						const fb = card.createEl("div", { cls: ok ? "gpt-quiz-fb gpt-quiz-fb--ok" : "gpt-quiz-fb gpt-quiz-fb--err" });
 						if (ok) { fb.textContent = "✅ Correct!"; }
-						else { fb.appendChild(document.createTextNode(t("quiz_correct_prefix"))); fb.createEl("strong", { text: String(q.answer ?? "") }); }
+						else { fb.appendChild(doc.createTextNode(t("quiz_correct_prefix"))); fb.createEl("strong", { text: String(q.answer ?? "") }); }
 					} else {
 						try {
 							const prompt = t("quiz_eval_prompt", q.question, q.answer, ans);

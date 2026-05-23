@@ -1,7 +1,6 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type TranslationValue = string | ((...args: any[]) => string);
+type TranslationValue = string | ((...args: never[]) => string);
 
 interface TranslationDict {
 	[key: string]: TranslationValue;
@@ -64,7 +63,7 @@ const en: TranslationDict = {
 	settings_storage_inactive_html: "⚠️ <strong>Disabled — history saved inside vault</strong><br>Obsidian Sync may synchronize chat history (uses up your GB limit).",
 	settings_storage_mobile:     "📱 Mobile device detected",
 	settings_storage_mobile_desc:"External storage outside vault works on desktop only. On mobile, data is saved in the plugin folder inside the vault.",
-	settings_storage_mobile_full:"📱 <strong>Mobile device detected</strong><br>External storage outside vault works on desktop only. On mobile, data is saved in the plugin folder inside the vault.<br><br>💡 <em>Tip:</em> To limit Obsidian Sync, disable configuration file sync (<code>.obsidian</code>) or add the plugin folder to exclusions.",
+	settings_storage_mobile_full:(configDir: string) => `📱 <strong>Mobile device detected</strong><br>External storage outside vault works on desktop only. On mobile, data is saved in the plugin folder inside the vault.<br><br>💡 <em>Tip:</em> To limit Obsidian Sync, disable configuration file sync (<code>${configDir}</code>) or add the plugin folder to exclusions.`,
 	settings_storage_mobile_na:  "(unavailable on mobile)",
 	settings_keys_local_warning_html: "🔒 <strong>API keys are stored locally</strong> in the plugin folder inside your vault (plain text). If you sync your vault — keys are synced too.",
 	settings_lang_name:          "Language",
@@ -252,10 +251,10 @@ const en: TranslationDict = {
 	provider_switched_claude:"🟣 Switched to Claude",
 
 	// Commands
-	cmd_open_chat:           "Open AI-Vault chat panel",
+	cmd_open_chat:           "Open chat panel",
 	cmd_open_history:        "Open chat history",
 	cmd_open_projects:       "Open projects",
-	cmd_summarize:           "AI-Vault: Summarize current note",
+	cmd_summarize:           "Summarize current note",
 
 	// Quiz
 	quiz_error:              "Error!",
@@ -341,7 +340,7 @@ const pl: TranslationDict = {
 	settings_storage_inactive_html: "⚠️ <strong>Wyłączony — historia zapisywana w vaulcie</strong><br>Obsidian Sync może synchronizować historię rozmów (zjada limit GB).",
 	settings_storage_mobile:     "📱 Wykryto urządzenie mobilne",
 	settings_storage_mobile_desc:"Zewnętrzny zapis poza vaultem działa tylko na desktopie. Na mobile dane są zapisywane w folderze pluginu w vaulcie.",
-	settings_storage_mobile_full:"📱 <strong>Wykryto urządzenie mobilne</strong><br>Zewnętrzny zapis poza vaultem działa tylko na desktopie. Na mobile dane są zapisywane w folderze pluginu w vaulcie.<br><br>💡 <em>Tip:</em> Aby ograniczyć Obsidian Sync, w ustawieniach Sync wyłącz synchronizację plików konfiguracyjnych (<code>.obsidian</code>) lub dodaj folder pluginu do wyjątków.",
+	settings_storage_mobile_full:(configDir: string) => `📱 <strong>Wykryto urządzenie mobilne</strong><br>Zewnętrzny zapis poza vaultem działa tylko na desktopie. Na mobile dane są zapisywane w folderze pluginu w vaulcie.<br><br>💡 <em>Tip:</em> Aby ograniczyć Obsidian Sync, w ustawieniach Sync wyłącz synchronizację plików konfiguracyjnych (<code>${configDir}</code>) lub dodaj folder pluginu do wyjątków.`,
 	settings_storage_mobile_na:  "(niedostępne na mobile)",
 	settings_keys_local_warning_html: "🔒 <strong>Klucze API są zapisywane lokalnie</strong> w folderze pluginu wewnątrz Twojego vaulta (plain text). Jeśli synchronizujesz vault — klucze też się synchronizują.",
 	settings_lang_name:          "Język / Language",
@@ -529,10 +528,10 @@ const pl: TranslationDict = {
 	provider_switched_claude:"🟣 Przełączono na Claude",
 
 	// Commands
-	cmd_open_chat:           "Otwórz panel czatu AI-Vault",
+	cmd_open_chat:           "Otwórz panel czatu",
 	cmd_open_history:        "Otwórz historię rozmów",
 	cmd_open_projects:       "Otwórz projekty",
-	cmd_summarize:           "AI-Vault: Podsumuj aktualną notatkę",
+	cmd_summarize:           "Podsumuj aktualną notatkę",
 
 	// Quiz
 	quiz_error:              "Błąd!",
@@ -574,8 +573,9 @@ let _lang: "en" | "pl" = "en";
 export function t(key: string, ...args: unknown[]): string {
 	const dict  = _lang === "pl" ? pl : en;
 	const val   = dict[key] ?? en[key] ?? key;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	return typeof val === "function" ? (val as (...a: any[]) => string)(...args) : (val as string);
+	return typeof val === "function"
+		? (val as unknown as (...a: unknown[]) => string)(...args)
+		: val;
 }
 
 /**

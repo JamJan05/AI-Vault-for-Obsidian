@@ -146,6 +146,8 @@ export async function callOpenAIResponses(
 	};
 
 	return withRetry(async () => {
+		// NOTE: Using fetch() for Responses API SSE streaming as requestUrl() doesn't support streaming.
+		// This requires isDesktopOnly: true in manifest.json.
 		const response = await fetch("https://api.openai.com/v1/responses", {
 			method:  "POST",
 			headers: {

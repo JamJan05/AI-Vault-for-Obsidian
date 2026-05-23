@@ -1,18 +1,11 @@
-import { ItemView, Notice, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, setIcon, WorkspaceLeaf } from "obsidian";
 import { PROJECTS_VIEW_TYPE } from "../constants";
 import { t } from "../i18n";
 import { formatDate } from "../utils";
+import { ConfirmModal } from "./ConfirmModal";
 import type { Project } from "../types";
 import type { HistoryManager } from "../history/HistoryManager";
 import type { ProjectManager } from "../history/ProjectManager";
-
-// ─── SVG icons ────────────────────────────────────────────────────────────────
-
-const SVG_CLOSE  = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
-const SVG_DELETE = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>`;
-const SVG_EDIT   = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
-const SVG_CHAT   = `<svg class="gpt-projects-card-chat-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
-const SVG_PROMPT = `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
 
 // ─── Plugin interface ──────────────────────────────────────────────────────────
 
@@ -58,6 +51,24 @@ export class GPTProjectsView extends ItemView {
 		this.buildProjectList(root);
 	}
 
+	private addIcon(el: HTMLElement, icon: string, cls?: string): HTMLElement {
+		const iconEl = el.createEl("span");
+		if (cls) iconEl.addClass(cls);
+		setIcon(iconEl, icon);
+		return iconEl;
+	}
+
+	private setIconOnly(el: HTMLElement, icon: string): void {
+		el.empty();
+		this.addIcon(el, icon);
+	}
+
+	private setIconText(el: HTMLElement, icon: string, text: string): void {
+		el.empty();
+		this.addIcon(el, icon);
+		el.createEl("span", { text });
+	}
+
 	// ── Sekcje ─────────────────────────────────────────────────────────────────
 
 	private buildHeader(root: HTMLElement): void {
@@ -75,7 +86,7 @@ export class GPTProjectsView extends ItemView {
 			cls:  "gpt-icon-btn",
 			attr: { "aria-label": "Zamknij" },
 		});
-		closeBtn.innerHTML = SVG_CLOSE;
+		this.setIconOnly(closeBtn, "x");
 		closeBtn.onclick = () => {
 			const leaves = this.plugin.app.workspace.getLeavesOfType(PROJECTS_VIEW_TYPE);
 			leaves[0]?.detach();
@@ -88,11 +99,10 @@ export class GPTProjectsView extends ItemView {
 		if (!proj) return;
 
 		const bar = root.createEl("div", { cls: "gpt-projects-active-bar" });
-		bar.style.background        = `color-mix(in srgb,${proj.color} 12%,var(--background-secondary))`;
-		bar.style.borderBottomColor = `color-mix(in srgb,${proj.color} 25%,transparent)`;
+		bar.setCssProps({ "--gpt-project-color": proj.color });
 
 		const dot = bar.createEl("span", { cls: "gpt-projects-active-dot" });
-		dot.style.background = proj.color;
+		dot.setCssProps({ "--gpt-project-color": proj.color });
 
 		bar.createEl("span", {
 			cls:  "gpt-projects-active-name",
@@ -127,16 +137,16 @@ export class GPTProjectsView extends ItemView {
 		const isActive = this.plugin.activeProjectId === proj.id;
 
 		const card = list.createEl("div", { cls: "gpt-projects-card" });
+		card.setCssProps({ "--gpt-project-color": proj.color });
 		if (isActive) {
-			card.style.borderColor  = proj.color;
-			card.style.background   = `color-mix(in srgb,${proj.color} 8%,var(--background-secondary))`;
+			card.addClass("gpt-projects-card--active");
 		}
 
 		// ── Card header ─────────────────────────────────────────────────────────
 		const top = card.createEl("div", { cls: "gpt-projects-card-top" });
 
 		const dot = top.createEl("span", { cls: "gpt-projects-card-dot" });
-		dot.style.background = proj.color;
+		dot.setCssProps({ "--gpt-project-color": proj.color });
 
 		top.createEl("span", { cls: "gpt-projects-card-name", text: proj.name });
 
@@ -144,15 +154,14 @@ export class GPTProjectsView extends ItemView {
 			cls:  "gpt-projects-card-badge",
 			text: t("projects_chat_count", sessions.length),
 		});
-		badge.style.background = `color-mix(in srgb,${proj.color} 15%,var(--background-primary))`;
-		badge.style.color      = proj.color;
+		badge.setCssProps({ "--gpt-project-color": proj.color });
 
 		// Edit button
 		const editBtn = top.createEl("button", {
 			cls:  "gpt-projects-icon-btn",
 			attr: { "aria-label": "Edytuj" },
 		});
-		editBtn.innerHTML = SVG_EDIT;
+		this.setIconOnly(editBtn, "pencil");
 		editBtn.onclick   = (e: MouseEvent) => { e.stopPropagation(); this.showCreateDialog(proj); };
 
 		// Delete button
@@ -160,22 +169,27 @@ export class GPTProjectsView extends ItemView {
 			cls:  "gpt-projects-icon-btn",
 			attr: { "aria-label": t("history_delete_btn") },
 		});
-		delBtn.innerHTML = SVG_DELETE;
-		delBtn.onclick   = async (e: MouseEvent) => {
+		this.setIconOnly(delBtn, "trash-2");
+		delBtn.onclick   = (e: MouseEvent) => {
 			e.stopPropagation();
-			if (!confirm(t("projects_delete_with_count", proj.name, sessions.length))) return;
-			if (this.plugin.activeProjectId === proj.id) this.plugin.setActiveProject(null);
-			await this.plugin.projects.deleteProject(proj.id);
-			this.render();
+			new ConfirmModal(
+				this.plugin.app,
+				t("projects_delete_with_count", proj.name, sessions.length),
+				async () => {
+					if (this.plugin.activeProjectId === proj.id) this.plugin.setActiveProject(null);
+					await this.plugin.projects.deleteProject(proj.id);
+					this.render();
+				},
+				t("history_delete_btn"),
+				t("chat_notes_cancel"),
+			).open();
 		};
 
 		// Custom prompt — badge
 		if (proj.systemPrompt) {
 			const tag = card.createEl("div", { cls: "gpt-projects-card-prompt-tag" });
-			tag.style.background   = `color-mix(in srgb,${proj.color} 10%,var(--background-primary))`;
-			tag.style.color        = proj.color;
-			tag.style.borderColor  = `color-mix(in srgb,${proj.color} 20%,transparent)`;
-			tag.innerHTML          = `${SVG_PROMPT} ${t("projects_own_prompt_btn")}`;
+			tag.setCssProps({ "--gpt-project-color": proj.color });
+			this.setIconText(tag, "pencil", t("projects_own_prompt_btn"));
 		}
 
 		// ── Chat list ───────────────────────────────────────────────────────────
@@ -184,7 +198,7 @@ export class GPTProjectsView extends ItemView {
 
 			for (const s of sessions.slice(0, 5)) {
 				const row = chatList.createEl("div", { cls: "gpt-projects-card-chat" });
-				row.innerHTML = SVG_CHAT;
+				this.addIcon(row, "message-square", "gpt-projects-card-chat-icon");
 				row.createEl("span", { cls: "gpt-projects-card-chat-title", text: s.title.slice(0, 40) });
 				row.createEl("span", { cls: "gpt-projects-card-chat-date",  text: formatDate(s.updatedAt) });
 
@@ -192,13 +206,20 @@ export class GPTProjectsView extends ItemView {
 					cls:  "gpt-projects-card-chat-del",
 					attr: { "aria-label": t("history_delete_btn") },
 				});
-				chatDel.innerHTML = SVG_DELETE;
-				chatDel.onclick   = async (e: MouseEvent) => {
+				this.setIconOnly(chatDel, "trash-2");
+				chatDel.onclick   = (e: MouseEvent) => {
 					e.stopPropagation();
-					if (!confirm(t("projects_chat_delete_confirm", s.title.slice(0, 40)))) return;
-					await this.plugin.history.deleteSession(s.id);
-					if (this.plugin.currentSessionId === s.id) this.plugin.newChat();
-					this.render();
+					new ConfirmModal(
+						this.plugin.app,
+						t("projects_chat_delete_confirm", s.title.slice(0, 40)),
+						async () => {
+							await this.plugin.history.deleteSession(s.id);
+							if (this.plugin.currentSessionId === s.id) this.plugin.newChat();
+							this.render();
+						},
+						t("history_delete_btn"),
+						t("chat_notes_cancel"),
+					).open();
 				};
 
 				row.onclick = (e: MouseEvent) => {
@@ -222,10 +243,11 @@ export class GPTProjectsView extends ItemView {
 
 	showCreateDialog(editProject?: Project): void {
 		const isEdit  = !!editProject;
-		const overlay = document.createElement("div");
+		const doc     = this.containerEl.ownerDocument;
+		const overlay = doc.createElement("div");
 		overlay.className = "gpt-modal-overlay";
 
-		const box = document.createElement("div");
+		const box = doc.createElement("div");
 		box.className = "gpt-modal-box";
 
 		box.createEl("p", {
@@ -240,7 +262,7 @@ export class GPTProjectsView extends ItemView {
 		if (isEdit) nameInput.value = editProject!.name;
 
 		const promptLabel = box.createEl("div", { cls: "gpt-modal-prompt-label" });
-		promptLabel.innerHTML = `${SVG_EDIT} ${t("projects_prompt_label")}`;
+		this.setIconText(promptLabel, "pencil", t("projects_prompt_label"));
 
 		const promptInput = box.createEl("textarea", {
 			cls:  "gpt-modal-input gpt-modal-prompt-area",
@@ -262,8 +284,9 @@ export class GPTProjectsView extends ItemView {
 			cls:  "gpt-modal-ok",
 			text: isEdit ? "Zapisz" : t("projects_create_btn"),
 		});
-		ok.onclick = async () => {			const name = nameInput.value.trim();
-			if (!name) { nameInput.style.borderColor = "var(--color-red)"; return; }
+		ok.onclick = async () => {
+			const name = nameInput.value.trim();
+			if (!name) { nameInput.addClass("gpt-modal-input-error"); return; }
 
 			if (isEdit) {
 				await this.plugin.projects.updateProject(editProject!.id, {
@@ -289,9 +312,10 @@ export class GPTProjectsView extends ItemView {
 		nameInput.addEventListener("keydown", (e: KeyboardEvent) => {
 			if (e.key === "Enter") void (ok.onclick as (() => Promise<void>) | null)?.();
 		});
+		nameInput.addEventListener("input", () => nameInput.removeClass("gpt-modal-input-error"));
 
 		overlay.appendChild(box);
 		this.containerEl.appendChild(overlay);
-		setTimeout(() => nameInput.focus(), 50);
+		window.setTimeout(() => nameInput.focus(), 50);
 	}
 }

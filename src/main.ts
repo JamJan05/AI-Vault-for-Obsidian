@@ -82,16 +82,16 @@ export default class GPTPlugin extends Plugin {
 		this.addCommand({ id: "open-gpt-chat",     name: t("cmd_open_chat"),    callback: () => void this.activateChatView() });
 		this.addCommand({ id: "open-gpt-history",  name: t("cmd_open_history"), callback: () => void this.activateHistoryView() });
 		this.addCommand({ id: "open-gpt-projects", name: t("cmd_open_projects"),callback: () => void this.activateProjectsView() });
-		this.addCommand({ id: "new-gpt-chat",      name: "AI-Vault: New conversation",   callback: () => this.newChat() });
+		this.addCommand({ id: "new-gpt-chat",      name: "New conversation",   callback: () => this.newChat() });
 
 		this.addCommand({
 			id: "analyze-selection",
-			name: "AI-Vault: Analyze selected text",
+			name: "Analyze selected text",
 			editorCallback: async editor => {
 				const sel = editor.getSelection();
 				if (!sel) { new Notice("Select text first."); return; }
 				const view = await this.activateChatView();
-				await new Promise(r => setTimeout(r, 300));
+				await new Promise(r => window.setTimeout(r, 300));
 				void view?.sendMessage(`Analyze:\n\n${sel}`);
 			},
 		});
@@ -103,14 +103,14 @@ export default class GPTPlugin extends Plugin {
 				const c = editor.getValue();
 				if (!c.trim()) { new Notice("Note is empty."); return; }
 				const view = await this.activateChatView();
-				await new Promise(r => setTimeout(r, 300));
+				await new Promise(r => window.setTimeout(r, 300));
 				void view?.sendMessage(`Summarize in 5 points:\n\n${c.slice(0, 8000)}`);
 			},
 		});
 
 		this.addCommand({
 			id: "reindex-vault",
-			name: "AI-Vault: Re-index vault (RAG)",
+			name: "Re-index vault (RAG)",
 			callback: async () => {
 				new Notice("⏳ Indexing…");
 				await this.rag.buildIndex();
@@ -142,12 +142,12 @@ export default class GPTPlugin extends Plugin {
 			if (!sel) return;
 			menu.addItem(i => i.setTitle("✦ AI-Vault: Analyze").setIcon("message-square").onClick(async () => {
 				const v = await this.activateChatView();
-				await new Promise(r => setTimeout(r, 300));
+				await new Promise(r => window.setTimeout(r, 300));
 				void v?.sendMessage(`Analyze:\n\n${sel}`);
 			}));
 			menu.addItem(i => i.setTitle("✦ AI-Vault: Summarize").setIcon("list").onClick(async () => {
 				const v = await this.activateChatView();
-				await new Promise(r => setTimeout(r, 300));
+				await new Promise(r => window.setTimeout(r, 300));
 				void v?.sendMessage(`Summarize in 3 points:\n\n${sel}`);
 			}));
 		}));
@@ -155,9 +155,10 @@ export default class GPTPlugin extends Plugin {
 		this.addSettingTab(new GPTSettingsTab(this.app, this));
 	}
 
-	async onunload(): Promise<void> {
+	onunload(): void {
 		this.debouncedUpdateFile?.cancel();
-		try { await this.rag?.saveIndexNow(); } catch { /* ignore */ }
+		this.rag?.saveIndexNow()
+			.catch(err => console.warn("[AI-Vault] Failed to save RAG index during unload:", err));
 	}
 
 	// ── Sessions ──────────────────────────────────────────────────────────────
@@ -243,7 +244,7 @@ export default class GPTPlugin extends Plugin {
 			leaf = workspace.getRightLeaf(false) ?? workspace.getLeaf(true);
 			await leaf.setViewState({ type: CHAT_VIEW_TYPE, active: true });
 		}
-		workspace.revealLeaf(leaf);
+		await workspace.revealLeaf(leaf);
 		return this.getChatView();
 	}
 
@@ -252,12 +253,12 @@ export default class GPTPlugin extends Plugin {
 		let leaf = workspace.getLeavesOfType(HISTORY_VIEW_TYPE)[0];
 		if (!leaf) {
 			const projLeaf = workspace.getLeavesOfType(PROJECTS_VIEW_TYPE)[0];
-			if (projLeaf) { await projLeaf.setViewState({ type: HISTORY_VIEW_TYPE, active: true }); workspace.revealLeaf(projLeaf); return; }
+			if (projLeaf) { await projLeaf.setViewState({ type: HISTORY_VIEW_TYPE, active: true }); await workspace.revealLeaf(projLeaf); return; }
 			const chatLeaf = workspace.getLeavesOfType(CHAT_VIEW_TYPE)[0];
 			leaf = chatLeaf ? workspace.createLeafBySplit(chatLeaf, "vertical") : (workspace.getLeftLeaf(false) ?? workspace.getLeaf(true));
 			await leaf.setViewState({ type: HISTORY_VIEW_TYPE, active: true });
 		}
-		workspace.revealLeaf(leaf);
+		await workspace.revealLeaf(leaf);
 	}
 
 	async activateProjectsView(): Promise<void> {
@@ -265,12 +266,12 @@ export default class GPTPlugin extends Plugin {
 		let leaf = workspace.getLeavesOfType(PROJECTS_VIEW_TYPE)[0];
 		if (!leaf) {
 			const histLeaf = workspace.getLeavesOfType(HISTORY_VIEW_TYPE)[0];
-			if (histLeaf) { await histLeaf.setViewState({ type: PROJECTS_VIEW_TYPE, active: true }); workspace.revealLeaf(histLeaf); return; }
+			if (histLeaf) { await histLeaf.setViewState({ type: PROJECTS_VIEW_TYPE, active: true }); await workspace.revealLeaf(histLeaf); return; }
 			const chatLeaf = workspace.getLeavesOfType(CHAT_VIEW_TYPE)[0];
 			leaf = chatLeaf ? workspace.createLeafBySplit(chatLeaf, "vertical") : (workspace.getLeftLeaf(false) ?? workspace.getLeaf(true));
 			await leaf.setViewState({ type: PROJECTS_VIEW_TYPE, active: true });
 		}
-		workspace.revealLeaf(leaf);
+		await workspace.revealLeaf(leaf);
 	}
 
 	// ── Settings ───────────────────────────────────────────────────────────────

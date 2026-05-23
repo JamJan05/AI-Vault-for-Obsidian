@@ -40,15 +40,17 @@ export class ExternalStorage {
 		private readonly fallback: PluginStorage,
 	) {
 		// Detect desktop — Obsidian on desktop exposes Node via require()
+		// NOTE: Using Node.js fs/path for external storage outside the vault.
+		// This requires desktop Obsidian. See manifest.json: isDesktopOnly = true.
 		try {
 			if (
 				typeof process !== "undefined" &&
 				process.versions &&
 				process.versions.node
 			) {
-				// eslint-disable-next-line @typescript-eslint/no-require-imports
+				// eslint-disable-next-line @typescript-eslint/no-require-imports -- Node.js fs is required for desktop-only external storage.
 				this._fs      = require("fs/promises") as FSPromises;
-				// eslint-disable-next-line @typescript-eslint/no-require-imports
+				// eslint-disable-next-line @typescript-eslint/no-require-imports -- Node.js path is required for desktop-only external storage.
 				this._path    = require("path") as NodePath;
 				this._desktop = true;
 			}
@@ -78,7 +80,7 @@ export class ExternalStorage {
 			return false;
 		}
 
-		// Cast to any to read settings because the plugin is generic here
+		// Read settings through a narrowed plugin shape because the base Plugin type is generic here.
 		const settings = (this.plugin as unknown as { settings: { externalStorageEnabled: boolean } }).settings;
 		if (!settings.externalStorageEnabled) {
 			this._enabled = false;

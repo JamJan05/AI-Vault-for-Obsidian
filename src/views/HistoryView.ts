@@ -1,14 +1,10 @@
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { ItemView, setIcon, WorkspaceLeaf } from "obsidian";
 import { HISTORY_VIEW_TYPE, PROJECTS_VIEW_TYPE } from "../constants";
 import { t } from "../i18n";
 import { formatDate } from "../utils";
+import { ConfirmModal } from "./ConfirmModal";
 import type { HistoryManager } from "../history/HistoryManager";
 import type { ProjectManager } from "../history/ProjectManager";
-
-// SVG helpers — inline SVG for icons (Obsidian's Lucide set doesn't include these)
-const SVG_CLOSE = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
-const SVG_FOLDER = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`;
-const SVG_DELETE = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>`;
 
 interface PluginWithDeps {
 	app:              import("obsidian").App;
@@ -48,6 +44,11 @@ export class GPTHistoryView extends ItemView {
 		this.buildSessionList(root);
 	}
 
+	private setIconOnly(el: HTMLElement, icon: string): void {
+		el.empty();
+		setIcon(el, icon);
+	}
+
 	// ── Sekcje ─────────────────────────────────────────────────────────────────
 
 	private buildHeader(root: HTMLElement): void {
@@ -61,7 +62,7 @@ export class GPTHistoryView extends ItemView {
 			cls:  "gpt-icon-btn",
 			attr: { "aria-label": "Zamknij" },
 		});
-		closeBtn.innerHTML = SVG_CLOSE;
+		this.setIconOnly(closeBtn, "x");
 		closeBtn.onclick = () => {
 			const leaves = this.plugin.app.workspace.getLeavesOfType(HISTORY_VIEW_TYPE);
 			leaves[0]?.detach();
@@ -71,7 +72,7 @@ export class GPTHistoryView extends ItemView {
 	private buildProjectsShortcut(root: HTMLElement): void {
 		const projCount = this.plugin.projects.projects.length;
 		const btn = root.createEl("div", { cls: "gpt-projects-shortcut" });
-		btn.innerHTML = SVG_FOLDER;
+		setIcon(btn, "folder");
 		btn.createEl("span", { cls: "gpt-projects-shortcut-label", text: t("chat_projects") });
 		if (projCount) {
 			btn.createEl("span", {
@@ -107,13 +108,20 @@ export class GPTHistoryView extends ItemView {
 				cls:  "gpt-history-item-del",
 				attr: { "aria-label": t("history_delete_btn") },
 			});
-			delBtn.innerHTML = SVG_DELETE;
-			delBtn.onclick   = async (e: MouseEvent) => {
+			this.setIconOnly(delBtn, "trash-2");
+			delBtn.onclick   = (e: MouseEvent) => {
 				e.stopPropagation();
-				if (!confirm(t("history_delete_chat_confirm", session.title.slice(0, 40)))) return;
-				await this.plugin.history.deleteSession(session.id);
-				if (this.plugin.currentSessionId === session.id) this.plugin.newChat();
-				this.render();
+				new ConfirmModal(
+					this.plugin.app,
+					t("history_delete_chat_confirm", session.title.slice(0, 40)),
+					async () => {
+						await this.plugin.history.deleteSession(session.id);
+						if (this.plugin.currentSessionId === session.id) this.plugin.newChat();
+						this.render();
+					},
+					t("history_delete_btn"),
+					t("chat_notes_cancel"),
+				).open();
 			};
 
 			item.createEl("div", { cls: "gpt-history-item-date",    text: formatDate(session.updatedAt) });

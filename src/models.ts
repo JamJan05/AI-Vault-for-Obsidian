@@ -40,41 +40,6 @@ export function mapEffortForGPT5(mode: string): string {
 	}
 }
 
-// ─── Pricing (USD per 1M tokens) ──────────────────────────────────────────────
-
-interface ModelPrice {
-	input:  number;
-	output: number;
-}
-
-export const MODEL_PRICING: Record<string, ModelPrice> = {
-	// OpenAI
-	"gpt-5":              { input: 1.25,  output: 10.00 },
-	"gpt-5-mini":         { input: 0.25,  output: 2.00  },
-	"gpt-5-nano":         { input: 0.05,  output: 0.40  },
-	"gpt-5-search-api":   { input: 1.25,  output: 10.00 },
-	"gpt-4o":             { input: 2.50,  output: 10.00 },
-	"gpt-4o-mini":        { input: 0.15,  output: 0.60  },
-	"gpt-4-turbo":        { input: 10.00, output: 30.00 },
-	// Anthropic
-	"claude-opus-4-5":    { input: 15.00, output: 75.00 },
-	"claude-sonnet-4-5":  { input: 3.00,  output: 15.00 },
-	"claude-haiku-4-5":   { input: 0.80,  output: 4.00  },
-};
-
-/**
- * Estimates the request cost in USD.
- * @returns formatted string (e.g. "$0.0042") or null when no pricing is available.
- */
-export function estimateCost(model: string, inputTokens: number, outputTokens: number): string | null {
-	const p = MODEL_PRICING[model];
-	if (!p) return null;
-	const cost = (inputTokens * p.input + outputTokens * p.output) / 1_000_000;
-	if (cost < 0.0001) return "<$0.0001";
-	if (cost < 0.01)   return `$${cost.toFixed(4)}`;
-	return `$${cost.toFixed(3)}`;
-}
-
 // ─── Thinking modes ───────────────────────────────────────────────────────────
 
 import { t } from "./i18n";
