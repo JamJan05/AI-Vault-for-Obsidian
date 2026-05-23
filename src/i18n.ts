@@ -105,6 +105,11 @@ const en: TranslationDict = {
 	chat_title_learn:            "Learn mode — model asks questions, generates quizzes",
 	chat_title_code:             "Code mode — model as expert programmer",
 	chat_section_rag:            "🗄️ RAG (vault context)",
+	chat_provider_tooltip:       (p: string) => `Current AI type: ${p}\nClick to change`,
+	chat_provider_picker_title:  "Select AI type",
+	chat_provider_gpt_desc:      "OpenAI GPT models",
+	chat_provider_claude_desc:   "Anthropic Claude models",
+	chat_provider_ollama_desc:   "Local Ollama models",
 	chat_model_tooltip:          (m: string) => `Current model: ${m}\nClick to change`,
 	chat_model_session_tooltip:  (title: string, model: string) => `${title}\nModel: ${model}\nClick to change`,
 	chat_mode_fast:              "⚡ Fast",
@@ -129,6 +134,7 @@ const en: TranslationDict = {
 	model_desc_sonnet:           "Recommended",
 	model_desc_haiku:            "Fast, cheap",
 	model_desc_ollama:           "Local Ollama model",
+	model_desc_custom:           "Current custom model",
 	model_gpt5nano_label:        "GPT-5 Nano",
 
 	// Web search
@@ -388,6 +394,11 @@ const pl: TranslationDict = {
 	chat_title_learn:            "Tryb nauki — model pyta, generuje quizy",
 	chat_title_code:             "Tryb kodowania — model jako ekspert programista",
 	chat_section_rag:            "🗄️ RAG (kontekst z vault)",
+	chat_provider_tooltip:       (p: string) => `Aktualny typ AI: ${p}\nKliknij aby zmienić`,
+	chat_provider_picker_title:  "Wybierz typ AI",
+	chat_provider_gpt_desc:      "Modele OpenAI GPT",
+	chat_provider_claude_desc:   "Modele Anthropic Claude",
+	chat_provider_ollama_desc:   "Lokalne modele Ollama",
 	chat_model_tooltip:          (m: string) => `Aktualny model: ${m}\nKliknij aby zmienić`,
 	chat_model_session_tooltip:  (title: string, model: string) => `${title}\nModel: ${model}\nKliknij aby zmienić`,
 	chat_mode_fast:              "⚡ Szybki",
@@ -412,6 +423,7 @@ const pl: TranslationDict = {
 	model_desc_sonnet:           "Polecany",
 	model_desc_haiku:            "Szybki, tani",
 	model_desc_ollama:           "Lokalny model Ollama",
+	model_desc_custom:           "Bieżący własny model",
 	model_gpt5nano_label:        "GPT-5 Nano",
 
 	// Web search

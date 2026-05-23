@@ -74,6 +74,19 @@ interface ModelOption {
 	desc:  () => string;
 }
 
+interface ProviderOption {
+	id:    Provider;
+	label: string;
+	icon:  string;
+	desc:  () => string;
+}
+
+const PROVIDER_OPTIONS: ProviderOption[] = [
+	{ id: "openai",    label: "GPT",    icon: "🤖", desc: () => t("chat_provider_gpt_desc")    },
+	{ id: "anthropic", label: "Claude", icon: "🟣", desc: () => t("chat_provider_claude_desc") },
+	{ id: "ollama",    label: "Ollama", icon: "🖥️", desc: () => t("chat_provider_ollama_desc") },
+];
+
 const ALL_MODELS: Record<"openai" | "anthropic", ModelOption[]> = {
 	openai: [
 		{ id: "gpt-5",            label: "GPT-5",        desc: () => t("model_desc_gpt5")       },
@@ -105,6 +118,7 @@ export class GPTChatView extends ItemView {
 
 	// Reference to the open model picker and its global mousedown handler
 	private currentPicker:       HTMLElement | null = null;
+	private currentPickerKind:   "model" | "provider" | null = null;
 	private pickerCloseHandler: ((e: MouseEvent) => void) | null = null;
 
 	private lastUsage: StreamUsage | null = null;
@@ -123,10 +137,8 @@ export class GPTChatView extends ItemView {
 	private webSearchBtn!:     HTMLButtonElement;
 	private learnBtn!:         HTMLButtonElement;
 	private codeBtn!:          HTMLButtonElement;
+	private providerSelectorBtn!: HTMLButtonElement;
 	private modelSelectorBtn!: HTMLButtonElement;
-	private gptBtn!:           HTMLButtonElement;
-	private claudeBtn!:        HTMLButtonElement;
-	private ollamaBtn!:        HTMLButtonElement;
 	private projectBar!:       HTMLElement;
 	private projectBarLabel!:  HTMLElement;
 	private manualBar!:        HTMLElement;
@@ -160,6 +172,7 @@ export class GPTChatView extends ItemView {
 		}
 		this.currentPicker?.remove();
 		this.currentPicker = null;
+		this.currentPickerKind = null;
 	}
 
 	// ── Auto-index ─────────────────────────────────────────────────────────────
@@ -224,20 +237,15 @@ export class GPTChatView extends ItemView {
 		const header = root.createEl("div", { cls: "gpt-header" });
 		header.createEl("span", { cls: "gpt-header-icon", text: "✦" });
 
+		this.providerSelectorBtn = header.createEl("button", { cls: "gpt-provider-selector" });
+		this.providerSelectorBtn.onclick = () => this.openProviderPicker();
+
 		this.modelSelectorBtn = header.createEl("button", { cls: "gpt-model-selector" });
 		this.modelSelectorBtn.onclick = () => this.openModelPicker();
-		this.updateModelSelector();
 
 		this.ragBadge = header.createEl("span", { cls: "gpt-rag-badge" });
 		this.updateRagBadge();
 
-		const providerSwitch = header.createEl("div", { cls: "gpt-provider-switch" });
-		this.gptBtn    = providerSwitch.createEl("button", { cls: "gpt-provider-btn", text: "GPT" });
-		this.claudeBtn = providerSwitch.createEl("button", { cls: "gpt-provider-btn", text: "Claude" });
-		this.ollamaBtn = providerSwitch.createEl("button", { cls: "gpt-provider-btn", text: "Ollama" });
-		this.gptBtn.onclick    = () => this.setProvider("openai");
-		this.claudeBtn.onclick = () => this.setProvider("anthropic");
-		this.ollamaBtn.onclick = () => this.setProvider("ollama");
 		this.updateProviderSwitch();
 
 		const histBtn = header.createEl("button", { cls: "gpt-icon-btn", attr: { "aria-label": t("cmd_open_history") } });
@@ -492,7 +500,9 @@ export class GPTChatView extends ItemView {
 	}
 
 	private getEffectiveProvider(model = this.getCurrentActiveModel()): Provider {
-		return this.settings.autoDetectProvider ? detectProvider(model) : this.settings.provider;
+		if (!this.settings.autoDetectProvider) return this.settings.provider;
+		const detected = detectProvider(model);
+		return detected === this.settings.provider ? detected : this.settings.provider;
 	}
 
 	private getProviderLabel(provider: Provider): string {
@@ -507,6 +517,10 @@ export class GPTChatView extends ItemView {
 		return "🤖";
 	}
 
+	private getProviderOption(provider: Provider): ProviderOption {
+		return PROVIDER_OPTIONS.find(option => option.id === provider) ?? PROVIDER_OPTIONS[0];
+	}
+
 	private getProviderPlaceholder(provider: Provider): string {
 		if (provider === "anthropic") return t("chat_placeholder_claude");
 		if (provider === "ollama") return t("chat_placeholder_ollama");
@@ -514,6 +528,9 @@ export class GPTChatView extends ItemView {
 	}
 
 	private formatModelLabel(model: string, provider: Provider): string {
+		const known = this.getModelsForProvider(provider).find(option => option.id === model);
+		if (known) return known.label;
+
 		if (provider === "openai") {
 			return model
 				.replace("gpt-", "GPT-")
@@ -532,26 +549,36 @@ export class GPTChatView extends ItemView {
 		return [{ id: model, label: model, desc: () => t("model_desc_ollama") }];
 	}
 
-	private getModelPickerGroups(): Array<{ provider: Provider; title: string; models: ModelOption[] }> {
-		const groups: Array<{ provider: Provider; title: string; models: ModelOption[] }> = [
-			{ provider: "openai", title: t("chat_picker_openai"), models: [...ALL_MODELS.openai] },
-			{ provider: "anthropic", title: t("chat_picker_claude"), models: [...ALL_MODELS.anthropic] },
-			{ provider: "ollama", title: t("chat_picker_ollama"), models: this.getOllamaModelsForPicker() },
-		];
+	private getModelsForProvider(provider: Provider): ModelOption[] {
+		if (provider === "openai") return [...ALL_MODELS.openai];
+		if (provider === "anthropic") return [...ALL_MODELS.anthropic];
+		return this.getOllamaModelsForPicker();
+	}
 
+	private getModelPickerGroups(): Array<{ provider: Provider; title: string; models: ModelOption[] }> {
+		const provider = this.settings.provider;
+		const group = {
+			provider,
+			title: this.getModelPickerTitle(provider),
+			models: this.getModelsForProvider(provider),
+		};
 		const activeModel = this.getCurrentActiveModel();
-		const activeProvider = this.getEffectiveProvider(activeModel);
-		const known = groups.some(group => group.models.some(model => model.id === activeModel));
+		const known = group.models.some(model => model.id === activeModel);
 		if (!known) {
-			const group = groups.find(item => item.provider === activeProvider);
-			group?.models.unshift({ id: activeModel, label: activeModel, desc: () => "Current custom model" });
+			group.models.unshift({ id: activeModel, label: activeModel, desc: () => t("model_desc_custom") });
 		}
 
-		return groups;
+		return [group];
+	}
+
+	private getModelPickerTitle(provider: Provider): string {
+		if (provider === "anthropic") return t("chat_picker_claude");
+		if (provider === "ollama") return t("chat_picker_ollama");
+		return t("chat_picker_openai");
 	}
 
 	private setActiveModel(model: string): Provider {
-		const provider = detectProvider(model);
+		const provider = this.settings.provider;
 		this.settings.provider = provider;
 		if (provider === "openai") {
 			this.settings.model = model;
@@ -645,14 +672,20 @@ export class GPTChatView extends ItemView {
 	}
 
 	updateProviderSwitch(): void {
-		if (!this.gptBtn || !this.claudeBtn || !this.ollamaBtn) return;
-		const provider = this.getEffectiveProvider();
-		this.gptBtn.classList.toggle("gpt-provider-btn--active", provider === "openai");
-		this.gptBtn.classList.toggle("gpt-provider-btn--openai", provider === "openai");
-		this.claudeBtn.classList.toggle("gpt-provider-btn--active", provider === "anthropic");
-		this.claudeBtn.classList.toggle("gpt-provider-btn--claude", provider === "anthropic");
-		this.ollamaBtn.classList.toggle("gpt-provider-btn--active", provider === "ollama");
-		this.ollamaBtn.classList.toggle("gpt-provider-btn--ollama", provider === "ollama");
+		if (!this.providerSelectorBtn) return;
+		const provider = this.settings.provider;
+		const option = this.getProviderOption(provider);
+
+		this.providerSelectorBtn.empty();
+		this.providerSelectorBtn.classList.toggle("gpt-provider-selector--openai", provider === "openai");
+		this.providerSelectorBtn.classList.toggle("gpt-provider-selector--claude", provider === "anthropic");
+		this.providerSelectorBtn.classList.toggle("gpt-provider-selector--ollama", provider === "ollama");
+		this.providerSelectorBtn.createEl("span", { cls: "gpt-provider-icon", text: option.icon });
+		this.providerSelectorBtn.createEl("span", { cls: "gpt-provider-label", text: option.label });
+		const arrow = this.providerSelectorBtn.createEl("span", { cls: "gpt-provider-arrow" });
+		setIcon(arrow, "chevron-down");
+		this.providerSelectorBtn.title = t("chat_provider_tooltip", option.label);
+
 		if (this.inputEl && !this.codeMode && !this.learnMode) {
 			this.inputEl.placeholder = this.getProviderPlaceholder(provider);
 		}
@@ -662,7 +695,7 @@ export class GPTChatView extends ItemView {
 	updateModelSelector(): void {
 		if (!this.modelSelectorBtn) return;
 		const model = this.getCurrentActiveModel();
-		const provider = this.getEffectiveProvider(model);
+		const provider = this.settings.provider;
 		const icon = this.getProviderIcon(provider);
 		const label = this.formatModelLabel(model, provider);
 
@@ -682,11 +715,93 @@ export class GPTChatView extends ItemView {
 		}
 		this.currentPicker?.remove();
 		this.currentPicker = null;
+		this.currentPickerKind = null;
+	}
+
+	private openProviderPicker(): void {
+		if (this.currentPicker) {
+			const wasProviderPicker = this.currentPickerKind === "provider";
+			this.closePicker();
+			if (wasProviderPicker) return;
+		}
+
+		const activeProvider = this.settings.provider;
+		const doc = this.containerEl.ownerDocument;
+		const picker = doc.createElement("div");
+		picker.className = "gpt-model-picker gpt-provider-picker";
+		this.currentPicker = picker;
+		this.currentPickerKind = "provider";
+
+		const hdr = doc.createElement("div");
+		hdr.className = "gpt-mp-header";
+		hdr.textContent = t("chat_provider_picker_title");
+		picker.appendChild(hdr);
+
+		for (const option of PROVIDER_OPTIONS) {
+			const isActive = option.id === activeProvider;
+			const row = doc.createElement("button");
+			row.className = "gpt-mp-row gpt-provider-row" + (isActive ? " gpt-mp-row--active" : "");
+			row.type = "button";
+
+			const icon = doc.createElement("span");
+			icon.className = "gpt-provider-row-icon";
+			icon.textContent = option.icon;
+			row.appendChild(icon);
+
+			const left = doc.createElement("span");
+			left.className = "gpt-mp-row-left";
+
+			const name = doc.createElement("span");
+			name.className = "gpt-mp-row-name";
+			name.textContent = option.label;
+
+			const desc = doc.createElement("span");
+			desc.className = "gpt-mp-row-desc";
+			desc.textContent = option.desc();
+
+			left.appendChild(name);
+			left.appendChild(desc);
+			row.appendChild(left);
+
+			if (isActive) {
+				const check = doc.createElement("span");
+				check.className = "gpt-mp-row-check";
+				check.textContent = "✓";
+				row.appendChild(check);
+			}
+
+			row.addEventListener("mousedown", (e) => e.stopPropagation());
+			row.addEventListener("click", () => this.setProvider(option.id));
+			picker.appendChild(row);
+		}
+
+		doc.body.appendChild(picker);
+		const rect = this.providerSelectorBtn.getBoundingClientRect();
+		picker.setCssProps({
+			top:  `${rect.bottom + 4}px`,
+			left: `${rect.left}px`,
+		});
+
+		this.pickerCloseHandler = (e: MouseEvent): void => {
+			const target = e.target as Node | null;
+			if (!target) return;
+			const inside = picker.contains(target) || (this.providerSelectorBtn?.contains(target) ?? false);
+			if (!inside) this.closePicker();
+		};
+		window.setTimeout(() => {
+			if (this.pickerCloseHandler) {
+				doc.addEventListener("mousedown", this.pickerCloseHandler);
+			}
+		}, 0);
 	}
 
 	private openModelPicker(): void {
 		// Toggle: if the picker is already open — close it
-		if (this.currentPicker) { this.closePicker(); return; }
+		if (this.currentPicker) {
+			const wasModelPicker = this.currentPickerKind === "model";
+			this.closePicker();
+			if (wasModelPicker) return;
+		}
 
 		const groups = this.getModelPickerGroups();
 		const activeId = this.getCurrentActiveModel();
@@ -695,6 +810,7 @@ export class GPTChatView extends ItemView {
 		const picker = doc.createElement("div");
 		picker.className = "gpt-model-picker";
 		this.currentPicker = picker;
+		this.currentPickerKind = "model";
 
 		for (const group of groups) {
 			const hdr = doc.createElement("div");
