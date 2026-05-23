@@ -1,6 +1,8 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import { t, setLanguage } from "./i18n";
 import { DEFAULT_SYSTEM_PROMPTS } from "./settings";
+import { detectProvider } from "./models";
+import { fetchOllamaModels } from "./api/ollama";
 import { FILE_API_KEYS } from "./constants";
 import type { ExternalStorage } from "./storage/ExternalStorage";
 import type { HistoryManager }  from "./history/HistoryManager";
@@ -8,7 +10,7 @@ import type { ProjectManager }  from "./history/ProjectManager";
 import type { RAGEngine }       from "./rag/RAGEngine";
 import type { GPTHistoryView }  from "./views/HistoryView";
 import type { GPTProjectsView } from "./views/ProjectsView";
-import type { PluginSettings }  from "./settings";
+import type { PluginSettings, Provider } from "./settings";
 
 // ─── Plugin interface ──────────────────────────────────────────────────────────
 
@@ -29,6 +31,8 @@ interface PluginWithDeps {
 // ─── SettingsTab ───────────────────────────────────────────────────────────────
 
 export class GPTSettingsTab extends PluginSettingTab {
+	private ollamaModels: string[] = [];
+
 	constructor(app: App, private readonly plugin: PluginWithDeps) {
 		super(app, plugin as never);
 	}
@@ -43,8 +47,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 		this.renderLanguage(containerEl);
 		this.renderKeyWarning(containerEl);
 		this.renderApiKeySync(containerEl);
-		this.renderOpenAIKeys(containerEl);
-		this.renderClaude(containerEl);
+		this.renderModelSelector(containerEl);
 		this.renderOpenAISettings(containerEl);
 		this.renderContext(containerEl);
 		this.renderRAG(containerEl);
@@ -152,45 +155,179 @@ export class GPTSettingsTab extends PluginSettingTab {
 		}
 	}
 
-	private renderOpenAIKeys(el: HTMLElement): void {
+	private renderModelSelector(el: HTMLElement): void {
+		const currentModel = this.getCurrentActiveModel();
+		const ollamaModels = this.getOllamaModelOptions();
+		const knownModels  = new Set<string>();
+
+		new Setting(el)
+			.setName("Model")
+			.setHeading();
+
+		new Setting(el)
+			.setName("Active model")
+			.setDesc("Provider is detected automatically from the model name.")
+			.addDropdown(d => {
+				const addModel = (id: string, label: string): void => {
+					knownModels.add(id);
+					d.addOption(id, label);
+				};
+
+				d.addOption("__openai_header__", "--- OpenAI ---");
+				addModel("gpt-5",            "GPT-5 (reasoning, best)");
+				addModel("gpt-5-mini",       "GPT-5 Mini (reasoning, faster)");
+				addModel("gpt-5-nano",       "GPT-5 Nano (fast / affordable)");
+				addModel("gpt-5-search-api", "GPT-5 Search (web search)");
+				addModel("gpt-4o",           "GPT-4o (web search)");
+				addModel("gpt-4o-mini",      "GPT-4o Mini (web search)");
+				addModel("gpt-4-turbo",      "GPT-4 Turbo");
+
+				d.addOption("__claude_header__", "--- Anthropic ---");
+				addModel("claude-opus-4-5",   "Claude Opus 4.5 (best)");
+				addModel("claude-sonnet-4-5", "Claude Sonnet 4.5 (recommended)");
+				addModel("claude-haiku-4-5",  "Claude Haiku 4.5 (fast / affordable)");
+
+				d.addOption("__ollama_header__", "--- Ollama (local) ---");
+				for (const model of ollamaModels) addModel(model, model);
+				if (ollamaModels.length === 0) {
+					d.addOption("__ollama_empty__", "(no models - click Refresh)");
+				}
+
+				if (!knownModels.has(currentModel)) addModel(currentModel, currentModel);
+				d.setValue(currentModel);
+
+				d.onChange(async (value: string) => {
+					if (value.startsWith("__")) {
+						d.setValue(currentModel);
+						return;
+					}
+
+					const provider = detectProvider(value);
+					this.plugin.settings.provider = provider;
+					if (provider === "openai") {
+						this.plugin.settings.model = value;
+					} else if (provider === "anthropic") {
+						this.plugin.settings.claudeModel = value;
+					} else {
+						this.plugin.settings.ollamaModel = value;
+					}
+
+					await this.plugin.saveSettings();
+					this.display();
+				});
+
+				return d;
+			})
+			.addButton(btn => btn
+				.setButtonText("Refresh Ollama")
+				.setTooltip("Fetch available models from local Ollama server")
+				.onClick(() => {
+					this.refreshOllamaModelsInSelector()
+						.catch((err: unknown) => {
+							const message = err instanceof Error ? err.message : String(err);
+							console.error("Ollama refresh failed:", err);
+							new Notice(`Ollama refresh failed: ${message}`, 6000);
+						});
+				}),
+			);
+
+		new Setting(el)
+			.setName("Auto-detect provider")
+			.setDesc("Automatically detect AI provider from model name: claude-* -> Anthropic, gpt-* -> OpenAI, others -> Ollama.")
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.autoDetectProvider)
+				.onChange(async (value: boolean) => {
+					this.plugin.settings.autoDetectProvider = value;
+					await this.plugin.saveSettings();
+					this.display();
+				}),
+			);
+
+		const activeProvider = this.plugin.settings.autoDetectProvider
+			? detectProvider(currentModel)
+			: this.plugin.settings.provider;
+		this.renderActiveApiKey(el, activeProvider);
+	}
+
+	private getOllamaModelOptions(): string[] {
+		const models = [...this.ollamaModels];
+		const current = this.plugin.settings.ollamaModel?.trim();
+		if (current && !models.includes(current)) models.unshift(current);
+		return models;
+	}
+
+	private getCurrentActiveModel(): string {
+		const provider = this.plugin.settings.provider;
+		if (provider === "anthropic") return this.plugin.settings.claudeModel ?? "claude-sonnet-4-5";
+		if (provider === "ollama") return this.plugin.settings.ollamaModel ?? "llama3.2";
+		return this.plugin.settings.model ?? "gpt-4o";
+	}
+
+	private renderActiveApiKey(el: HTMLElement, provider: Provider): void {
 		const keysInSync      = this.plugin.settings.apiKeysInSync;
 		const extEnabled      = this.plugin.externalStorage.isEnabled;
 		const keysStoredLocal = !keysInSync && extEnabled;
 		const keysLocation    = keysStoredLocal ? t("settings_key_local") : t("settings_key_sync");
 
-		new Setting(el)
-			.setName(t("settings_openai_title"))
-			.setHeading();
-
-		new Setting(el)
-			.setName(t("settings_openai_key_name"))
-			.setDesc(keysLocation)
-			.addText(txt => {
-				txt.inputEl.type = "password";
-				txt.setPlaceholder("sk-…")
-					.setValue(this.plugin.settings.apiKey)
-					.onChange(async (v: string) => {
-						this.plugin.settings.apiKey = v.trim();
+		if (provider === "openai") {
+			new Setting(el)
+				.setName("OpenAI API Key")
+				.setDesc(keysLocation)
+				.addText(txt => {
+					txt.inputEl.type = "password";
+					txt.setPlaceholder("sk-...")
+						.setValue(this.plugin.settings.apiKey ?? "")
+						.onChange(async (value: string) => {
+							this.plugin.settings.apiKey = value.trim();
+							await this.plugin.saveSettings();
+						});
+				});
+		} else if (provider === "anthropic") {
+			new Setting(el)
+				.setName("Anthropic API Key")
+				.setDesc(keysLocation)
+				.addText(txt => {
+					txt.inputEl.type = "password";
+					txt.setPlaceholder("sk-ant-...")
+						.setValue(this.plugin.settings.claudeApiKey ?? "")
+						.onChange(async (value: string) => {
+							this.plugin.settings.claudeApiKey = value.trim();
+							await this.plugin.saveSettings();
+						});
+				});
+		} else {
+			new Setting(el)
+				.setName("Ollama Base URL")
+				.setDesc("Address of your local Ollama server.")
+				.addText(txt => txt
+					.setPlaceholder("http://localhost:11434")
+					.setValue(this.plugin.settings.ollamaBaseUrl ?? "http://localhost:11434")
+					.onChange(async (value: string) => {
+						this.plugin.settings.ollamaBaseUrl = value.trim();
 						await this.plugin.saveSettings();
-					});
-			});
+					}),
+				);
+		}
+	}
 
-		new Setting(el)
-			.setName(t("settings_openai_model_name"))
-			.addDropdown(d => d
-				.addOption("gpt-5",            "GPT-5 (reasoning, best)")
-				.addOption("gpt-5-mini",       "GPT-5 Mini (reasoning, faster)")
-				.addOption("gpt-5-nano",       t("model_gpt5nano_label"))
-				.addOption("gpt-5-search-api", "GPT-5 Search (web search 🌐)")
-				.addOption("gpt-4o",           "GPT-4o (web search ✓)")
-				.addOption("gpt-4o-mini",      "GPT-4o Mini (web search ✓)")
-				.addOption("gpt-4-turbo",      "GPT-4 Turbo")
-				.setValue(this.plugin.settings.model)
-				.onChange(async (v: string) => {
-					this.plugin.settings.model = v;
-					await this.plugin.saveSettings();
-				}),
-			);
+	private async refreshOllamaModelsInSelector(): Promise<void> {
+		const baseUrl = this.plugin.settings.ollamaBaseUrl || "http://localhost:11434";
+		const models = await fetchOllamaModels(baseUrl);
+		this.ollamaModels = models;
+
+		if (models.length === 0) {
+			new Notice("No Ollama models found. Is the server running?", 5000);
+			this.display();
+			return;
+		}
+
+		if (!models.includes(this.plugin.settings.ollamaModel ?? "")) {
+			this.plugin.settings.ollamaModel = models[0];
+			await this.plugin.saveSettings();
+		}
+
+		new Notice(`Found ${models.length} Ollama model(s)`, 3000);
+		this.display();
 	}
 
 	private renderOpenAISettings(el: HTMLElement): void {
@@ -310,43 +447,6 @@ export class GPTSettingsTab extends PluginSettingTab {
 						}
 					});
 			});
-	}
-
-	private renderClaude(el: HTMLElement): void {
-		const keysInSync      = this.plugin.settings.apiKeysInSync;
-		const extEnabled      = this.plugin.externalStorage.isEnabled;
-		const keysStoredLocal = !keysInSync && extEnabled;
-		const keysLocation    = keysStoredLocal ? t("settings_key_local") : t("settings_key_sync");
-
-		new Setting(el)
-			.setName(t("settings_claude_title"))
-			.setHeading();
-
-		new Setting(el)
-			.setName(t("settings_claude_key_name"))
-			.setDesc(keysLocation)
-			.addText(txt => {
-				txt.inputEl.type = "password";
-				txt.setPlaceholder("sk-ant-…")
-					.setValue(this.plugin.settings.claudeApiKey ?? "")
-					.onChange(async (v: string) => {
-						this.plugin.settings.claudeApiKey = v.trim();
-						await this.plugin.saveSettings();
-					});
-			});
-
-		new Setting(el)
-			.setName(t("settings_claude_model_name"))
-			.addDropdown(d => d
-				.addOption("claude-opus-4-5",   "Claude Opus 4.5 (best)")
-				.addOption("claude-sonnet-4-5", "Claude Sonnet 4.5 (recommended)")
-				.addOption("claude-haiku-4-5",  "Claude Haiku 4.5 (fast / affordable)")
-				.setValue(this.plugin.settings.claudeModel ?? "claude-sonnet-4-5")
-				.onChange(async (v: string) => {
-					this.plugin.settings.claudeModel = v;
-					await this.plugin.saveSettings();
-				}),
-			);
 	}
 
 	private renderRAG(el: HTMLElement): void {

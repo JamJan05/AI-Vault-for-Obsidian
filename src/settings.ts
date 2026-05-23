@@ -1,7 +1,7 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ThinkingMode = "fast" | "normal" | "think";
-export type Provider     = "openai" | "anthropic";
+export type Provider     = "openai" | "anthropic" | "ollama";
 export type Language     = "en" | "pl";
 
 export type RAGSearchMode = "hybrid" | "semantic" | "exact" | "recent";
@@ -16,6 +16,9 @@ export interface PluginSettings {
 	provider:               Provider;
 	model:                  string;
 	claudeModel:            string;
+	ollamaBaseUrl:          string;
+	ollamaModel:            string;
+	autoDetectProvider:     boolean;
 	thinkingMode:           ThinkingMode;
 
 	// Max tokens per thinking mode
@@ -60,6 +63,9 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	provider:                "openai",
 	model:                   "gpt-4o",
 	claudeModel:             "claude-sonnet-4-5",
+	ollamaBaseUrl:           "http://localhost:11434",
+	ollamaModel:             "llama3.2",
+	autoDetectProvider:      true,
 	thinkingMode:            "normal",
 	maxTokensFast:           4096,
 	maxTokensNormal:         8192,

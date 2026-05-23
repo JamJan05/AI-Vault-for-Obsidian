@@ -203,9 +203,14 @@ export default class GPTPlugin extends Plugin {
 		const session = this.currentSession as {
 			id: string; title: string; projectId: string | null;
 			messages: ChatMessage[]; createdAt: number; updatedAt: number;
+			model?: string;
 		};
 		session.messages  = messages;
 		session.updatedAt = Date.now();
+		session.model     =
+			this.settings.provider === "anthropic" ? (this.settings.claudeModel ?? "claude-sonnet-4-5") :
+			this.settings.provider === "ollama"    ? (this.settings.ollamaModel ?? "llama3.2") :
+			this.settings.model;
 
 		// Auto-title from the first user message
 		if (messages.length >= 1 && session.title === "New conversation") {

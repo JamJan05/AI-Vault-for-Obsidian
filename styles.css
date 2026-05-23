@@ -2,6 +2,7 @@
 :root {
   --gpt-color-openai:   #10a37f;
   --gpt-color-claude:   #7c3aed;
+  --gpt-color-ollama:   #475569;
   --gpt-color-web:      #2563eb;
   --gpt-color-learn:    #f59e0b;
   --gpt-color-error:    #e74c3c;
@@ -52,8 +53,9 @@
   border: none; background: transparent;
   color: var(--text-muted); cursor: pointer; transition: all .15s;
 }
-.gpt-provider-btn--active:first-child { background: var(--gpt-color-openai); color: #fff; }
-.gpt-provider-btn--active:last-child  { background: var(--gpt-color-claude); color: #fff; }
+.gpt-provider-btn--active.gpt-provider-btn--openai { background: var(--gpt-color-openai); color: #fff; }
+.gpt-provider-btn--active.gpt-provider-btn--claude { background: var(--gpt-color-claude); color: #fff; }
+.gpt-provider-btn--active.gpt-provider-btn--ollama { background: var(--gpt-color-ollama); color: #fff; }
 .gpt-provider-btn:hover:not(.gpt-provider-btn--active) {
   background: var(--background-modifier-hover);
   color: var(--text-normal);

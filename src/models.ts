@@ -1,3 +1,5 @@
+import type { Provider } from "./settings";
+
 // ─── Model sets ───────────────────────────────────────────────────────────────
 
 /** Models that support built-in web search */
@@ -28,6 +30,27 @@ export function isGPT5(model: string): boolean {
 
 export function isGPT5Search(model: string): boolean {
 	return model === GPT5_SEARCH_API;
+}
+
+/**
+ * Detects the AI provider from a model id.
+ * claude-* -> Anthropic, GPT/o-series/text-davinci -> OpenAI, everything else -> Ollama.
+ */
+export function detectProvider(model: string): Provider {
+	const lower = model.trim().toLowerCase();
+
+	if (lower.startsWith("claude")) return "anthropic";
+
+	if (
+		lower.startsWith("gpt-") ||
+		lower.startsWith("o1") ||
+		lower.startsWith("o3") ||
+		lower.startsWith("o4") ||
+		lower.startsWith("chatgpt-") ||
+		lower.startsWith("text-davinci")
+	) return "openai";
+
+	return "ollama";
 }
 
 /** Maps internal thinking modes → reasoning_effort for GPT-5 */
