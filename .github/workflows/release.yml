@@ -11,6 +11,10 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -63,16 +67,67 @@ jobs:
       contents: write
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download plugin artifact
         uses: actions/download-artifact@v4
         with:
           name: ai-vault-plugin
 
+      - name: Resolve release version
+        id: release_version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "version=${GITHUB_REF_NAME}" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          git fetch --force --tags
+          git tag --list > /tmp/ai-vault-release-tags.txt
+
+          node <<'NODE' >> "${GITHUB_OUTPUT}"
+          const fs = require("node:fs");
+          const pkg = require("./package.json");
+
+          const semverPattern = /^\d+\.\d+\.\d+$/;
+          const parse = (version) => version.split(".").map(Number);
+          const compare = (a, b) => {
+            const pa = parse(a);
+            const pb = parse(b);
+            for (let i = 0; i < 3; i++) {
+              if (pa[i] !== pb[i]) return pa[i] - pb[i];
+            }
+            return 0;
+          };
+          const incrementPatch = (version) => {
+            const [major, minor, patch] = parse(version);
+            return `${major}.${minor}.${patch + 1}`;
+          };
+
+          const packageVersion = semverPattern.test(pkg.version) ? pkg.version : "0.0.0";
+          const tags = fs.readFileSync("/tmp/ai-vault-release-tags.txt", "utf8")
+            .split(/\r?\n/)
+            .map((tag) => tag.trim())
+            .filter((tag) => semverPattern.test(tag))
+            .sort(compare);
+
+          const latestTag = tags.at(-1);
+          const version = !latestTag || compare(latestTag, packageVersion) < 0
+            ? packageVersion
+            : incrementPatch(latestTag);
+
+          console.log(`version=${version}`);
+          NODE
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref == 'refs/heads/main' && format('main-{0}.{1}', github.run_number, github.run_attempt) || github.ref_name }}
-          name: ${{ github.ref == 'refs/heads/main' && format('Main build {0}.{1}', github.run_number, github.run_attempt) || github.ref_name }}
+          tag_name: ${{ steps.release_version.outputs.version }}
+          name: ${{ steps.release_version.outputs.version }}
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
           files: |
