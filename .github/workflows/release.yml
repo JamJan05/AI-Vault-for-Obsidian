@@ -24,8 +24,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_version: ${{ steps.release_version.outputs.version }}
-      stable_release: ${{ steps.stable_release.outputs.publish }}
-      release_sha: ${{ steps.stable_release.outputs.sha }}
+      publish_release: ${{ steps.release_eligibility.outputs.publish }}
+      prerelease: ${{ steps.release_eligibility.outputs.prerelease }}
+      make_latest: ${{ steps.release_eligibility.outputs.make_latest }}
+      release_sha: ${{ steps.release_eligibility.outputs.sha }}
 
     steps:
       - name: Checkout repository
@@ -111,24 +113,35 @@ jobs:
           }
           NODE
 
-      - name: Determine stable release eligibility
-        id: stable_release
+      - name: Determine GitHub release eligibility
+        id: release_eligibility
         shell: bash
         env:
           RELEASE_VERSION: ${{ steps.release_version.outputs.version }}
         run: |
           publish=false
+          prerelease=false
+          make_latest=false
           release_sha="${GITHUB_SHA}"
 
-          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == refs/tags/* && "${RELEASE_VERSION}" != *-* ]]; then
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == refs/tags/* ]]; then
             release_sha="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
-            git fetch --force origin main:refs/remotes/origin/main
-            if git merge-base --is-ancestor "${release_sha}" refs/remotes/origin/main; then
+
+            if [[ "${RELEASE_VERSION}" == *-* ]]; then
               publish=true
+              prerelease=true
+            else
+              git fetch --force origin main:refs/remotes/origin/main
+              if git merge-base --is-ancestor "${release_sha}" refs/remotes/origin/main; then
+                publish=true
+                make_latest=true
+              fi
             fi
           fi
 
           echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
+          echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
+          echo "make_latest=${make_latest}" >> "${GITHUB_OUTPUT}"
           echo "sha=${release_sha}" >> "${GITHUB_OUTPUT}"
 
       - name: Lint
@@ -154,10 +167,10 @@ jobs:
             manifest.json
 
   release:
-    name: Publish stable GitHub release
+    name: Publish GitHub release
     runs-on: ubuntu-latest
     needs: build
-    if: needs.build.outputs.stable_release == 'true'
+    if: needs.build.outputs.publish_release == 'true'
     permissions:
       contents: write
 
@@ -174,8 +187,8 @@ jobs:
           name: ${{ needs.build.outputs.release_version }}
           target_commitish: ${{ needs.build.outputs.release_sha }}
           generate_release_notes: true
-          prerelease: false
-          make_latest: true
+          prerelease: ${{ needs.build.outputs.prerelease }}
+          make_latest: ${{ needs.build.outputs.make_latest }}
           files: |
             main.js
             styles.css
