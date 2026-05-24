@@ -22,6 +22,38 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Update version files from tag
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const version = process.env.VERSION;
+          const readJson = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
+          const writeJson = (p, d) => fs.writeFileSync(p, JSON.stringify(d, null, 2) + "\n");
+
+          const manifest = readJson("manifest.json");
+          manifest.version = version;
+          writeJson("manifest.json", manifest);
+
+          const pkg = readJson("package.json");
+          pkg.version = version;
+          writeJson("package.json", pkg);
+
+          if (fs.existsSync("package-lock.json")) {
+            const lock = readJson("package-lock.json");
+            lock.version = version;
+            if (lock.packages?.[""]) lock.packages[""].version = version;
+            writeJson("package-lock.json", lock);
+          }
+
+          if (fs.existsSync("versions.json")) {
+            const versions = readJson("versions.json");
+            versions[version] = manifest.minAppVersion;
+            writeJson("versions.json", versions);
+          }
+          NODE
+
       - name: Build
         run: npm run build
 
