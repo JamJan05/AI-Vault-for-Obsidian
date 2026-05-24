@@ -142,10 +142,10 @@
   cursor: pointer; transition: all .2s; white-space: nowrap;
 }
 .gpt-mode-btn:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
-.gpt-mode-btn--active {
-  background: var(--interactive-accent) !important;
-  color: #fff !important;
-  border-color: var(--interactive-accent) !important;
+.gpt-mode-btn.gpt-mode-btn--active {
+  background: var(--interactive-accent);
+  color: #fff;
+  border-color: var(--interactive-accent);
   font-weight: 600;
 }
 
@@ -179,7 +179,9 @@
   text-overflow: ellipsis; white-space: nowrap;
   font-size: 11px; font-weight: 600;
 }
-.gpt-ctx-hidden  { display: none !important; }
+.gpt-chat-root .gpt-ctx-hidden,
+.gpt-history-root .gpt-ctx-hidden,
+.gpt-projects-root .gpt-ctx-hidden { display: none; }
 .gpt-ctx-list    { color: var(--text-muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .gpt-ctx-clear   { background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 0 2px; font-size: 13px; line-height: 1; }
 
@@ -237,7 +239,7 @@
 .gpt-msg-interrupted { font-size: 10px; color: var(--text-faint); margin-top: 6px; font-style: italic; }
 .gpt-msg-error-line  { color: var(--gpt-color-error); font-weight: 600; }
 .gpt-msg-error-detail { font-size: 10px; color: var(--text-faint); margin-top: 6px; }
-.gpt-error { color: var(--gpt-color-error) !important; }
+.gpt-bubble .gpt-error { color: var(--gpt-color-error); }
 
 /* ─── Loading dots ───────────────────────────────────────────────────────────── */
 .gpt-loading .gpt-msg-content { display: none; }
@@ -286,10 +288,10 @@
   font-family: var(--font-interface); margin-left: auto; line-height: 1;
 }
 .gpt-code-copy:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
-.gpt-code-copy--ok {
-  color: var(--gpt-color-openai) !important;
-  border-color: var(--gpt-color-openai) !important;
-  background: color-mix(in srgb, var(--gpt-color-openai) 10%, var(--background-secondary)) !important;
+.gpt-code-copy.gpt-code-copy--ok {
+  color: var(--gpt-color-openai);
+  border-color: var(--gpt-color-openai);
+  background: color-mix(in srgb, var(--gpt-color-openai) 10%, var(--background-secondary));
 }
 .gpt-bubble pre  { background: var(--background-primary); border-radius: 0; padding: 10px 12px; overflow-x: auto; margin: 0; font-size: 12px; }
 .gpt-bubble code { font-family: var(--font-monospace); font-size: 12px; }
@@ -332,28 +334,28 @@
 .gpt-tool-btn:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
 
 /* Active states for tool buttons */
-.gpt-rag-btn--active {
-  background: color-mix(in srgb, var(--gpt-color-openai) 15%, var(--background-secondary)) !important;
-  color: var(--gpt-color-openai) !important;
-  border-color: var(--gpt-color-openai) !important;
+.gpt-tool-btn.gpt-rag-btn--active {
+  background: color-mix(in srgb, var(--gpt-color-openai) 15%, var(--background-secondary));
+  color: var(--gpt-color-openai);
+  border-color: var(--gpt-color-openai);
   font-weight: 600;
 }
-.gpt-websearch-btn--active {
-  background: color-mix(in srgb, var(--gpt-color-web) 15%, var(--background-secondary)) !important;
-  color: var(--gpt-color-web) !important;
-  border-color: var(--gpt-color-web) !important;
+.gpt-tool-btn.gpt-websearch-btn--active {
+  background: color-mix(in srgb, var(--gpt-color-web) 15%, var(--background-secondary));
+  color: var(--gpt-color-web);
+  border-color: var(--gpt-color-web);
   font-weight: 600;
 }
-.gpt-learn-btn--active {
-  background: color-mix(in srgb, var(--gpt-color-learn) 15%, var(--background-secondary)) !important;
-  color: #b45309 !important;
-  border-color: var(--gpt-color-learn) !important;
+.gpt-tool-btn.gpt-learn-btn--active {
+  background: color-mix(in srgb, var(--gpt-color-learn) 15%, var(--background-secondary));
+  color: #b45309;
+  border-color: var(--gpt-color-learn);
   font-weight: 600;
 }
-.gpt-code-btn--active {
-  background: color-mix(in srgb, var(--gpt-color-claude) 15%, var(--background-secondary)) !important;
-  color: var(--gpt-color-claude) !important;
-  border-color: var(--gpt-color-claude) !important;
+.gpt-tool-btn.gpt-code-btn--active {
+  background: color-mix(in srgb, var(--gpt-color-claude) 15%, var(--background-secondary));
+  color: var(--gpt-color-claude);
+  border-color: var(--gpt-color-claude);
   font-weight: 600;
 }
 
@@ -473,15 +475,15 @@
   border-color: var(--interactive-accent);
   background: color-mix(in srgb, var(--interactive-accent) 8%, var(--background-primary));
 }
-.gpt-quiz-opt--correct {
-  border-color: var(--gpt-color-openai) !important;
-  background: color-mix(in srgb, var(--gpt-color-openai) 12%, var(--background-primary)) !important;
-  color: var(--gpt-color-ok-text) !important; font-weight: 600;
+.gpt-quiz-opt.gpt-quiz-opt--correct {
+  border-color: var(--gpt-color-openai);
+  background: color-mix(in srgb, var(--gpt-color-openai) 12%, var(--background-primary));
+  color: var(--gpt-color-ok-text); font-weight: 600;
 }
-.gpt-quiz-opt--wrong {
-  border-color: var(--gpt-color-error) !important;
-  background: color-mix(in srgb, var(--gpt-color-error) 10%, var(--background-primary)) !important;
-  color: var(--gpt-color-err-text) !important;
+.gpt-quiz-opt.gpt-quiz-opt--wrong {
+  border-color: var(--gpt-color-error);
+  background: color-mix(in srgb, var(--gpt-color-error) 10%, var(--background-primary));
+  color: var(--gpt-color-err-text);
 }
 .gpt-quiz-opt:disabled { cursor: default; }
 .gpt-quiz-fb { margin-top: 10px; padding: 9px 12px; border-radius: 8px; font-size: 12px; line-height: 1.5; }

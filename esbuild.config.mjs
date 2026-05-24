@@ -1,8 +1,20 @@
 import esbuild from "esbuild";
 import process from "process";
-import builtins from "builtin-modules";
 
 const prod = process.argv[2] === "production";
+
+const nodeBuiltins = [
+  "fs",
+  "fs/promises",
+  "path",
+  "os",
+  "crypto",
+  "events",
+  "stream",
+  "util",
+  "http",
+  "https",
+];
 
 const context = await esbuild.context({
   entryPoints: ["src/main.ts"],
@@ -21,7 +33,7 @@ const context = await esbuild.context({
     "@lezer/common",
     "@lezer/highlight",
     "@lezer/lr",
-    ...builtins,
+    ...nodeBuiltins,
   ],
   format: "cjs",
   target: "es2022",
