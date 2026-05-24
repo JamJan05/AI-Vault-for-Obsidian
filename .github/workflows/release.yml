@@ -3,15 +3,12 @@ name: Build and Release
 on:
   push:
     branches:
-      - main
+      - "**"
     tags:
       - "*"
   pull_request:
     branches:
       - main
-  release:
-    types:
-      - published
   workflow_dispatch:
 
 concurrency:
@@ -27,13 +24,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_version: ${{ steps.release_version.outputs.version }}
+      stable_release: ${{ steps.stable_release.outputs.publish }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -44,66 +41,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Resolve release version
+      - name: Resolve build version
         id: release_version
         shell: bash
-        env:
-          RELEASE_TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
-          if [[ -n "${RELEASE_TAG_NAME}" ]]; then
-            echo "version=${RELEASE_TAG_NAME}" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             echo "version=${GITHUB_REF_NAME}" >> "${GITHUB_OUTPUT}"
             exit 0
           fi
 
-          if [[ "${GITHUB_EVENT_NAME}" != "push" || "${GITHUB_REF}" != "refs/heads/main" ]]; then
-            node -p '"version=" + require("./package.json").version' >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
+          node -p '"version=" + require("./package.json").version' >> "${GITHUB_OUTPUT}"
 
-          git fetch --force --tags
-          git tag --list > /tmp/ai-vault-release-tags.txt
-
-          node <<'NODE' >> "${GITHUB_OUTPUT}"
-          const fs = require("node:fs");
-          const pkg = require("./package.json");
-
-          const semverPattern = /^\d+\.\d+\.\d+$/;
-          const parse = (version) => version.split(".").map(Number);
-          const compare = (a, b) => {
-            const pa = parse(a);
-            const pb = parse(b);
-            for (let i = 0; i < 3; i++) {
-              if (pa[i] !== pb[i]) return pa[i] - pb[i];
-            }
-            return 0;
-          };
-          const incrementPatch = (version) => {
-            const [major, minor, patch] = parse(version);
-            return `${major}.${minor}.${patch + 1}`;
-          };
-
-          const packageVersion = semverPattern.test(pkg.version) ? pkg.version : "0.0.0";
-          const tags = fs.readFileSync("/tmp/ai-vault-release-tags.txt", "utf8")
-            .split(/\r?\n/)
-            .map((tag) => tag.trim())
-            .filter((tag) => semverPattern.test(tag))
-            .sort(compare);
-
-          const latestTag = tags.at(-1);
-          const version = !latestTag || compare(latestTag, packageVersion) < 0
-            ? packageVersion
-            : incrementPatch(latestTag);
-
-          console.log(`version=${version}`);
-          NODE
-
-      - name: Sync release metadata
-        if: github.event_name == 'release' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')))
+      - name: Sync build metadata
         env:
           RELEASE_VERSION: ${{ steps.release_version.outputs.version }}
         run: |
@@ -137,25 +86,46 @@ jobs:
             const versions = readJson("versions.json");
             versions[version] = manifest.minAppVersion;
 
-            const semver = /^\d+\.\d+\.\d+$/;
-            const parse = (value) => value.split(".").map(Number);
-            const compare = (a, b) => {
-              const pa = parse(a);
-              const pb = parse(b);
-              for (let i = 0; i < 3; i++) {
-                if (pa[i] !== pb[i]) return pa[i] - pb[i];
-              }
-              return 0;
+            const parse = (value) => {
+              const match = value.match(/^(\d+)\.(\d+)\.(\d+)(?:[.-](\d+))?(?:-.+)?$/);
+              return match ? match.slice(1).map((part) => Number(part ?? 0)) : null;
             };
+
             const sorted = Object.fromEntries(
               Object.entries(versions).sort(([a], [b]) => {
-                if (semver.test(a) && semver.test(b)) return compare(a, b);
+                const pa = parse(a);
+                const pb = parse(b);
+                if (pa && pb) {
+                  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+                    if (pa[i] !== pb[i]) return pa[i] - pb[i];
+                  }
+                  return a.localeCompare(b);
+                }
+                if (pa) return -1;
+                if (pb) return 1;
                 return a.localeCompare(b);
               }),
             );
             writeJson("versions.json", sorted);
           }
           NODE
+
+      - name: Determine stable release eligibility
+        id: stable_release
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release_version.outputs.version }}
+        run: |
+          publish=false
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == refs/tags/* && "${RELEASE_VERSION}" != *-* ]]; then
+            git fetch --force origin main:refs/remotes/origin/main
+            if git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main; then
+              publish=true
+            fi
+          fi
+
+          echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
 
       - name: Lint
         run: npm run lint --if-present
@@ -180,10 +150,10 @@ jobs:
             manifest.json
 
   release:
-    name: Create GitHub release
+    name: Publish stable GitHub release
     runs-on: ubuntu-latest
     needs: build
-    if: (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) && !contains(github.event.head_commit.message || '', '[skip release]')) || (github.event_name == 'release' && github.event.release.prerelease)
+    if: needs.build.outputs.stable_release == 'true'
     permissions:
       contents: write
 
@@ -196,11 +166,12 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.build.outputs.release_version }}
+          tag_name: ${{ github.ref_name }}
           name: ${{ needs.build.outputs.release_version }}
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
-          prerelease: ${{ contains(needs.build.outputs.release_version, '-') }}
+          prerelease: false
+          make_latest: true
           files: |
             main.js
             styles.css
