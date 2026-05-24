@@ -1,187 +1,235 @@
-# AI Vault for Obsidian
+# ✨ AI-Vault for Obsidian
 
-Chat with **GPT** and **Claude** directly inside Obsidian — with RAG over your vault, conversation history, projects, and smart modes.
+Chat with **OpenAI GPT** and **Anthropic Claude** directly inside Obsidian, with vault-aware context, conversation history, projects, smart modes, and local-first storage.
 
-AI Vault turns Obsidian into a full AI workspace. Talk to multiple frontier models, give them access to your notes and canvases, organize chats into projects, and keep everything synced with your vault — without ever leaving the app.
+AI-Vault turns your Obsidian workspace into an AI assistant that can use your notes, canvases, selected files, and project history as context while keeping plugin data on your own machine.
 
------
+---
 
-## ✨ Features
+## 🚀 Highlights
 
-### 🤖 Multi-provider AI
+- 🤖 **Multi-provider chat** - switch between OpenAI and Anthropic models from the chat view.
+- 📚 **Vault RAG** - search relevant Markdown and Canvas content from your vault.
+- 📎 **Manual note context** - attach specific notes or canvases to a conversation.
+- 🗂️ **Projects** - group related chats with custom prompts and shared project context.
+- 🕘 **Conversation history** - automatically save and reopen previous chats.
+- ⚡ **Streaming responses** - see answers as they are generated.
+- 🧠 **Thinking modes** - choose Fast, Normal, or Think mode.
+- 🎓 **Learn mode** - generate study-friendly answers and interactive quiz-style responses.
+- 💻 **Code mode** - get programming-focused answers with code formatting.
+- 🌐 **Web search** - use supported OpenAI and Claude web-search capabilities.
+- 🌍 **Bilingual UI** - English and Polish interface.
+- 🔐 **Local-first storage** - history, projects, keys, and RAG index can stay outside your vault.
 
-Switch between **OpenAI** and **Anthropic** models with a single click in the chat header — no need to dive into settings.
+---
 
-**OpenAI models:**
+## 🧩 Requirements
+
+- 🖥️ Obsidian desktop **1.7.2 or newer**
+- 🔑 OpenAI API key and/or Anthropic API key
+- 📡 Internet access for model calls, embeddings, and web search
+
+> AI-Vault is desktop-only because streaming and external local storage rely on desktop APIs.
+
+---
+
+## 🤖 Supported Models
+
+### OpenAI
 
 - GPT-5
-- GPT-5 nano
-- GPT-5 mini
+- GPT-5 Mini
+- GPT-5 Nano
 - GPT-5 Search
 - GPT-4o
-- GPT-4o mini
-- GPT-4o turbo
+- GPT-4o Mini
+- GPT-4 Turbo
 
-**Anthropic models:**
+### Anthropic
 
-- Claude Sonnet 4.5
 - Claude Opus 4.5
+- Claude Sonnet 4.5
 - Claude Haiku 4.5
 
-### 📚 RAG over your vault
+---
 
-The plugin indexes your notes locally and feeds the most relevant context to the AI on every message.
+## 📚 Vault Context
 
-- Full support for **Markdown** (`.md`) files
-- Full support for **Canvas** (`.canvas`) files — the parser understands canvas topology through edges and reconstructs the logical flow of nodes
-- Local index stored outside the vault (no sync bloat)
+AI-Vault can add your notes to the model context in two ways:
 
-### 🗂️ Projects
+- 🔎 **Automatic RAG** searches indexed `.md` and `.canvas` files for relevant chunks.
+- 📎 **Manual context** lets you pick specific notes or canvases for the conversation.
 
-Group related conversations into **projects** — each with its own system prompt, model, and context scope. Perfect for separating work, study, and personal threads.
+Canvas files are parsed into readable text using their nodes and edges, so the model can understand the flow of a canvas instead of receiving raw JSON.
 
-### 💬 Conversation history
+The RAG engine combines keyword search and embeddings when available. If no OpenAI key is configured for embeddings, lexical search can still provide useful matches.
 
-Every chat is saved automatically and stored **outside the vault**, so it never inflates your Obsidian Sync or clutters your file tree.
+---
 
-### 🎯 Smart modes
+## 🗂️ Projects
 
-Switch the AI’s behavior depending on what you need:
+Projects let you keep related conversations together.
 
-- **Code mode** — focused on programming, with code-aware formatting
-- **Learn mode** — explains concepts step by step, asks clarifying questions
-- **Thinking mode** — deeper reasoning before answering
+Each project can have:
 
-### 🌐 Web search
+- 📝 its own custom system prompt,
+- 💬 linked conversations,
+- 🧠 context from other chats in the same project,
+- 🎨 a project color for easier scanning.
 
-Use GPT-5 Search to fetch live information from the web directly in your chat.
+This works well for long-running research, coding tasks, study topics, writing work, or client-specific threads.
 
-### 🌍 Bilingual UI
+---
 
-Full interface in **English** and **Polish**.
+## 💬 Chat Tools
 
-### ⚡ Streaming & cost tracking
+Inside the AI-Vault chat view you can:
 
-- Live token streaming — see the response as it’s generated
-- Built-in **token counter** and **cost tracker** for every conversation
+- 🧠 switch reasoning mode,
+- 🔁 regenerate the last response,
+- ⏹️ stop generation,
+- 📋 copy messages and code blocks,
+- 📤 export a conversation to a note,
+- 📚 toggle RAG,
+- 🔄 re-index the vault,
+- 📎 attach notes manually,
+- 🌐 toggle web search,
+- 🎓 enable Learn mode,
+- 💻 enable Code mode.
 
------
+---
 
-## 📱 Platform support
+## 🔐 Privacy And Storage
 
-|Platform|Status                                |
-|--------|--------------------------------------|
-|Windows |✅ Supported                           |
-|macOS   |✅ Supported                           |
-|Linux   |✅ Supported                           |
+By default, AI-Vault stores plugin data outside your vault in a local folder next to the vault directory:
 
+```text
+<parent-of-vault>/<vault-name>-gpt-data/
+```
 
------
+This keeps data out of Obsidian Sync by default.
 
-## 🚀 Installation
+Stored locally:
 
-### From Obsidian Community Plugins (recommended once approved)
+- 🔑 API keys
+- 🕘 conversation history
+- 🗂️ projects
+- 📚 RAG index
 
-1. Open **Settings → Community plugins**
-1. Make sure **Restricted mode** is **off**
-1. Click **Browse** and search for **AI Vault**
-1. Click **Install**, then **Enable**
+Data is sent to model providers only when it is part of a request, for example:
 
-### Manual installation
+- your chat message,
+- selected notes,
+- relevant RAG chunks,
+- project context,
+- web-search requests.
 
-1. Download the latest release from the [Releases page](https://github.com/JamJan05/AI-Vault-for-Obsidian/releases)
-1. Extract `main.js`, `manifest.json`, and `styles.css` into:
-   
-   ```
-   <your-vault>/.obsidian/plugins/ai-vault/
-   ```
-1. Reload Obsidian
-1. Enable **AI Vault** in **Settings → Community plugins**
+AI-Vault does not use its own backend server. Requests go directly from Obsidian to the configured OpenAI or Anthropic API.
 
------
+---
 
-## 🔑 Setup
+## 📦 Installation
 
-After enabling the plugin:
+### Manual Installation
 
-1. Open **Settings → AI Vault**
-1. Paste your **OpenAI API key** and/or **Anthropic API key**
-1. Choose your default model
-1. Open the chat from the ribbon icon on the left sidebar
+1. Download the latest release from the [Releases page](https://github.com/JamJan05/AI-Vault-for-Obsidian/releases).
+2. Copy the plugin files into:
 
-> Your API keys are stored locally on your device. They are never sent anywhere except directly to the official OpenAI and Anthropic endpoints.
+```text
+<your-vault>/.obsidian/plugins/ai-vault/
+```
 
------
+Required files:
 
-## 📖 Usage
+```text
+main.js
+manifest.json
+styles.css
+```
 
-### Starting a chat
+3. Reload Obsidian.
+4. Open **Settings -> Community plugins**.
+5. Enable **AI-Vault**.
 
-Click the **AI Vault** icon in the left ribbon — the chat panel opens on the right.
+### Community Plugins
 
-### Switching models
+Once available in the Obsidian Community Plugins directory:
 
-Click the model name in the chat header to switch between GPT and Claude variants without leaving the conversation.
+1. Open **Settings -> Community plugins**.
+2. Turn off **Restricted mode** if needed.
+3. Click **Browse**.
+4. Search for **AI-Vault**.
+5. Install and enable the plugin.
 
-### Using vault context (RAG)
+---
 
-Toggle the **vault context** button to let the AI search your notes and canvases for relevant information before answering.
+## ⚙️ Setup
 
-### Creating a project
+1. Open **Settings -> AI-Vault**.
+2. Choose the interface language.
+3. Add your OpenAI API key and/or Anthropic API key.
+4. Choose your default provider and model.
+5. Configure RAG, token limits, storage, and system prompt settings.
+6. Open AI-Vault from the ribbon icon or command palette.
 
-Use the **Projects** menu in the chat header to create a new project, set its system prompt, and assign conversations to it.
+---
 
-### Changing mode
+## 🛠️ Development
 
-Pick **Code**, **Learn**, or **Thinking** mode from the mode selector — the AI will adapt its style accordingly.
+Install dependencies:
 
------
+```bash
+npm install
+```
 
-## 🔒 Privacy
+Run a development build:
 
-- **API keys** are stored locally on your device.
-- **Conversation history** is stored locally, outside your vault.
-- **RAG index** is stored locally, outside your vault.
-- Vault content is sent to the model **only** when you enable vault context, and only the relevant chunks are transmitted.
-- No data is sent to any third party other than the official OpenAI / Anthropic APIs.
+```bash
+npm run dev
+```
 
------
+Run typecheck:
 
-## 💰 Cost
+```bash
+npm run typecheck
+```
 
-The plugin itself is **free and open source**.
+Create a production build:
 
-You pay only for what you use via your own OpenAI / Anthropic API keys, billed directly by the providers. The built-in cost tracker shows estimated spend per conversation.
+```bash
+npm run build
+```
 
------
+The production plugin files are:
 
-## 🛠️ Tech
+```text
+main.js
+manifest.json
+styles.css
+```
 
-- Written in **TypeScript**
-- Built with **esbuild**
-- Uses official **OpenAI** and **Anthropic** REST APIs with streaming (SSE)
-- Local-first architecture — no external servers
+---
 
------
-
-## 🐛 Reporting issues
+## 🐛 Reporting Issues
 
 Found a bug or have a feature request? Open an issue on [GitHub Issues](https://github.com/JamJan05/AI-Vault-for-Obsidian/issues).
 
-When reporting bugs, please include:
+Please include:
 
-- Obsidian version
-- Operating system
-- Plugin version
-- Steps to reproduce
+- 🧱 Obsidian version
+- 💻 operating system
+- 🔖 AI-Vault version
+- 🤖 selected provider and model
+- 🧭 steps to reproduce
+- 🧾 relevant console errors, if available
 
------
+---
 
 ## 🤝 Contributing
 
-Pull requests are welcome. For larger changes, please open an issue first to discuss what you’d like to change.
+Pull requests are welcome. For larger changes, please open an issue first to discuss the proposed direction.
 
------
+---
 
 ## 📜 License
 
