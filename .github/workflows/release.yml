@@ -2,295 +2,33 @@ name: Build and Release
 
 on:
   push:
-    branches:
-      - main
     tags:
       - "*"
-  pull_request:
-    branches:
-      - main
-  workflow_dispatch:
-
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  bump-version:
-    name: Bump patch version
+  build:
     runs-on: ubuntu-latest
-    if: "github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(github.event.head_commit.message, 'chore: bump version')"
-    permissions:
-      contents: write
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Compute new version
-        id: version
-        run: |
-          CURRENT=$(jq -r '.version' manifest.json)
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-          echo "new=$MAJOR.$MINOR.$((PATCH + 1))" >> $GITHUB_OUTPUT
-
-      - name: Update version files
-        env:
-          NEW_VERSION: ${{ steps.version.outputs.new }}
-        run: |
-          node <<'NODE'
-          const fs = require("node:fs");
-          const version = process.env.NEW_VERSION;
-          const readJson = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
-          const writeJson = (p, d) => fs.writeFileSync(p, JSON.stringify(d, null, 2) + "\n");
-
-          const manifest = readJson("manifest.json");
-          manifest.version = version;
-          writeJson("manifest.json", manifest);
-
-          const pkg = readJson("package.json");
-          pkg.version = version;
-          writeJson("package.json", pkg);
-
-          if (fs.existsSync("package-lock.json")) {
-            const lock = readJson("package-lock.json");
-            lock.version = version;
-            if (lock.packages?.[""]) lock.packages[""].version = version;
-            writeJson("package-lock.json", lock);
-          }
-
-          if (fs.existsSync("versions.json")) {
-            const versions = readJson("versions.json");
-            versions[version] = manifest.minAppVersion;
-            writeJson("versions.json", versions);
-          }
-          NODE
-
-      - name: Commit, tag and push
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add manifest.json package.json versions.json
-          git add package-lock.json 2>/dev/null || true
-          git commit -m "chore: bump version to ${{ steps.version.outputs.new }}"
-          git tag ${{ steps.version.outputs.new }}
-          git push
-          git push origin ${{ steps.version.outputs.new }}
-
-  build:
-    name: Check and build plugin
-    runs-on: ubuntu-latest
-    if: "!contains(github.event.head_commit.message, 'chore: bump version')"
-    outputs:
-      release_version: ${{ steps.release_version.outputs.version }}
-      stable_release: ${{ steps.stable_release.outputs.publish }}
-      release_sha: ${{ steps.stable_release.outputs.sha }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Resolve build version
-        id: release_version
-        shell: bash
-        run: |
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            echo "version=${GITHUB_REF_NAME}" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-
-          node -p '"version=" + require("./package.json").version' >> "${GITHUB_OUTPUT}"
-
-      - name: Sync build metadata
-        env:
-          RELEASE_VERSION: ${{ steps.release_version.outputs.version }}
-        run: |
-          node <<'NODE'
-          const fs = require("node:fs");
-
-          const version = process.env.RELEASE_VERSION;
-          if (!version) throw new Error("RELEASE_VERSION is empty");
-
-          const readJson = (path) => JSON.parse(fs.readFileSync(path, "utf8"));
-          const writeJson = (path, data) => {
-            fs.writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
-          };
-
-          const manifest = readJson("manifest.json");
-          manifest.version = version;
-          writeJson("manifest.json", manifest);
-
-          const pkg = readJson("package.json");
-          pkg.version = version;
-          writeJson("package.json", pkg);
-
-          if (fs.existsSync("package-lock.json")) {
-            const lock = readJson("package-lock.json");
-            lock.version = version;
-            if (lock.packages?.[""]) lock.packages[""].version = version;
-            writeJson("package-lock.json", lock);
-          }
-
-          if (fs.existsSync("versions.json")) {
-            const versions = readJson("versions.json");
-            versions[version] = manifest.minAppVersion;
-
-            const parse = (value) => {
-              const match = value.match(/^(\d+)\.(\d+)\.(\d+)(?:[.-](\d+))?(?:-.+)?$/);
-              return match ? match.slice(1).map((part) => Number(part ?? 0)) : null;
-            };
-
-            const sorted = Object.fromEntries(
-              Object.entries(versions).sort(([a], [b]) => {
-                const pa = parse(a);
-                const pb = parse(b);
-                if (pa && pb) {
-                  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-                    if (pa[i] !== pb[i]) return pa[i] - pb[i];
-                  }
-                  return a.localeCompare(b);
-                }
-                if (pa) return -1;
-                if (pb) return 1;
-                return a.localeCompare(b);
-              }),
-            );
-            writeJson("versions.json", sorted);
-          }
-          NODE
-
-      - name: Determine stable release eligibility
-        id: stable_release
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ steps.release_version.outputs.version }}
-        run: |
-          publish=false
-          release_sha="${GITHUB_SHA}"
-
-          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == refs/tags/* && "${RELEASE_VERSION}" != *-* ]]; then
-            release_sha="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
-            git fetch --force origin main:refs/remotes/origin/main
-            if git merge-base --is-ancestor "${release_sha}" refs/remotes/origin/main; then
-              publish=true
-            fi
-          fi
-
-          echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
-          echo "sha=${release_sha}" >> "${GITHUB_OUTPUT}"
-
-      - name: Lint
-        run: npm run lint --if-present
-
-      - name: Test
-        run: npm run test --if-present
-
-      - name: Typecheck
-        run: npm run typecheck
-
       - name: Build
         run: npm run build
 
-      - name: Upload plugin artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ai-vault-plugin
-          if-no-files-found: error
-          path: |
-            main.js
-            styles.css
-            manifest.json
-
-  release:
-    name: Publish stable GitHub release
-    runs-on: ubuntu-latest
-    needs: build
-    if: needs.build.outputs.stable_release == 'true'
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download plugin artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ai-vault-plugin
-
-      - name: Create release
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ needs.build.outputs.release_version }}
-          target_commitish: ${{ needs.build.outputs.release_sha }}
-          generate_release_notes: true
-          prerelease: false
-          make_latest: true
           files: |
             main.js
             styles.css
             manifest.json
-
-  notify-failure:
-    name: Notify issues about main failure
-    runs-on: ubuntu-latest
-    needs: build
-    if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      issues: write
-      contents: read
-
-    steps:
-      - name: Create or update failure issue
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const title = "CI failure on main";
-            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
-            const shortSha = context.sha.slice(0, 7);
-            const body = [
-              "<!-- ai-vault-ci-failure -->",
-              "The main branch CI failed.",
-              "",
-              `- Workflow: ${context.workflow}`,
-              `- Run: ${runUrl}`,
-              `- Commit: ${context.sha}`,
-              `- Actor: ${context.actor}`,
-              "",
-              "Please check the failing job logs and fix the build before creating a release."
-            ].join("\n");
-
-            const query = `repo:${owner}/${repo} is:issue is:open in:title "${title}"`;
-            const search = await github.rest.search.issuesAndPullRequests({ q: query, per_page: 1 });
-
-            if (search.data.items.length > 0) {
-              const issueNumber = search.data.items[0].number;
-              await github.rest.issues.createComment({
-                owner,
-                repo,
-                issue_number: issueNumber,
-                body: `${body}\n\nNew failing commit: \`${shortSha}\``
-              });
-            } else {
-              await github.rest.issues.create({
-                owner,
-                repo,
-                title,
-                body
-              });
-            }
