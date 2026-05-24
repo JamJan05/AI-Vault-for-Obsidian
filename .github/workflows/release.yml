@@ -25,6 +25,7 @@ jobs:
     outputs:
       release_version: ${{ steps.release_version.outputs.version }}
       stable_release: ${{ steps.stable_release.outputs.publish }}
+      release_sha: ${{ steps.stable_release.outputs.sha }}
 
     steps:
       - name: Checkout repository
@@ -117,15 +118,18 @@ jobs:
           RELEASE_VERSION: ${{ steps.release_version.outputs.version }}
         run: |
           publish=false
+          release_sha="${GITHUB_SHA}"
 
           if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == refs/tags/* && "${RELEASE_VERSION}" != *-* ]]; then
+            release_sha="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
             git fetch --force origin main:refs/remotes/origin/main
-            if git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main; then
+            if git merge-base --is-ancestor "${release_sha}" refs/remotes/origin/main; then
               publish=true
             fi
           fi
 
           echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
+          echo "sha=${release_sha}" >> "${GITHUB_OUTPUT}"
 
       - name: Lint
         run: npm run lint --if-present
@@ -168,7 +172,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ needs.build.outputs.release_version }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: ${{ needs.build.outputs.release_sha }}
           generate_release_notes: true
           prerelease: false
           make_latest: true
