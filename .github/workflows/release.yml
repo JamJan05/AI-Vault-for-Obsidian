@@ -1,18 +1,17 @@
-name: Build and Release
+name: Build and Prerelease
 
 on:
   push:
     branches:
-      - "**"
+      - safety-O
     tags:
-      - "*"
-  pull_request:
-    branches:
-      - main
+      - "*-beta.*"
+      - "*-alpha.*"
+      - "*-rc.*"
   workflow_dispatch:
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: prerelease-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -25,8 +24,6 @@ jobs:
     outputs:
       release_version: ${{ steps.release_version.outputs.version }}
       publish_release: ${{ steps.release_eligibility.outputs.publish }}
-      prerelease: ${{ steps.release_eligibility.outputs.prerelease }}
-      make_latest: ${{ steps.release_eligibility.outputs.make_latest }}
       release_sha: ${{ steps.release_eligibility.outputs.sha }}
 
     steps:
@@ -88,60 +85,23 @@ jobs:
           if (fs.existsSync("versions.json")) {
             const versions = readJson("versions.json");
             versions[version] = manifest.minAppVersion;
-
-            const parse = (value) => {
-              const match = value.match(/^(\d+)\.(\d+)\.(\d+)(?:[.-](\d+))?(?:-.+)?$/);
-              return match ? match.slice(1).map((part) => Number(part ?? 0)) : null;
-            };
-
-            const sorted = Object.fromEntries(
-              Object.entries(versions).sort(([a], [b]) => {
-                const pa = parse(a);
-                const pb = parse(b);
-                if (pa && pb) {
-                  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-                    if (pa[i] !== pb[i]) return pa[i] - pb[i];
-                  }
-                  return a.localeCompare(b);
-                }
-                if (pa) return -1;
-                if (pb) return 1;
-                return a.localeCompare(b);
-              }),
-            );
-            writeJson("versions.json", sorted);
+            writeJson("versions.json", versions);
           }
           NODE
 
-      - name: Determine GitHub release eligibility
+      - name: Determine prerelease eligibility
         id: release_eligibility
         shell: bash
-        env:
-          RELEASE_VERSION: ${{ steps.release_version.outputs.version }}
         run: |
           publish=false
-          prerelease=false
-          make_latest=false
           release_sha="${GITHUB_SHA}"
 
-          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == refs/tags/* ]]; then
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == refs/tags/* && "${GITHUB_REF_NAME}" == *-* ]]; then
             release_sha="$(git rev-list -n 1 "${GITHUB_REF_NAME}")"
-
-            if [[ "${RELEASE_VERSION}" == *-* ]]; then
-              publish=true
-              prerelease=true
-            else
-              git fetch --force origin main:refs/remotes/origin/main
-              if git merge-base --is-ancestor "${release_sha}" refs/remotes/origin/main; then
-                publish=true
-                make_latest=true
-              fi
-            fi
+            publish=true
           fi
 
           echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
-          echo "prerelease=${prerelease}" >> "${GITHUB_OUTPUT}"
-          echo "make_latest=${make_latest}" >> "${GITHUB_OUTPUT}"
           echo "sha=${release_sha}" >> "${GITHUB_OUTPUT}"
 
       - name: Lint
@@ -166,8 +126,8 @@ jobs:
             styles.css
             manifest.json
 
-  release:
-    name: Publish GitHub release
+  prerelease:
+    name: Publish GitHub prerelease
     runs-on: ubuntu-latest
     needs: build
     if: needs.build.outputs.publish_release == 'true'
@@ -180,66 +140,16 @@ jobs:
         with:
           name: ai-vault-plugin
 
-      - name: Create release
+      - name: Create prerelease
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ needs.build.outputs.release_version }}
           target_commitish: ${{ needs.build.outputs.release_sha }}
           generate_release_notes: true
-          prerelease: ${{ needs.build.outputs.prerelease }}
-          make_latest: ${{ needs.build.outputs.make_latest }}
+          prerelease: true
+          make_latest: false
           files: |
             main.js
             styles.css
             manifest.json
-
-  notify-failure:
-    name: Notify issues about main failure
-    runs-on: ubuntu-latest
-    needs: build
-    if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      issues: write
-      contents: read
-
-    steps:
-      - name: Create or update failure issue
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const title = "CI failure on main";
-            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
-            const shortSha = context.sha.slice(0, 7);
-            const body = [
-              "<!-- ai-vault-ci-failure -->",
-              "The main branch CI failed.",
-              "",
-              `- Workflow: ${context.workflow}`,
-              `- Run: ${runUrl}`,
-              `- Commit: ${context.sha}`,
-              `- Actor: ${context.actor}`,
-              "",
-              "Please check the failing job logs and fix the build before creating a release."
-            ].join("\n");
-
-            const query = `repo:${owner}/${repo} is:issue is:open in:title "${title}"`;
-            const search = await github.rest.search.issuesAndPullRequests({ q: query, per_page: 1 });
-
-            if (search.data.items.length > 0) {
-              const issueNumber = search.data.items[0].number;
-              await github.rest.issues.createComment({
-                owner,
-                repo,
-                issue_number: issueNumber,
-                body: `${body}\n\nNew failing commit: \`${shortSha}\``
-              });
-            } else {
-              await github.rest.issues.create({
-                owner,
-                repo,
-                title,
-                body
-              });
-            }
