@@ -1,8 +1,8 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import { t, setLanguage } from "./i18n";
-import { DEFAULT_SYSTEM_PROMPTS } from "./settings";
+import { DEFAULT_SYSTEM_PROMPTS, DEFAULT_LOCAL_OPENAI_URL, DEFAULT_LOCAL_OLLAMA_URL } from "./settings";
 import { detectProvider } from "./models";
-import { fetchOllamaModels } from "./api/ollama";
+import { fetchLocalModels, normalizeLocalBaseUrl } from "./api/local";
 import { FILE_API_KEYS } from "./constants";
 import type { ExternalStorage } from "./storage/ExternalStorage";
 import type { HistoryManager }  from "./history/HistoryManager";
@@ -10,7 +10,7 @@ import type { ProjectManager }  from "./history/ProjectManager";
 import type { RAGEngine }       from "./rag/RAGEngine";
 import type { GPTHistoryView }  from "./views/HistoryView";
 import type { GPTProjectsView } from "./views/ProjectsView";
-import type { PluginSettings, Provider } from "./settings";
+import type { LocalApiType, PluginSettings, Provider } from "./settings";
 
 // ─── Plugin interface ──────────────────────────────────────────────────────────
 
@@ -28,11 +28,17 @@ interface PluginWithDeps {
 	getProjectsView(): GPTProjectsView | null;
 }
 
+function isProvider(value: string): value is Provider {
+	return value === "openai" || value === "anthropic" || value === "local";
+}
+
+function isLocalApiType(value: string): value is LocalApiType {
+	return value === "openai-compatible" || value === "ollama";
+}
+
 // ─── SettingsTab ───────────────────────────────────────────────────────────────
 
 export class GPTSettingsTab extends PluginSettingTab {
-	private ollamaModels: string[] = [];
-
 	constructor(app: App, private readonly plugin: PluginWithDeps) {
 		super(app, plugin as never);
 	}
@@ -48,6 +54,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 		this.renderKeyWarning(containerEl);
 		this.renderApiKeySync(containerEl);
 		this.renderModelSelector(containerEl);
+		this.renderLocalApiSettings(containerEl);
 		this.renderOpenAISettings(containerEl);
 		this.renderContext(containerEl);
 		this.renderRAG(containerEl);
@@ -157,12 +164,28 @@ export class GPTSettingsTab extends PluginSettingTab {
 
 	private renderModelSelector(el: HTMLElement): void {
 		const currentModel = this.getCurrentActiveModel();
-		const ollamaModels = this.getOllamaModelOptions();
+		const localModels  = this.getLocalModelOptions();
 		const knownModels  = new Set<string>();
 
 		new Setting(el)
 			.setName("Model")
 			.setHeading();
+
+		new Setting(el)
+			.setName("Provider")
+			.setDesc("Select the active AI provider.")
+			.addDropdown(d => d
+				.addOption("openai", "OpenAI")
+				.addOption("anthropic", "Anthropic")
+				.addOption("local", "Local API")
+				.setValue(this.plugin.settings.provider)
+				.onChange(async (value: string) => {
+					if (!isProvider(value)) return;
+					this.plugin.settings.provider = value;
+					await this.plugin.saveSettings();
+					this.display();
+				}),
+			);
 
 		new Setting(el)
 			.setName("Active model")
@@ -187,29 +210,29 @@ export class GPTSettingsTab extends PluginSettingTab {
 				addModel("claude-sonnet-4-5", "Claude Sonnet 4.5 (recommended)");
 				addModel("claude-haiku-4-5",  "Claude Haiku 4.5 (fast / affordable)");
 
-				d.addOption("__ollama_header__", "--- Ollama (local) ---");
-				for (const model of ollamaModels) addModel(model, model);
-				if (ollamaModels.length === 0) {
-					d.addOption("__ollama_empty__", "(no models - click Refresh)");
+				d.addOption("__local_header__", "--- Local API ---");
+				for (const model of localModels) addModel(model, model);
+				if (localModels.length === 0) {
+					d.addOption("__local_empty__", "(no models - click Refresh)");
 				}
 
-				if (!knownModels.has(currentModel)) addModel(currentModel, currentModel);
-				d.setValue(currentModel);
+				if (currentModel && !knownModels.has(currentModel)) addModel(currentModel, currentModel);
+				d.setValue(currentModel || "__local_empty__");
 
 				d.onChange(async (value: string) => {
 					if (value.startsWith("__")) {
-						d.setValue(currentModel);
+						d.setValue(currentModel || "__local_empty__");
 						return;
 					}
 
-					const provider = detectProvider(value);
+					const provider = localModels.includes(value) ? "local" : detectProvider(value);
 					this.plugin.settings.provider = provider;
 					if (provider === "openai") {
 						this.plugin.settings.model = value;
 					} else if (provider === "anthropic") {
 						this.plugin.settings.claudeModel = value;
 					} else {
-						this.plugin.settings.ollamaModel = value;
+						this.plugin.settings.localModel = value;
 					}
 
 					await this.plugin.saveSettings();
@@ -217,23 +240,11 @@ export class GPTSettingsTab extends PluginSettingTab {
 				});
 
 				return d;
-			})
-			.addButton(btn => btn
-				.setButtonText("Refresh Ollama")
-				.setTooltip("Fetch available models from local Ollama server")
-				.onClick(() => {
-					this.refreshOllamaModelsInSelector()
-						.catch((err: unknown) => {
-							const message = err instanceof Error ? err.message : String(err);
-							console.error("Ollama refresh failed:", err);
-							new Notice(`Ollama refresh failed: ${message}`, 6000);
-						});
-				}),
-			);
+			});
 
 		new Setting(el)
 			.setName("Auto-detect provider")
-			.setDesc("Automatically detect AI provider from model name: claude-* -> Anthropic, gpt-* -> OpenAI, others -> Ollama.")
+			.setDesc("Automatically detect AI provider from model name: claude-* -> Anthropic, gpt-* -> OpenAI, others -> Local API.")
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.autoDetectProvider)
 				.onChange(async (value: boolean) => {
@@ -243,15 +254,12 @@ export class GPTSettingsTab extends PluginSettingTab {
 				}),
 			);
 
-		const activeProvider = this.plugin.settings.autoDetectProvider
-			? detectProvider(currentModel)
-			: this.plugin.settings.provider;
-		this.renderActiveApiKey(el, activeProvider);
+		this.renderActiveApiKey(el, this.plugin.settings.provider);
 	}
 
-	private getOllamaModelOptions(): string[] {
-		const models = [...this.ollamaModels];
-		const current = this.plugin.settings.ollamaModel?.trim();
+	private getLocalModelOptions(): string[] {
+		const models  = [...(this.plugin.settings.localModelsCache ?? [])];
+		const current = this.plugin.settings.localModel?.trim();
 		if (current && !models.includes(current)) models.unshift(current);
 		return models;
 	}
@@ -259,7 +267,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 	private getCurrentActiveModel(): string {
 		const provider = this.plugin.settings.provider;
 		if (provider === "anthropic") return this.plugin.settings.claudeModel ?? "claude-sonnet-4-5";
-		if (provider === "ollama") return this.plugin.settings.ollamaModel ?? "llama3.2";
+		if (provider === "local") return this.plugin.settings.localModel?.trim() ?? "";
 		return this.plugin.settings.model ?? "gpt-4o";
 	}
 
@@ -295,38 +303,121 @@ export class GPTSettingsTab extends PluginSettingTab {
 							await this.plugin.saveSettings();
 						});
 				});
-		} else {
-			new Setting(el)
-				.setName("Ollama Base URL")
-				.setDesc("Address of your local Ollama server.")
-				.addText(txt => txt
-					.setPlaceholder("http://localhost:11434")
-					.setValue(this.plugin.settings.ollamaBaseUrl ?? "http://localhost:11434")
-					.onChange(async (value: string) => {
-						this.plugin.settings.ollamaBaseUrl = value.trim();
-						await this.plugin.saveSettings();
-					}),
-				);
 		}
 	}
 
-	private async refreshOllamaModelsInSelector(): Promise<void> {
-		const baseUrl = this.plugin.settings.ollamaBaseUrl || "http://localhost:11434";
-		const models = await fetchOllamaModels(baseUrl);
-		this.ollamaModels = models;
+	private renderLocalApiSettings(el: HTMLElement): void {
+		if (this.plugin.settings.provider !== "local") return;
 
-		if (models.length === 0) {
-			new Notice("No Ollama models found. Is the server running?", 5000);
-			this.display();
-			return;
+		const localType = this.plugin.settings.localApiType;
+		const placeholder = this.getDefaultLocalBaseUrl(localType);
+		const localModels = this.getLocalModelOptions();
+
+		new Setting(el)
+			.setName("Local API")
+			.setDesc("Use local models through LM Studio, Ollama or other local servers.")
+			.setHeading();
+
+		new Setting(el)
+			.setName("Local API Type")
+			.addDropdown(d => d
+				.addOption("openai-compatible", "OpenAI-compatible")
+				.addOption("ollama", "Ollama")
+				.setValue(localType)
+				.onChange(async (value: string) => {
+					if (!isLocalApiType(value)) return;
+					const previousType = this.plugin.settings.localApiType;
+					this.plugin.settings.localApiType = value;
+
+					const currentBase = this.plugin.settings.localBaseUrl.trim();
+					const previousDefault = this.getDefaultLocalBaseUrl(previousType);
+					if (!currentBase || normalizeLocalBaseUrl(currentBase, previousType) === previousDefault) {
+						this.plugin.settings.localBaseUrl = this.getDefaultLocalBaseUrl(value);
+					}
+
+					await this.plugin.saveSettings();
+					this.display();
+				}),
+			);
+
+		new Setting(el)
+			.setName("Base URL")
+			.setDesc("LM Studio usually uses http://localhost:1234/v1. Ollama usually uses http://localhost:11434.")
+			.addText(txt => {
+				txt.setPlaceholder(placeholder)
+					.setValue(this.plugin.settings.localBaseUrl ?? "")
+					.onChange(async (value: string) => {
+						this.plugin.settings.localBaseUrl = value.trim();
+						await this.plugin.saveSettings();
+					});
+				txt.inputEl.addClass("gpt-settings-input-full");
+			});
+
+		new Setting(el)
+			.setName("Refresh models")
+			.setDesc("Fetch available models from your selected local server.")
+			.addButton(btn => btn
+				.setButtonText("Refresh models")
+				.setTooltip("Fetch available models from your local server")
+				.onClick(() => {
+					btn.setButtonText("Refreshing...").setDisabled(true);
+					void this.refreshLocalModelsInSelector()
+						.catch((err: unknown) => {
+							const message = err instanceof Error ? err.message : String(err);
+							console.error("Local API refresh failed:", err);
+							new Notice(`Local API refresh failed: ${message}`, 7000);
+						})
+						.finally(() => {
+							btn.setButtonText("Refresh models").setDisabled(false);
+						});
+				}),
+			);
+
+		new Setting(el)
+			.setName("Model")
+			.setDesc(localModels.length > 0
+				? "Select the local model used for chat."
+				: "Click Refresh models after starting your local server.")
+			.addDropdown(d => {
+				if (localModels.length === 0) {
+					d.addOption("__local_empty__", "No models loaded");
+					d.setValue("__local_empty__");
+					return d;
+				}
+
+				for (const model of localModels) d.addOption(model, model);
+				d.setValue(this.plugin.settings.localModel || localModels[0]);
+				d.onChange(async (value: string) => {
+					if (value.startsWith("__")) return;
+					this.plugin.settings.localModel = value;
+					await this.plugin.saveSettings();
+					this.display();
+				});
+				return d;
+			});
+	}
+
+	private getDefaultLocalBaseUrl(localApiType: LocalApiType): string {
+		return localApiType === "ollama" ? DEFAULT_LOCAL_OLLAMA_URL : DEFAULT_LOCAL_OPENAI_URL;
+	}
+
+	private async refreshLocalModelsInSelector(): Promise<void> {
+		const defaultBaseUrl = this.getDefaultLocalBaseUrl(this.plugin.settings.localApiType);
+		const normalizedBaseUrl = normalizeLocalBaseUrl(
+			this.plugin.settings.localBaseUrl || defaultBaseUrl,
+			this.plugin.settings.localApiType,
+		);
+		this.plugin.settings.localBaseUrl = normalizedBaseUrl;
+
+		const models = await fetchLocalModels(this.plugin.settings);
+		this.plugin.settings.localModelsCache = models;
+
+		if (!this.plugin.settings.localModel?.trim() && models.length > 0) {
+			this.plugin.settings.localModel = models[0];
 		}
 
-		if (!models.includes(this.plugin.settings.ollamaModel ?? "")) {
-			this.plugin.settings.ollamaModel = models[0];
-			await this.plugin.saveSettings();
-		}
-
-		new Notice(`Found ${models.length} Ollama model(s)`, 3000);
+		await this.plugin.saveSettings();
+		new Notice(`Found ${models.length} Local API model(s)`, 3000);
 		this.display();
 	}
 

@@ -24,7 +24,7 @@ import {
 } from "../utils";
 import { callOpenAI }  from "../api/openai";
 import { callClaude }  from "../api/anthropic";
-import { callOllama }  from "../api/ollama";
+import { callLocalApi } from "../api/local";
 import { parseCanvasToText }   from "../rag/canvasParser";
 import { resolveNoteWithLinks } from "../rag/linkResolver";
 import { FallbackModal } from "./FallbackModal";
@@ -84,7 +84,7 @@ interface ProviderOption {
 const PROVIDER_OPTIONS: ProviderOption[] = [
 	{ id: "openai",    label: "GPT",    icon: "🤖", desc: () => t("chat_provider_gpt_desc")    },
 	{ id: "anthropic", label: "Claude", icon: "🟣", desc: () => t("chat_provider_claude_desc") },
-	{ id: "ollama",    label: "Ollama", icon: "🖥️", desc: () => t("chat_provider_ollama_desc") },
+	{ id: "local",     label: "Local API", icon: "🖥️", desc: () => t("chat_provider_ollama_desc") },
 ];
 
 const ALL_MODELS: Record<"openai" | "anthropic", ModelOption[]> = {
@@ -495,7 +495,7 @@ export class GPTChatView extends ItemView {
 	private getCurrentActiveModel(): string {
 		const provider = this.settings.provider;
 		if (provider === "anthropic") return this.settings.claudeModel ?? "claude-sonnet-4-5";
-		if (provider === "ollama") return this.settings.ollamaModel ?? "llama3.2";
+		if (provider === "local") return this.settings.localModel?.trim() ?? "";
 		return this.settings.model ?? "gpt-4o";
 	}
 
@@ -507,13 +507,13 @@ export class GPTChatView extends ItemView {
 
 	private getProviderLabel(provider: Provider): string {
 		if (provider === "anthropic") return "Claude";
-		if (provider === "ollama") return "Ollama";
+		if (provider === "local") return "Local API";
 		return "GPT";
 	}
 
 	private getProviderIcon(provider: Provider): string {
 		if (provider === "anthropic") return "🟣";
-		if (provider === "ollama") return "🖥️";
+		if (provider === "local") return "🖥️";
 		return "🤖";
 	}
 
@@ -523,7 +523,7 @@ export class GPTChatView extends ItemView {
 
 	private getProviderPlaceholder(provider: Provider): string {
 		if (provider === "anthropic") return t("chat_placeholder_claude");
-		if (provider === "ollama") return t("chat_placeholder_ollama");
+		if (provider === "local") return t("chat_placeholder_ollama");
 		return t("chat_placeholder");
 	}
 
@@ -544,15 +544,17 @@ export class GPTChatView extends ItemView {
 		return model;
 	}
 
-	private getOllamaModelsForPicker(): ModelOption[] {
-		const model = this.settings.ollamaModel?.trim() || "llama3.2";
-		return [{ id: model, label: model, desc: () => t("model_desc_ollama") }];
+	private getLocalModelsForPicker(): ModelOption[] {
+		const models  = [...(this.settings.localModelsCache ?? [])];
+		const current = this.settings.localModel?.trim();
+		if (current && !models.includes(current)) models.unshift(current);
+		return models.map(model => ({ id: model, label: model, desc: () => t("model_desc_ollama") }));
 	}
 
 	private getModelsForProvider(provider: Provider): ModelOption[] {
 		if (provider === "openai") return [...ALL_MODELS.openai];
 		if (provider === "anthropic") return [...ALL_MODELS.anthropic];
-		return this.getOllamaModelsForPicker();
+		return this.getLocalModelsForPicker();
 	}
 
 	private getModelPickerGroups(): Array<{ provider: Provider; title: string; models: ModelOption[] }> {
@@ -573,7 +575,7 @@ export class GPTChatView extends ItemView {
 
 	private getModelPickerTitle(provider: Provider): string {
 		if (provider === "anthropic") return t("chat_picker_claude");
-		if (provider === "ollama") return t("chat_picker_ollama");
+		if (provider === "local") return t("chat_picker_ollama");
 		return t("chat_picker_openai");
 	}
 
@@ -585,7 +587,7 @@ export class GPTChatView extends ItemView {
 		} else if (provider === "anthropic") {
 			this.settings.claudeModel = model;
 		} else {
-			this.settings.ollamaModel = model;
+			this.settings.localModel = model;
 		}
 		return provider;
 	}
@@ -593,7 +595,7 @@ export class GPTChatView extends ItemView {
 	private disableUnsupportedWebSearch(provider: Provider, model: string): void {
 		if (!this.webSearchActive) return;
 		const unsupported =
-			provider === "ollama" ||
+			provider === "local" ||
 			(provider === "openai" && !WEB_SEARCH_CAPABLE.has(model));
 		if (!unsupported) return;
 
@@ -605,7 +607,7 @@ export class GPTChatView extends ItemView {
 		const activeModel = this.getCurrentActiveModel();
 		const provider = this.getEffectiveProvider(activeModel);
 
-		if (!this.webSearchActive && provider === "ollama") {
+		if (!this.webSearchActive && provider === "local") {
 			new Notice(t("ws_ollama_unsupported"), 7000);
 			return;
 		}
@@ -679,7 +681,7 @@ export class GPTChatView extends ItemView {
 		this.providerSelectorBtn.empty();
 		this.providerSelectorBtn.classList.toggle("gpt-provider-selector--openai", provider === "openai");
 		this.providerSelectorBtn.classList.toggle("gpt-provider-selector--claude", provider === "anthropic");
-		this.providerSelectorBtn.classList.toggle("gpt-provider-selector--ollama", provider === "ollama");
+		this.providerSelectorBtn.classList.toggle("gpt-provider-selector--ollama", provider === "local");
 		this.providerSelectorBtn.createEl("span", { cls: "gpt-provider-icon", text: option.icon });
 		this.providerSelectorBtn.createEl("span", { cls: "gpt-provider-label", text: option.label });
 		const arrow = this.providerSelectorBtn.createEl("span", { cls: "gpt-provider-arrow" });
@@ -919,10 +921,10 @@ export class GPTChatView extends ItemView {
 
 		const activeModel = this.getCurrentActiveModel();
 		const activeProvider = this.getEffectiveProvider(activeModel);
-		const webSearchEnabled = activeProvider !== "ollama" && this.webSearchActive;
+		const webSearchEnabled = activeProvider !== "local" && this.webSearchActive;
 		if (activeProvider === "openai" && !this.settings.apiKey) { new Notice(t("err_no_openai_key")); return; }
 		if (activeProvider === "anthropic" && !this.settings.claudeApiKey) { new Notice(t("err_no_claude_key")); return; }
-		if (activeProvider === "ollama" && !this.settings.ollamaBaseUrl.trim()) { new Notice(t("err_no_ollama_url")); return; }
+		if (activeProvider === "local" && !this.settings.localBaseUrl.trim()) { new Notice(t("err_no_ollama_url")); return; }
 
 		if (!override) this.inputEl.value = "";
 		this.sendBtn.disabled = true;
@@ -970,15 +972,12 @@ export class GPTChatView extends ItemView {
 					webSearchEnabled, onChunk, this.abortController.signal,
 					this.getMaxTokensForMode(activeMode),
 				);
-			} else if (activeProvider === "ollama") {
-				result = await callOllama(
-					this.settings.ollamaBaseUrl,
-					activeModel,
-					msgs,
-					onChunk,
-					this.abortController.signal,
-					this.getMaxTokensForMode(activeMode),
-				);
+			} else if (activeProvider === "local") {
+				const text = await callLocalApi(this.settings, msgs, {
+					maxTokens: this.getMaxTokensForMode(activeMode),
+				});
+				onChunk(text);
+				result = { text, usage: null };
 			} else {
 				result = await callOpenAI(
 					this.settings.apiKey,
@@ -1448,15 +1447,13 @@ export class GPTChatView extends ItemView {
 							let r: StreamResult;
 							if (provider === "anthropic") {
 								r = await callClaude(this.settings.claudeApiKey, activeModel, [{ role: "user", content: prompt }], "fast");
-							} else if (provider === "ollama") {
-								r = await callOllama(
-									this.settings.ollamaBaseUrl,
-									activeModel,
+							} else if (provider === "local") {
+								const text = await callLocalApi(
+									this.settings,
 									[{ role: "user", content: prompt }],
-									null,
-									null,
-									this.getMaxTokensForMode("fast"),
+									{ maxTokens: this.getMaxTokensForMode("fast") },
 								);
+								r = { text, usage: null };
 							} else {
 								r = await callOpenAI(this.settings.apiKey, activeModel, [{ role: "user", content: prompt }], "fast");
 							}

@@ -34,7 +34,7 @@ export function isGPT5Search(model: string): boolean {
 
 /**
  * Detects the AI provider from a model id.
- * claude-* -> Anthropic, GPT/o-series/text-davinci -> OpenAI, everything else -> Ollama.
+ * claude-* -> Anthropic, GPT/o-series/text-davinci -> OpenAI, everything else -> Local API.
  */
 export function detectProvider(model: string): Provider {
 	const lower = model.trim().toLowerCase();
@@ -50,7 +50,7 @@ export function detectProvider(model: string): Provider {
 		lower.startsWith("text-davinci")
 	) return "openai";
 
-	return "ollama";
+	return "local";
 }
 
 /** Maps internal thinking modes → reasoning_effort for GPT-5 */

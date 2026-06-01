@@ -209,7 +209,7 @@ export default class GPTPlugin extends Plugin {
 		session.updatedAt = Date.now();
 		session.model     =
 			this.settings.provider === "anthropic" ? (this.settings.claudeModel ?? "claude-sonnet-4-5") :
-			this.settings.provider === "ollama"    ? (this.settings.ollamaModel ?? "llama3.2") :
+			this.settings.provider === "local"     ? (this.settings.localModel || "") :
 			this.settings.model;
 
 		// Auto-title from the first user message
@@ -292,6 +292,27 @@ export default class GPTPlugin extends Plugin {
 		}
 
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, d) as PluginSettings;
+
+		// Migrate the legacy standalone "ollama" provider → unified Local API
+		if (d) this._migrateLegacyOllamaSettings(d);
+	}
+
+	/** Maps old ollama provider/fields onto the new Local API settings (one-time, non-destructive). */
+	private _migrateLegacyOllamaSettings(raw: Record<string, unknown>): void {
+		const legacyBaseUrl = raw.ollamaBaseUrl;
+		const legacyModel   = raw.ollamaModel;
+
+		if ((raw.provider as string) === "ollama") {
+			this.settings.provider     = "local";
+			this.settings.localApiType = "ollama";
+			if (typeof legacyModel === "string" && legacyModel && !this.settings.localModel) {
+				this.settings.localModel = legacyModel;
+			}
+			if (typeof legacyBaseUrl === "string" && legacyBaseUrl
+				&& this.settings.localBaseUrl === DEFAULT_SETTINGS.localBaseUrl) {
+				this.settings.localBaseUrl = legacyBaseUrl;
+			}
+		}
 	}
 
 	async saveSettings(): Promise<void> {

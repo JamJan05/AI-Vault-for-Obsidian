@@ -77,7 +77,7 @@ const en: TranslationDict = {
 	chat_welcome_hint:           "Use 📎 Notes to manually select context.",
 	chat_placeholder:            "Type a message… (Enter = send)",
 	chat_placeholder_claude:     "Type a message to Claude… (Enter = send)",
-	chat_placeholder_ollama:     "Type a message to Ollama… (Enter = send)",
+	chat_placeholder_ollama:     "Type a message to Local API… (Enter = send)",
 	chat_placeholder_code:       "Describe what you want to code…",
 	chat_placeholder_learn:      "Enter a topic or type 'make a test'…",
 	chat_notes_btn:              "Notes",
@@ -109,7 +109,7 @@ const en: TranslationDict = {
 	chat_provider_picker_title:  "Select AI type",
 	chat_provider_gpt_desc:      "OpenAI GPT models",
 	chat_provider_claude_desc:   "Anthropic Claude models",
-	chat_provider_ollama_desc:   "Local Ollama models",
+	chat_provider_ollama_desc:   "Local API models",
 	chat_model_tooltip:          (m: string) => `Current model: ${m}\nClick to change`,
 	chat_model_session_tooltip:  (title: string, model: string) => `${title}\nModel: ${model}\nClick to change`,
 	chat_mode_fast:              "⚡ Fast",
@@ -120,7 +120,7 @@ const en: TranslationDict = {
 	chat_mode_think_desc:        "Deep analysis",
 	chat_picker_openai:          "🤖 Select OpenAI model",
 	chat_picker_claude:          "🟣 Select Claude model",
-	chat_picker_ollama:          "🖥️ Select Ollama model",
+	chat_picker_ollama:          "🖥️ Select Local API model",
 	chat_regen_tooltip:          "Regenerate last response",
 	chat_export_tooltip:         "Export conversation to note",
 	model_desc_gpt5:             "Reasoning, best",
@@ -133,7 +133,7 @@ const en: TranslationDict = {
 	model_desc_opus:             "Best Claude",
 	model_desc_sonnet:           "Recommended",
 	model_desc_haiku:            "Fast, cheap",
-	model_desc_ollama:           "Local Ollama model",
+	model_desc_ollama:           "Local API model",
 	model_desc_custom:           "Current custom model",
 	model_gpt5nano_label:        "GPT-5 Nano",
 
@@ -143,7 +143,7 @@ const en: TranslationDict = {
 	ws_claude_enabled:       (m: string) => `🌐 Internet ON — Claude will decide when to search (${m})`,
 	ws_gpt5search_always:    "ℹ️ GPT-5 Search has web search built-in — always active regardless of toggle.",
 	ws_unsupported:          (m: string) => `⚠️ Model ${m} does not support web search. Choose GPT-5 Search, GPT-4o or GPT-4o Mini.`,
-	ws_ollama_unsupported:   "⚠️ Web search is not available for Ollama models.",
+	ws_ollama_unsupported:   "⚠️ Web search is not available for Local API models.",
 	ws_searching_label:      "Searching the web…",
 
 	// Modes
@@ -238,7 +238,7 @@ const en: TranslationDict = {
 	// Errors
 	err_no_openai_key:       "⚠️ Set your OpenAI API key in settings.",
 	err_no_claude_key:       "⚠️ Set your Claude API key in settings.",
-	err_no_ollama_url:       "⚠️ Set your Ollama Base URL in settings.",
+	err_no_ollama_url:       "⚠️ Set your Local API Base URL in settings.",
 	err_empty_response:      "Model returned an empty response. Please try again.",
 	err_stream:              "Streaming error",
 	err_stream_responses:    "Responses API streaming error",
@@ -260,7 +260,7 @@ const en: TranslationDict = {
 	// Provider
 	provider_switched_gpt:   "🤖 Switched to GPT",
 	provider_switched_claude:"🟣 Switched to Claude",
-	provider_switched_ollama:"🖥️ Switched to Ollama",
+	provider_switched_ollama:"🖥️ Switched to Local API",
 
 	// Commands
 	cmd_open_chat:           "Open chat panel",
@@ -366,7 +366,7 @@ const pl: TranslationDict = {
 	chat_welcome_hint:           "Użyj 📎 Notatki, aby ręcznie wybrać kontekst.",
 	chat_placeholder:            "Napisz wiadomość… (Enter = wyślij)",
 	chat_placeholder_claude:     "Napisz wiadomość do Claude… (Enter = wyślij)",
-	chat_placeholder_ollama:     "Napisz wiadomość do Ollamy… (Enter = wyślij)",
+	chat_placeholder_ollama:     "Napisz wiadomość do lokalnego API… (Enter = wyślij)",
 	chat_placeholder_code:       "Opisz co chcesz zakodować…",
 	chat_placeholder_learn:      "Podaj temat lub napisz 'zrób test'…",
 	chat_notes_btn:              "Notatki",
@@ -398,7 +398,7 @@ const pl: TranslationDict = {
 	chat_provider_picker_title:  "Wybierz typ AI",
 	chat_provider_gpt_desc:      "Modele OpenAI GPT",
 	chat_provider_claude_desc:   "Modele Anthropic Claude",
-	chat_provider_ollama_desc:   "Lokalne modele Ollama",
+	chat_provider_ollama_desc:   "Lokalne modele API",
 	chat_model_tooltip:          (m: string) => `Aktualny model: ${m}\nKliknij aby zmienić`,
 	chat_model_session_tooltip:  (title: string, model: string) => `${title}\nModel: ${model}\nKliknij aby zmienić`,
 	chat_mode_fast:              "⚡ Szybki",
@@ -409,7 +409,7 @@ const pl: TranslationDict = {
 	chat_mode_think_desc:        "Głęboka analiza",
 	chat_picker_openai:          "🤖 Wybierz model OpenAI",
 	chat_picker_claude:          "🟣 Wybierz model Claude",
-	chat_picker_ollama:          "🖥️ Wybierz model Ollama",
+	chat_picker_ollama:          "🖥️ Wybierz model lokalnego API",
 	chat_regen_tooltip:          "Regeneruj ostatnią odpowiedź",
 	chat_export_tooltip:         "Eksportuj rozmowę do notatki",
 	model_desc_gpt5:             "Reasoning, najlepszy",
@@ -422,7 +422,7 @@ const pl: TranslationDict = {
 	model_desc_opus:             "Najlepszy Claude",
 	model_desc_sonnet:           "Polecany",
 	model_desc_haiku:            "Szybki, tani",
-	model_desc_ollama:           "Lokalny model Ollama",
+	model_desc_ollama:           "Lokalny model API",
 	model_desc_custom:           "Bieżący własny model",
 	model_gpt5nano_label:        "GPT-5 Nano",
 
@@ -432,7 +432,7 @@ const pl: TranslationDict = {
 	ws_claude_enabled:       (m: string) => `🌐 Internet WŁĄCZONY — Claude sam zdecyduje kiedy szukać (${m})`,
 	ws_gpt5search_always:    "ℹ️ GPT-5 Search ma web search wbudowany — zawsze aktywny, niezależnie od przełącznika.",
 	ws_unsupported:          (m: string) => `⚠️ Model ${m} nie wspiera web search. Wybierz GPT-5 Search, GPT-4o lub GPT-4o Mini.`,
-	ws_ollama_unsupported:   "⚠️ Web search nie jest dostępny dla modeli Ollama.",
+	ws_ollama_unsupported:   "⚠️ Web search nie jest dostępny dla modeli lokalnego API.",
 	ws_searching_label:      "Przeszukuję internet…",
 
 	// Modes
@@ -527,7 +527,7 @@ const pl: TranslationDict = {
 	// Errors
 	err_no_openai_key:       "⚠️ Ustaw klucz API OpenAI w ustawieniach.",
 	err_no_claude_key:       "⚠️ Ustaw klucz API Claude w ustawieniach.",
-	err_no_ollama_url:       "⚠️ Ustaw Ollama Base URL w ustawieniach.",
+	err_no_ollama_url:       "⚠️ Ustaw Base URL lokalnego API w ustawieniach.",
 	err_empty_response:      "Model zwrócił pustą odpowiedź. Spróbuj ponownie.",
 	err_stream:              "Błąd streamingu",
 	err_stream_responses:    "Błąd streamingu Responses API",
@@ -549,7 +549,7 @@ const pl: TranslationDict = {
 	// Provider
 	provider_switched_gpt:   "🤖 Przełączono na GPT",
 	provider_switched_claude:"🟣 Przełączono na Claude",
-	provider_switched_ollama:"🖥️ Przełączono na Ollamę",
+	provider_switched_ollama:"🖥️ Przełączono na Lokalne API",
 
 	// Commands
 	cmd_open_chat:           "Otwórz panel czatu",

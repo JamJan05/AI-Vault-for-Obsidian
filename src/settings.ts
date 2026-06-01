@@ -1,10 +1,15 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ThinkingMode = "fast" | "normal" | "think";
-export type Provider     = "openai" | "anthropic" | "ollama";
+export type Provider     = "openai" | "anthropic" | "local";
+export type LocalApiType = "openai-compatible" | "ollama";
 export type Language     = "en" | "pl";
 
 export type RAGSearchMode = "hybrid" | "semantic" | "exact" | "recent";
+
+// Default Base URLs per local API type
+export const DEFAULT_LOCAL_OPENAI_URL = "http://localhost:1234/v1";
+export const DEFAULT_LOCAL_OLLAMA_URL = "http://localhost:11434";
 
 export interface PluginSettings {
 	// API Keys
@@ -16,8 +21,10 @@ export interface PluginSettings {
 	provider:               Provider;
 	model:                  string;
 	claudeModel:            string;
-	ollamaBaseUrl:          string;
-	ollamaModel:            string;
+	localApiType:           LocalApiType;
+	localBaseUrl:           string;
+	localModel:             string;
+	localModelsCache:       string[];
 	autoDetectProvider:     boolean;
 	thinkingMode:           ThinkingMode;
 
@@ -63,8 +70,10 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	provider:                "openai",
 	model:                   "gpt-4o",
 	claudeModel:             "claude-sonnet-4-5",
-	ollamaBaseUrl:           "http://localhost:11434",
-	ollamaModel:             "llama3.2",
+	localApiType:            "openai-compatible",
+	localBaseUrl:            DEFAULT_LOCAL_OPENAI_URL,
+	localModel:              "",
+	localModelsCache:        [],
 	autoDetectProvider:      true,
 	thinkingMode:            "normal",
 	maxTokensFast:           4096,
