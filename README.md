@@ -1,8 +1,8 @@
 # AI Vault for Obsidian
 
-Chat with **GPT** and **Claude** directly inside Obsidian — with RAG over your vault, conversation history, projects, and smart modes.
+Chat with **GPT**, **Claude**, and **local models** directly inside Obsidian — with RAG over your vault, conversation history, projects, and smart modes.
 
-AI Vault turns Obsidian into a full AI workspace. Talk to multiple frontier models, give them access to your notes and canvases, organize chats into projects, and keep everything synced with your vault — without ever leaving the app.
+AI Vault turns Obsidian into a full AI workspace. Talk to frontier models or local OpenAI-compatible servers, give them access to your notes and canvases, organize chats into projects, and keep everything synced with your vault — without ever leaving the app.
 
 -----
 
@@ -10,7 +10,7 @@ AI Vault turns Obsidian into a full AI workspace. Talk to multiple frontier mode
 
 ### 🤖 Multi-provider AI
 
-Switch between **OpenAI** and **Anthropic** models with a single click in the chat header — no need to dive into settings.
+Switch between **OpenAI**, **Anthropic**, and **Local API** models with a single click in the chat header — no need to dive into settings.
 
 **OpenAI models:**
 
@@ -27,6 +27,16 @@ Switch between **OpenAI** and **Anthropic** models with a single click in the ch
 - Claude Sonnet 4.5
 - Claude Opus 4.5
 - Claude Haiku 4.5
+
+**Local API models:**
+
+- LM Studio
+- Ollama
+- Jan
+- LocalAI
+- llama.cpp server
+- vLLM
+- Other OpenAI-compatible local servers
 
 ### 📚 RAG over your vault
 
@@ -105,11 +115,33 @@ Full interface in **English** and **Polish**.
 After enabling the plugin:
 
 1. Open **Settings → AI Vault**
-1. Paste your **OpenAI API key** and/or **Anthropic API key**
+1. Paste your **OpenAI API key** and/or **Anthropic API key**, or choose **Local API** for local models
 1. Choose your default model
 1. Open the chat from the ribbon icon on the left sidebar
 
-> Your API keys are stored locally on your device. They are never sent anywhere except directly to the official OpenAI and Anthropic endpoints.
+> Your API keys are stored locally on your device. They are never sent anywhere except directly to the official OpenAI and Anthropic endpoints. Local API requests are sent only to the Base URL you configure.
+
+### Local API setup
+
+Use **Provider → Local API** for local model servers.
+
+For **LM Studio** and other OpenAI-compatible servers:
+
+1. Start the local server in LM Studio
+1. Load a model
+1. Set **Local API Type** to **OpenAI-compatible**
+1. Set **Base URL** to `http://localhost:1234/v1`
+1. Click **Refresh models**
+1. Select the model from the dropdown
+
+For **Ollama**:
+
+1. Start Ollama with `ollama serve`
+1. Pull a model, for example `ollama pull llama3`
+1. Set **Local API Type** to **Ollama**
+1. Set **Base URL** to `http://localhost:11434`
+1. Click **Refresh models**
+1. Select the model from the dropdown
 
 -----
 
@@ -121,7 +153,7 @@ Click the **AI Vault** icon in the left ribbon — the chat panel opens on the r
 
 ### Switching models
 
-Click the model name in the chat header to switch between GPT and Claude variants without leaving the conversation.
+Click the model name in the chat header to switch between GPT, Claude, and Local API models without leaving the conversation.
 
 ### Using vault context (RAG)
 
@@ -143,7 +175,7 @@ Pick **Code**, **Learn**, or **Thinking** mode from the mode selector — the AI
 - **Conversation history** is stored locally, outside your vault.
 - **RAG index** is stored locally, outside your vault.
 - Vault content is sent to the model **only** when you enable vault context, and only the relevant chunks are transmitted.
-- No data is sent to any third party other than the official OpenAI / Anthropic APIs.
+- No data is sent to any third party other than the official OpenAI / Anthropic APIs or the Local API Base URL you configure.
 
 -----
 
@@ -151,7 +183,7 @@ Pick **Code**, **Learn**, or **Thinking** mode from the mode selector — the AI
 
 The plugin itself is **free and open source**.
 
-You pay only for what you use via your own OpenAI / Anthropic API keys, billed directly by the providers. The built-in cost tracker shows estimated spend per conversation.
+You pay only for what you use via your own OpenAI / Anthropic API keys, billed directly by the providers. Local API usage is handled by your local server. The built-in cost tracker shows estimated spend per conversation when provider usage data is available.
 
 -----
 
@@ -160,6 +192,7 @@ You pay only for what you use via your own OpenAI / Anthropic API keys, billed d
 - Written in **TypeScript**
 - Built with **esbuild**
 - Uses official **OpenAI** and **Anthropic** REST APIs with streaming (SSE)
+- Uses **Obsidian requestUrl** for non-streaming Local API requests
 - Local-first architecture — no external servers
 
 -----
