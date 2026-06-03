@@ -18,6 +18,18 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Validate tag is semver
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          # Obsidian requires plain semver (x.y.z, optionally -prerelease). Fail fast
+          # on bad tags like "1.0.2.1" before building or creating a release.
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag '${VERSION}' is not valid semver (expected x.y.z or x.y.z-prerelease)."
+            exit 1
+          fi
+          echo "Tag '${VERSION}' is valid semver."
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"

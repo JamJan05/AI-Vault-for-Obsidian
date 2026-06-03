@@ -1,0 +1,76 @@
+name: Validate version
+
+# Guards against the classic mistake: bumping the version in manifest.json by hand
+# without a matching release tag. The release workflow sets the version FROM the tag,
+# so manifest.json must always correspond to a real release. This job fails fast with
+# a clear message instead of letting Obsidian reject the plugin later.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Check version consistency
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need all tags
+
+      - name: Validate manifest version, internal consistency and matching tag
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const { execSync } = require("node:child_process");
+
+          const read = (p) => JSON.parse(fs.readFileSync(p, "utf8"));
+          const manifest = read("manifest.json");
+          const pkg = read("package.json");
+          const version = manifest.version;
+          const errors = [];
+
+          // 1. Tag format must be semver.
+          if (!/^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/.test(version)) {
+            errors.push(`manifest.json version "${version}" is not valid semver (expected x.y.z or x.y.z-prerelease).`);
+          }
+
+          // 2. package.json must match manifest.json.
+          if (pkg.version !== version) {
+            errors.push(`package.json version (${pkg.version}) does not match manifest.json version (${version}).`);
+          }
+
+          // 3. versions.json must list manifest.json's version.
+          if (fs.existsSync("versions.json")) {
+            const versions = read("versions.json");
+            if (!(version in versions)) {
+              errors.push(`versions.json has no entry for ${version}.`);
+            }
+          }
+
+          // 4. A git tag named <version> must exist (i.e. an actual release).
+          const tags = execSync("git tag -l", { encoding: "utf8" })
+            .split("\n").map((s) => s.trim()).filter(Boolean);
+          if (!tags.includes(version)) {
+            errors.push(
+              `No git tag "${version}" exists, so manifest.json points at a version that was never released.\n` +
+              `   Do NOT bump the version by hand. Let the release workflow set it: ` +
+              `git tag ${version} && git push origin ${version}`,
+            );
+          }
+
+          if (errors.length) {
+            console.error("::error::Version validation failed:\n - " + errors.join("\n - "));
+            process.exit(1);
+          }
+          console.log(`OK: version ${version} is consistent and has a matching release tag.`);
+          NODE
