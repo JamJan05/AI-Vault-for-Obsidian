@@ -1,4 +1,5 @@
 import { DIR_HISTORY, FILE_HISTORY_INDEX } from "../constants";
+import { t } from "../i18n";
 import type { ExternalStorage } from "../storage/ExternalStorage";
 import type { ChatMessage, ChatSession, SessionMeta } from "../types";
 
@@ -88,7 +89,7 @@ export class HistoryManager {
 		const now = Date.now();
 		return {
 			id:        now.toString(),
-			title:     "New conversation",
+			title:     t("chat_default_title"),
 			createdAt: now,
 			updatedAt: now,
 			messages:  [],

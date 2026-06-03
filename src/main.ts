@@ -82,14 +82,14 @@ export default class GPTPlugin extends Plugin {
 		this.addCommand({ id: "open-gpt-chat",     name: t("cmd_open_chat"),    callback: () => void this.activateChatView() });
 		this.addCommand({ id: "open-gpt-history",  name: t("cmd_open_history"), callback: () => void this.activateHistoryView() });
 		this.addCommand({ id: "open-gpt-projects", name: t("cmd_open_projects"),callback: () => void this.activateProjectsView() });
-		this.addCommand({ id: "new-gpt-chat",      name: "New conversation",   callback: () => this.newChat() });
+		this.addCommand({ id: "new-gpt-chat",      name: t("cmd_new_chat"),     callback: () => this.newChat() });
 
 		this.addCommand({
 			id: "analyze-selection",
-			name: "Analyze selected text",
+			name: t("cmd_analyze"),
 			editorCallback: async editor => {
 				const sel = editor.getSelection();
-				if (!sel) { new Notice("Select text first."); return; }
+				if (!sel) { new Notice(t("cmd_select_text_first")); return; }
 				const view = await this.activateChatView();
 				await new Promise(r => window.setTimeout(r, 300));
 				void view?.sendMessage(`Analyze:\n\n${sel}`);
@@ -101,7 +101,7 @@ export default class GPTPlugin extends Plugin {
 			name: t("cmd_summarize"),
 			editorCallback: async editor => {
 				const c = editor.getValue();
-				if (!c.trim()) { new Notice("Note is empty."); return; }
+				if (!c.trim()) { new Notice(t("cmd_note_empty")); return; }
 				const view = await this.activateChatView();
 				await new Promise(r => window.setTimeout(r, 300));
 				void view?.sendMessage(`Summarize in 5 points:\n\n${c.slice(0, 8000)}`);
@@ -110,12 +110,12 @@ export default class GPTPlugin extends Plugin {
 
 		this.addCommand({
 			id: "reindex-vault",
-			name: "Re-index vault (RAG)",
+			name: t("cmd_reindex"),
 			callback: async () => {
-				new Notice("⏳ Indexing…");
+				new Notice(t("cmd_indexing"));
 				await this.rag.buildIndex();
 				const s = this.rag.stats;
-				new Notice(`✅ RAG: ${s.files} notes`);
+				new Notice(t("rag_done", s.files));
 			},
 		});
 

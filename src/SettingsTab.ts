@@ -609,10 +609,10 @@ export class GPTSettingsTab extends PluginSettingTab {
 			info.empty();
 			info.createEl("strong", { text: t("settings_storage_active") });
 			info.createEl("br");
-			info.appendChild(info.ownerDocument.createTextNode("Obsidian Sync does not sync this data."));
+			info.appendChild(info.ownerDocument.createTextNode(t("settings_storage_no_sync")));
 			info.createEl("br");
 			info.createEl("br");
-			info.createEl("strong", { text: "Location:" });
+			info.createEl("strong", { text: t("settings_storage_location") });
 			info.createEl("br");
 			const pathEl = info.createEl("code", { text: currentPath });
 			pathEl.addClass("gpt-settings-storage-path");
@@ -641,7 +641,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 			.setName(t("settings_storage_path_name"))
 			.setDesc(t("settings_storage_path_desc", defaultPath))
 			.addText(txt => {
-				txt.setPlaceholder("/path/to/folder (empty = auto)")
+				txt.setPlaceholder(t("settings_storage_path_placeholder"))
 					.setValue(this.plugin.settings.externalStoragePath ?? "")
 					.setDisabled(!isDesktop);
 				txt.inputEl.addClass("gpt-settings-input-full");

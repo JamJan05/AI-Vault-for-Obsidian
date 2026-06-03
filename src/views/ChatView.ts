@@ -1172,9 +1172,9 @@ export class GPTChatView extends ItemView {
 		// Footer with copy button
 		const footer     = msgEl.createEl("div", { cls: "gpt-msg-footer" });
 		const assistLabel = this.getProviderLabel(this.getEffectiveProvider());
-		footer.createEl("span", { cls: "gpt-msg-label", text: role === "user" ? "You" : assistLabel });
+		footer.createEl("span", { cls: "gpt-msg-label", text: role === "user" ? t("chat_role_you") : assistLabel });
 
-		const copyBtn = footer.createEl("button", { cls: "gpt-copy-btn", attr: { title: "Copy", "aria-label": "Copy" } });
+		const copyBtn = footer.createEl("button", { cls: "gpt-copy-btn", attr: { title: t("chat_copy"), "aria-label": t("chat_copy") } });
 		this.setButtonIcon(copyBtn, "copy");
 		copyBtn.onclick   = async () => {
 			await navigator.clipboard.writeText(bubble.dataset.raw ?? contentEl.innerText);
@@ -1209,11 +1209,11 @@ export class GPTChatView extends ItemView {
 			if (this.stopBtn) return;
 			this.stopBtn = this.sendBtn.parentElement!.createEl("button", {
 				cls:  "gpt-stop-btn",
-				text: "⏹ Stop",
+				text: `⏹ ${t("chat_stop")}`,
 			});
 			this.stopBtn.onclick = () => {
 				this.abortController?.abort();
-				new Notice("⏹ Generation stopped");
+				new Notice(t("chat_generation_stopped"));
 			};
 			this.sendBtn.addClass("gpt-ctx-hidden");
 		} else {
