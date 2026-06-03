@@ -2,6 +2,7 @@
 :root {
   --gpt-color-openai:   #10a37f;
   --gpt-color-claude:   #7c3aed;
+  --gpt-color-ollama:   #475569;
   --gpt-color-web:      #2563eb;
   --gpt-color-learn:    #f59e0b;
   --gpt-color-error:    #e74c3c;
@@ -39,25 +40,27 @@
   text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* ─── Provider switch ────────────────────────────────────────────────────────── */
-.gpt-provider-switch {
-  display: flex;
-  border-radius: 8px;
+/* ─── Provider selector ─────────────────────────────────────────────────────── */
+.gpt-provider-selector {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 8px; border-radius: 8px;
   border: 1px solid var(--background-modifier-border);
-  overflow: hidden;
-  flex-shrink: 0;
+  background: var(--background-primary); color: var(--text-normal);
+  cursor: pointer; font-size: 12px; font-weight: 700;
+  flex: 0 0 auto; min-width: 86px; max-width: 112px;
+  transition: background .15s, border-color .15s, color .15s;
+  white-space: nowrap; overflow: hidden;
 }
-.gpt-provider-btn {
-  padding: 3px 10px; font-size: 11px; font-weight: 600;
-  border: none; background: transparent;
-  color: var(--text-muted); cursor: pointer; transition: all .15s;
-}
-.gpt-provider-btn--active:first-child { background: var(--gpt-color-openai); color: #fff; }
-.gpt-provider-btn--active:last-child  { background: var(--gpt-color-claude); color: #fff; }
-.gpt-provider-btn:hover:not(.gpt-provider-btn--active) {
+.gpt-provider-selector:hover {
   background: var(--background-modifier-hover);
-  color: var(--text-normal);
 }
+.gpt-provider-selector--openai { border-color: color-mix(in srgb, var(--gpt-color-openai) 45%, var(--background-modifier-border)); }
+.gpt-provider-selector--claude { border-color: color-mix(in srgb, var(--gpt-color-claude) 45%, var(--background-modifier-border)); }
+.gpt-provider-selector--ollama { border-color: color-mix(in srgb, var(--gpt-color-ollama) 45%, var(--background-modifier-border)); }
+.gpt-provider-icon { font-size: 13px; flex-shrink: 0; }
+.gpt-provider-label { overflow: hidden; text-overflow: ellipsis; flex: 1; text-align: left; }
+.gpt-provider-arrow { flex-shrink: 0; opacity: .55; transition: opacity .15s; }
+.gpt-provider-selector:hover .gpt-provider-arrow { opacity: 1; }
 
 /* ─── Model selector ─────────────────────────────────────────────────────────── */
 .gpt-model-selector {
@@ -66,7 +69,7 @@
   border: 1px solid var(--background-modifier-border);
   background: var(--background-secondary); color: var(--text-normal);
   cursor: pointer; font-size: 12px; font-weight: 600;
-  flex: 1; min-width: 0; max-width: 160px;
+  flex: 1 1 120px; min-width: 96px; max-width: 220px;
   transition: background .15s, border-color .15s;
   white-space: nowrap; overflow: hidden;
 }
@@ -87,6 +90,7 @@
   border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.25);
   padding: 6px; min-width: 220px; max-height: 420px; overflow-y: auto;
 }
+.gpt-provider-picker { min-width: 190px; }
 .gpt-mp-header {
   font-size: 11px; font-weight: 700; color: var(--text-muted);
   padding: 4px 8px 6px; letter-spacing: .04em;
@@ -105,6 +109,8 @@
 .gpt-mp-row-desc  { font-size: 10px; color: var(--text-muted); }
 .gpt-mp-row-check { font-size: 12px; color: var(--interactive-accent); font-weight: 700; flex-shrink: 0; }
 .gpt-mp-divider   { height: 1px; background: var(--background-modifier-border); margin: 4px 0; }
+.gpt-provider-row { justify-content: flex-start; gap: 8px; }
+.gpt-provider-row-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
 
 /* ─── Badges & buttons ───────────────────────────────────────────────────────── */
 .gpt-rag-badge {

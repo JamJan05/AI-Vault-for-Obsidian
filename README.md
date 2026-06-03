@@ -1,6 +1,6 @@
 # ✨ AI-Vault for Obsidian
 
-Chat with **OpenAI GPT** and **Anthropic Claude** directly inside Obsidian, with vault-aware context, conversation history, projects, smart modes, and local-first storage.
+Chat with **OpenAI GPT**, **Anthropic Claude**, and **local models** directly inside Obsidian, with vault-aware context, conversation history, projects, smart modes, and local-first storage.
 
 AI-Vault turns your Obsidian workspace into an AI assistant that can use your notes, canvases, selected files, and project history as context while keeping plugin data on your own machine.
 
@@ -8,7 +8,8 @@ AI-Vault turns your Obsidian workspace into an AI assistant that can use your no
 
 ## 🚀 Highlights
 
-- 🤖 **Multi-provider chat** - switch between OpenAI and Anthropic models from the chat view.
+- 🤖 **Multi-provider chat** - switch between OpenAI, Anthropic, and local models from the chat view.
+- 🖥️ **Local models** - run models offline through LM Studio, Ollama, and other OpenAI-compatible servers.
 - 📚 **Vault RAG** - search relevant Markdown and Canvas content from your vault.
 - 📎 **Manual note context** - attach specific notes or canvases to a conversation.
 - 🗂️ **Projects** - group related chats with custom prompts and shared project context.
@@ -18,7 +19,7 @@ AI-Vault turns your Obsidian workspace into an AI assistant that can use your no
 - 🎓 **Learn mode** - generate study-friendly answers and interactive quiz-style responses.
 - 💻 **Code mode** - get programming-focused answers with code formatting.
 - 🌐 **Web search** - use supported OpenAI and Claude web-search capabilities.
-- 🌍 **Bilingual UI** - English and Polish interface.
+- 🌍 **Bilingual UI** - fully localized English and Polish interface.
 - 🔐 **Local-first storage** - history, projects, keys, and RAG index can stay outside your vault.
 
 ---
@@ -26,8 +27,8 @@ AI-Vault turns your Obsidian workspace into an AI assistant that can use your no
 ## 🧩 Requirements
 
 - 🖥️ Obsidian desktop **1.7.2 or newer**
-- 🔑 OpenAI API key and/or Anthropic API key
-- 📡 Internet access for model calls, embeddings, and web search
+- 🔑 OpenAI API key and/or Anthropic API key — **or** a local model server (LM Studio, Ollama, …)
+- 📡 Internet access for cloud model calls, embeddings, and web search (local models can run offline)
 
 > AI-Vault is desktop-only because streaming and external local storage rely on desktop APIs.
 
@@ -50,6 +51,40 @@ AI-Vault turns your Obsidian workspace into an AI assistant that can use your no
 - Claude Opus 4.5
 - Claude Sonnet 4.5
 - Claude Haiku 4.5
+
+### Local API
+
+Any model served by an OpenAI-compatible or Ollama endpoint, including:
+
+- LM Studio
+- Ollama
+- LocalAI
+- llama.cpp server
+- vLLM
+- Other OpenAI-compatible local servers
+
+---
+
+## 🖥️ Local Models
+
+Use **Provider → Local API** to chat with models running on your own machine. AI-Vault supports two endpoint types and can fetch the available model list from your server.
+
+### LM Studio (and other OpenAI-compatible servers)
+
+1. Start the local server in LM Studio and load a model.
+2. In **Settings → AI-Vault**, set **Local API Type** to **OpenAI-compatible**.
+3. Set **Base URL** to `http://localhost:1234/v1`.
+4. Click **Refresh models** and select a model from the list.
+
+### Ollama
+
+1. Start Ollama with `ollama serve`.
+2. Pull a model, for example `ollama pull llama3`.
+3. In **Settings → AI-Vault**, set **Local API Type** to **Ollama**.
+4. Set **Base URL** to `http://localhost:11434` (no `/v1` — AI-Vault uses Ollama's native endpoints).
+5. Click **Refresh models** and select a model from the list.
+
+> Web search is not available for local models. Local API requests are sent only to the Base URL you configure and never leave your machine.
 
 ---
 
@@ -99,6 +134,12 @@ Inside the AI-Vault chat view you can:
 
 ---
 
+## 🌍 Language
+
+The entire interface is fully localized in **English** and **Polish**. Switch it any time in **Settings → AI-Vault → Language / Język**; the change applies across settings, chat, projects, history, quizzes, and notices.
+
+---
+
 ## 🔐 Privacy And Storage
 
 By default, AI-Vault stores plugin data outside your vault in a local folder next to the vault directory:
@@ -124,7 +165,7 @@ Data is sent to model providers only when it is part of a request, for example:
 - project context,
 - web-search requests.
 
-AI-Vault does not use its own backend server. Requests go directly from Obsidian to the configured OpenAI or Anthropic API.
+AI-Vault does not use its own backend server. Requests go directly from Obsidian to the configured OpenAI or Anthropic API, or to the Local API Base URL you set.
 
 ---
 
@@ -167,7 +208,7 @@ Once available in the Obsidian Community Plugins directory:
 
 1. Open **Settings -> AI-Vault**.
 2. Choose the interface language.
-3. Add your OpenAI API key and/or Anthropic API key.
+3. Add your OpenAI API key and/or Anthropic API key, or configure a **Local API** server.
 4. Choose your default provider and model.
 5. Configure RAG, token limits, storage, and system prompt settings.
 6. Open AI-Vault from the ribbon icon or command palette.

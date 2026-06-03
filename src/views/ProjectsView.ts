@@ -252,12 +252,12 @@ export class GPTProjectsView extends ItemView {
 
 		box.createEl("p", {
 			cls:  "gpt-modal-title",
-			text: isEdit ? `Edytuj projekt: ${editProject!.name}` : "Nowy projekt:",
+			text: isEdit ? t("projects_modal_edit_title", editProject!.name) : t("projects_modal_new_title"),
 		});
 
 		const nameInput = box.createEl("input", {
 			cls:  "gpt-modal-input",
-			attr: { type: "text", placeholder: "Nazwa projektu…" },
+			attr: { type: "text", placeholder: t("projects_name_placeholder") },
 		}) as HTMLInputElement;
 		if (isEdit) nameInput.value = editProject!.name;
 

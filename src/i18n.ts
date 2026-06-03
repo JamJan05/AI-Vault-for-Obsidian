@@ -58,6 +58,9 @@ const en: TranslationDict = {
 	settings_storage_open_name:  "Open folder in explorer",
 	settings_storage_open_btn:   "Open folder",
 	settings_storage_open_desc:  "Shows the history folder in the system file manager.",
+	settings_storage_no_sync:    "Obsidian Sync does not sync this data.",
+	settings_storage_location:   "Location:",
+	settings_storage_path_placeholder: "/path/to/folder (empty = auto)",
 	settings_storage_active:     "✅ Active — history saved OUTSIDE vault",
 	settings_storage_inactive:   "⚠️ Disabled — history saved inside vault",
 	settings_storage_inactive_html: "⚠️ <strong>Disabled — history saved inside vault</strong><br>Obsidian Sync may synchronize chat history (uses up your GB limit).",
@@ -69,6 +72,34 @@ const en: TranslationDict = {
 	settings_lang_name:          "Language",
 	settings_lang_desc:          "Interface language for the plugin.",
 
+	// Model selector
+	settings_model_heading:      "Model",
+	settings_provider_name:      "Provider",
+	settings_provider_desc:      "Select the active AI provider.",
+	settings_active_model_name:  "Active model",
+	settings_active_model_desc:  "Provider is detected automatically from the model name.",
+	settings_local_empty_paren:  "(no models - click Refresh)",
+	settings_autodetect_name:    "Auto-detect provider",
+	settings_autodetect_desc:    "Automatically detect AI provider from model name: claude-* -> Anthropic, gpt-* -> OpenAI, others -> Local API.",
+
+	// Local API
+	settings_local_title:        "🖥️ Local API",
+	settings_local_desc:         "Use local models through LM Studio, Ollama or other local servers.",
+	settings_local_type_name:    "Local API Type",
+	settings_local_baseurl_name: "Base URL",
+	settings_local_baseurl_desc: "LM Studio usually uses http://localhost:1234/v1. Ollama usually uses http://localhost:11434.",
+	settings_local_refresh_name: "Refresh models",
+	settings_local_refresh_desc: "Fetch available models from your selected local server.",
+	settings_local_refresh_btn:  "Refresh models",
+	settings_local_refresh_tip:  "Fetch available models from your local server",
+	settings_local_refreshing:   "Refreshing...",
+	settings_local_refresh_fail: (m: string) => `Local API refresh failed: ${m}`,
+	settings_local_model_name:   "Model",
+	settings_local_model_desc_ok:    "Select the local model used for chat.",
+	settings_local_model_desc_empty: "Click Refresh models after starting your local server.",
+	settings_local_model_empty_opt:  "No models loaded",
+	settings_local_models_found: (n: number) => `Found ${n} Local API model(s)`,
+
 	// Chat view
 	chat_new:                    "New",
 	chat_history:                "History",
@@ -77,6 +108,7 @@ const en: TranslationDict = {
 	chat_welcome_hint:           "Use 📎 Notes to manually select context.",
 	chat_placeholder:            "Type a message… (Enter = send)",
 	chat_placeholder_claude:     "Type a message to Claude… (Enter = send)",
+	chat_placeholder_ollama:     "Type a message to Local API… (Enter = send)",
 	chat_placeholder_code:       "Describe what you want to code…",
 	chat_placeholder_learn:      "Enter a topic or type 'make a test'…",
 	chat_notes_btn:              "Notes",
@@ -91,6 +123,9 @@ const en: TranslationDict = {
 	chat_copy:                   "Copy",
 	chat_copied:                 "Copied!",
 	chat_interrupted:            "⏹ Interrupted by user",
+	chat_generation_stopped:     "⏹ Generation stopped",
+	chat_role_you:               "You",
+	chat_default_title:          "New conversation",
 	chat_btn_rag:                "RAG",
 	chat_btn_index:              "Index",
 	chat_btn_notes:              "Notes",
@@ -104,6 +139,11 @@ const en: TranslationDict = {
 	chat_title_learn:            "Learn mode — model asks questions, generates quizzes",
 	chat_title_code:             "Code mode — model as expert programmer",
 	chat_section_rag:            "🗄️ RAG (vault context)",
+	chat_provider_tooltip:       (p: string) => `Current AI type: ${p}\nClick to change`,
+	chat_provider_picker_title:  "Select AI type",
+	chat_provider_gpt_desc:      "OpenAI GPT models",
+	chat_provider_claude_desc:   "Anthropic Claude models",
+	chat_provider_ollama_desc:   "Local API models",
 	chat_model_tooltip:          (m: string) => `Current model: ${m}\nClick to change`,
 	chat_model_session_tooltip:  (title: string, model: string) => `${title}\nModel: ${model}\nClick to change`,
 	chat_mode_fast:              "⚡ Fast",
@@ -114,6 +154,7 @@ const en: TranslationDict = {
 	chat_mode_think_desc:        "Deep analysis",
 	chat_picker_openai:          "🤖 Select OpenAI model",
 	chat_picker_claude:          "🟣 Select Claude model",
+	chat_picker_ollama:          "🖥️ Select Local API model",
 	chat_regen_tooltip:          "Regenerate last response",
 	chat_export_tooltip:         "Export conversation to note",
 	model_desc_gpt5:             "Reasoning, best",
@@ -126,6 +167,8 @@ const en: TranslationDict = {
 	model_desc_opus:             "Best Claude",
 	model_desc_sonnet:           "Recommended",
 	model_desc_haiku:            "Fast, cheap",
+	model_desc_ollama:           "Local API model",
+	model_desc_custom:           "Current custom model",
 	model_gpt5nano_label:        "GPT-5 Nano",
 
 	// Web search
@@ -134,6 +177,7 @@ const en: TranslationDict = {
 	ws_claude_enabled:       (m: string) => `🌐 Internet ON — Claude will decide when to search (${m})`,
 	ws_gpt5search_always:    "ℹ️ GPT-5 Search has web search built-in — always active regardless of toggle.",
 	ws_unsupported:          (m: string) => `⚠️ Model ${m} does not support web search. Choose GPT-5 Search, GPT-4o or GPT-4o Mini.`,
+	ws_ollama_unsupported:   "⚠️ Web search is not available for Local API models.",
 	ws_searching_label:      "Searching the web…",
 
 	// Modes
@@ -177,6 +221,9 @@ const en: TranslationDict = {
 	projects_prompt_hint:        "If set, this prompt REPLACES the global system prompt. Leave empty to use the global prompt.",
 	projects_create_btn:         "Create",
 	projects_custom_prompt_badge:"· ✏️ custom prompt",
+	projects_modal_new_title:    "New project:",
+	projects_modal_edit_title:   (name: string) => `Edit project: ${name}`,
+	projects_name_placeholder:   "Project name…",
 
 	// RAG
 	rag_ready_short:         (f: number, e: number) => `🗄️ RAG ready — ${f} notes (${e} embeddings)`,
@@ -228,6 +275,7 @@ const en: TranslationDict = {
 	// Errors
 	err_no_openai_key:       "⚠️ Set your OpenAI API key in settings.",
 	err_no_claude_key:       "⚠️ Set your Claude API key in settings.",
+	err_no_ollama_url:       "⚠️ Set your Local API Base URL in settings.",
 	err_empty_response:      "Model returned an empty response. Please try again.",
 	err_stream:              "Streaming error",
 	err_stream_responses:    "Responses API streaming error",
@@ -249,12 +297,19 @@ const en: TranslationDict = {
 	// Provider
 	provider_switched_gpt:   "🤖 Switched to GPT",
 	provider_switched_claude:"🟣 Switched to Claude",
+	provider_switched_ollama:"🖥️ Switched to Local API",
 
 	// Commands
 	cmd_open_chat:           "Open chat panel",
 	cmd_open_history:        "Open chat history",
 	cmd_open_projects:       "Open projects",
 	cmd_summarize:           "Summarize current note",
+	cmd_new_chat:            "New conversation",
+	cmd_analyze:             "Analyze selected text",
+	cmd_reindex:             "Re-index vault (RAG)",
+	cmd_select_text_first:   "Select text first.",
+	cmd_note_empty:          "Note is empty.",
+	cmd_indexing:            "⏳ Indexing…",
 
 	// Quiz
 	quiz_error:              "Error!",
@@ -335,6 +390,9 @@ const pl: TranslationDict = {
 	settings_storage_open_name:  "Otwórz folder w eksploratorze",
 	settings_storage_open_btn:   "Otwórz folder",
 	settings_storage_open_desc:  "Pokazuje folder z historią w systemowym menedżerze plików.",
+	settings_storage_no_sync:    "Obsidian Sync nie synchronizuje tych danych.",
+	settings_storage_location:   "Lokalizacja:",
+	settings_storage_path_placeholder: "/ścieżka/do/folderu (puste = auto)",
 	settings_storage_active:     "✅ Aktywny — historia zapisywana POZA vaultem",
 	settings_storage_inactive:   "⚠️ Wyłączony — historia zapisywana w vaulcie",
 	settings_storage_inactive_html: "⚠️ <strong>Wyłączony — historia zapisywana w vaulcie</strong><br>Obsidian Sync może synchronizować historię rozmów (zjada limit GB).",
@@ -346,6 +404,34 @@ const pl: TranslationDict = {
 	settings_lang_name:          "Język / Language",
 	settings_lang_desc:          "Język interfejsu wtyczki.",
 
+	// Model selector
+	settings_model_heading:      "Model",
+	settings_provider_name:      "Dostawca",
+	settings_provider_desc:      "Wybierz aktywnego dostawcę AI.",
+	settings_active_model_name:  "Aktywny model",
+	settings_active_model_desc:  "Dostawca jest wykrywany automatycznie na podstawie nazwy modelu.",
+	settings_local_empty_paren:  "(brak modeli — kliknij Odśwież)",
+	settings_autodetect_name:    "Auto-wykrywanie dostawcy",
+	settings_autodetect_desc:    "Automatycznie wykrywaj dostawcę AI z nazwy modelu: claude-* → Anthropic, gpt-* → OpenAI, pozostałe → Lokalne API.",
+
+	// Local API
+	settings_local_title:        "🖥️ Lokalne API",
+	settings_local_desc:         "Używaj lokalnych modeli przez LM Studio, Ollama lub inne lokalne serwery.",
+	settings_local_type_name:    "Typ lokalnego API",
+	settings_local_baseurl_name: "Base URL",
+	settings_local_baseurl_desc: "LM Studio zwykle używa http://localhost:1234/v1. Ollama zwykle używa http://localhost:11434.",
+	settings_local_refresh_name: "Odśwież modele",
+	settings_local_refresh_desc: "Pobierz dostępne modele z wybranego lokalnego serwera.",
+	settings_local_refresh_btn:  "Odśwież modele",
+	settings_local_refresh_tip:  "Pobierz dostępne modele z lokalnego serwera",
+	settings_local_refreshing:   "Odświeżanie…",
+	settings_local_refresh_fail: (m: string) => `Odświeżanie lokalnego API nie powiodło się: ${m}`,
+	settings_local_model_name:   "Model",
+	settings_local_model_desc_ok:    "Wybierz lokalny model używany do czatu.",
+	settings_local_model_desc_empty: "Kliknij Odśwież modele po uruchomieniu lokalnego serwera.",
+	settings_local_model_empty_opt:  "Brak załadowanych modeli",
+	settings_local_models_found: (n: number) => `Znaleziono ${n} modeli lokalnego API`,
+
 	// Chat view
 	chat_new:                    "Nowa",
 	chat_history:                "Historia",
@@ -354,6 +440,7 @@ const pl: TranslationDict = {
 	chat_welcome_hint:           "Użyj 📎 Notatki, aby ręcznie wybrać kontekst.",
 	chat_placeholder:            "Napisz wiadomość… (Enter = wyślij)",
 	chat_placeholder_claude:     "Napisz wiadomość do Claude… (Enter = wyślij)",
+	chat_placeholder_ollama:     "Napisz wiadomość do lokalnego API… (Enter = wyślij)",
 	chat_placeholder_code:       "Opisz co chcesz zakodować…",
 	chat_placeholder_learn:      "Podaj temat lub napisz 'zrób test'…",
 	chat_notes_btn:              "Notatki",
@@ -368,6 +455,9 @@ const pl: TranslationDict = {
 	chat_copy:                   "Kopiuj",
 	chat_copied:                 "Skopiowano!",
 	chat_interrupted:            "⏹ Przerwane przez użytkownika",
+	chat_generation_stopped:     "⏹ Przerwano generowanie",
+	chat_role_you:               "Ty",
+	chat_default_title:          "Nowa rozmowa",
 	chat_btn_rag:                "RAG",
 	chat_btn_index:              "Indeksuj",
 	chat_btn_notes:              "Notatki",
@@ -381,6 +471,11 @@ const pl: TranslationDict = {
 	chat_title_learn:            "Tryb nauki — model pyta, generuje quizy",
 	chat_title_code:             "Tryb kodowania — model jako ekspert programista",
 	chat_section_rag:            "🗄️ RAG (kontekst z vault)",
+	chat_provider_tooltip:       (p: string) => `Aktualny typ AI: ${p}\nKliknij aby zmienić`,
+	chat_provider_picker_title:  "Wybierz typ AI",
+	chat_provider_gpt_desc:      "Modele OpenAI GPT",
+	chat_provider_claude_desc:   "Modele Anthropic Claude",
+	chat_provider_ollama_desc:   "Lokalne modele API",
 	chat_model_tooltip:          (m: string) => `Aktualny model: ${m}\nKliknij aby zmienić`,
 	chat_model_session_tooltip:  (title: string, model: string) => `${title}\nModel: ${model}\nKliknij aby zmienić`,
 	chat_mode_fast:              "⚡ Szybki",
@@ -391,6 +486,7 @@ const pl: TranslationDict = {
 	chat_mode_think_desc:        "Głęboka analiza",
 	chat_picker_openai:          "🤖 Wybierz model OpenAI",
 	chat_picker_claude:          "🟣 Wybierz model Claude",
+	chat_picker_ollama:          "🖥️ Wybierz model lokalnego API",
 	chat_regen_tooltip:          "Regeneruj ostatnią odpowiedź",
 	chat_export_tooltip:         "Eksportuj rozmowę do notatki",
 	model_desc_gpt5:             "Reasoning, najlepszy",
@@ -403,6 +499,8 @@ const pl: TranslationDict = {
 	model_desc_opus:             "Najlepszy Claude",
 	model_desc_sonnet:           "Polecany",
 	model_desc_haiku:            "Szybki, tani",
+	model_desc_ollama:           "Lokalny model API",
+	model_desc_custom:           "Bieżący własny model",
 	model_gpt5nano_label:        "GPT-5 Nano",
 
 	// Web search
@@ -411,6 +509,7 @@ const pl: TranslationDict = {
 	ws_claude_enabled:       (m: string) => `🌐 Internet WŁĄCZONY — Claude sam zdecyduje kiedy szukać (${m})`,
 	ws_gpt5search_always:    "ℹ️ GPT-5 Search ma web search wbudowany — zawsze aktywny, niezależnie od przełącznika.",
 	ws_unsupported:          (m: string) => `⚠️ Model ${m} nie wspiera web search. Wybierz GPT-5 Search, GPT-4o lub GPT-4o Mini.`,
+	ws_ollama_unsupported:   "⚠️ Web search nie jest dostępny dla modeli lokalnego API.",
 	ws_searching_label:      "Przeszukuję internet…",
 
 	// Modes
@@ -454,6 +553,9 @@ const pl: TranslationDict = {
 	projects_prompt_hint:        "Gdy ustawisz ten prompt, ZASTĄPI on globalny prompt systemowy. Jeśli zostawisz puste — użyty będzie domyślny prompt.",
 	projects_create_btn:         "Utwórz",
 	projects_custom_prompt_badge:"· ✏️ własny prompt",
+	projects_modal_new_title:    "Nowy projekt:",
+	projects_modal_edit_title:   (name: string) => `Edytuj projekt: ${name}`,
+	projects_name_placeholder:   "Nazwa projektu…",
 
 	// RAG
 	rag_ready_short:         (f: number, e: number) => `🗄️ RAG gotowy — ${f} notatek (${e} embeddingów)`,
@@ -505,6 +607,7 @@ const pl: TranslationDict = {
 	// Errors
 	err_no_openai_key:       "⚠️ Ustaw klucz API OpenAI w ustawieniach.",
 	err_no_claude_key:       "⚠️ Ustaw klucz API Claude w ustawieniach.",
+	err_no_ollama_url:       "⚠️ Ustaw Base URL lokalnego API w ustawieniach.",
 	err_empty_response:      "Model zwrócił pustą odpowiedź. Spróbuj ponownie.",
 	err_stream:              "Błąd streamingu",
 	err_stream_responses:    "Błąd streamingu Responses API",
@@ -526,12 +629,19 @@ const pl: TranslationDict = {
 	// Provider
 	provider_switched_gpt:   "🤖 Przełączono na GPT",
 	provider_switched_claude:"🟣 Przełączono na Claude",
+	provider_switched_ollama:"🖥️ Przełączono na Lokalne API",
 
 	// Commands
 	cmd_open_chat:           "Otwórz panel czatu",
 	cmd_open_history:        "Otwórz historię rozmów",
 	cmd_open_projects:       "Otwórz projekty",
 	cmd_summarize:           "Podsumuj aktualną notatkę",
+	cmd_new_chat:            "Nowa rozmowa",
+	cmd_analyze:             "Analizuj zaznaczony tekst",
+	cmd_reindex:             "Przeindeksuj vault (RAG)",
+	cmd_select_text_first:   "Najpierw zaznacz tekst.",
+	cmd_note_empty:          "Notatka jest pusta.",
+	cmd_indexing:            "⏳ Indeksowanie…",
 
 	// Quiz
 	quiz_error:              "Błąd!",

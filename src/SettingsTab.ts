@@ -1,6 +1,8 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import { t, setLanguage } from "./i18n";
-import { DEFAULT_SYSTEM_PROMPTS } from "./settings";
+import { DEFAULT_SYSTEM_PROMPTS, DEFAULT_LOCAL_OPENAI_URL, DEFAULT_LOCAL_OLLAMA_URL } from "./settings";
+import { detectProvider } from "./models";
+import { fetchLocalModels, normalizeLocalBaseUrl } from "./api/local";
 import { FILE_API_KEYS } from "./constants";
 import type { ExternalStorage } from "./storage/ExternalStorage";
 import type { HistoryManager }  from "./history/HistoryManager";
@@ -8,7 +10,7 @@ import type { ProjectManager }  from "./history/ProjectManager";
 import type { RAGEngine }       from "./rag/RAGEngine";
 import type { GPTHistoryView }  from "./views/HistoryView";
 import type { GPTProjectsView } from "./views/ProjectsView";
-import type { PluginSettings }  from "./settings";
+import type { LocalApiType, PluginSettings, Provider } from "./settings";
 
 // ─── Plugin interface ──────────────────────────────────────────────────────────
 
@@ -24,6 +26,14 @@ interface PluginWithDeps {
 	saveData(data: Record<string, unknown>): Promise<void>;
 	getHistoryView():  GPTHistoryView | null;
 	getProjectsView(): GPTProjectsView | null;
+}
+
+function isProvider(value: string): value is Provider {
+	return value === "openai" || value === "anthropic" || value === "local";
+}
+
+function isLocalApiType(value: string): value is LocalApiType {
+	return value === "openai-compatible" || value === "ollama";
 }
 
 // ─── SettingsTab ───────────────────────────────────────────────────────────────
@@ -43,8 +53,8 @@ export class GPTSettingsTab extends PluginSettingTab {
 		this.renderLanguage(containerEl);
 		this.renderKeyWarning(containerEl);
 		this.renderApiKeySync(containerEl);
-		this.renderOpenAIKeys(containerEl);
-		this.renderClaude(containerEl);
+		this.renderModelSelector(containerEl);
+		this.renderLocalApiSettings(containerEl);
 		this.renderOpenAISettings(containerEl);
 		this.renderContext(containerEl);
 		this.renderRAG(containerEl);
@@ -152,45 +162,263 @@ export class GPTSettingsTab extends PluginSettingTab {
 		}
 	}
 
-	private renderOpenAIKeys(el: HTMLElement): void {
+	private renderModelSelector(el: HTMLElement): void {
+		const currentModel = this.getCurrentActiveModel();
+		const localModels  = this.getLocalModelOptions();
+		const knownModels  = new Set<string>();
+
+		new Setting(el)
+			.setName(t("settings_model_heading"))
+			.setHeading();
+
+		new Setting(el)
+			.setName(t("settings_provider_name"))
+			.setDesc(t("settings_provider_desc"))
+			.addDropdown(d => d
+				.addOption("openai", "OpenAI")
+				.addOption("anthropic", "Anthropic")
+				.addOption("local", "Local API")
+				.setValue(this.plugin.settings.provider)
+				.onChange(async (value: string) => {
+					if (!isProvider(value)) return;
+					this.plugin.settings.provider = value;
+					await this.plugin.saveSettings();
+					this.display();
+				}),
+			);
+
+		new Setting(el)
+			.setName(t("settings_active_model_name"))
+			.setDesc(t("settings_active_model_desc"))
+			.addDropdown(d => {
+				const addModel = (id: string, label: string): void => {
+					knownModels.add(id);
+					d.addOption(id, label);
+				};
+
+				d.addOption("__openai_header__", "--- OpenAI ---");
+				addModel("gpt-5",            "GPT-5 (reasoning, best)");
+				addModel("gpt-5-mini",       "GPT-5 Mini (reasoning, faster)");
+				addModel("gpt-5-nano",       "GPT-5 Nano (fast / affordable)");
+				addModel("gpt-5-search-api", "GPT-5 Search (web search)");
+				addModel("gpt-4o",           "GPT-4o (web search)");
+				addModel("gpt-4o-mini",      "GPT-4o Mini (web search)");
+				addModel("gpt-4-turbo",      "GPT-4 Turbo");
+
+				d.addOption("__claude_header__", "--- Anthropic ---");
+				addModel("claude-opus-4-5",   "Claude Opus 4.5 (best)");
+				addModel("claude-sonnet-4-5", "Claude Sonnet 4.5 (recommended)");
+				addModel("claude-haiku-4-5",  "Claude Haiku 4.5 (fast / affordable)");
+
+				d.addOption("__local_header__", "--- Local API ---");
+				for (const model of localModels) addModel(model, model);
+				if (localModels.length === 0) {
+					d.addOption("__local_empty__", t("settings_local_empty_paren"));
+				}
+
+				if (currentModel && !knownModels.has(currentModel)) addModel(currentModel, currentModel);
+				d.setValue(currentModel || "__local_empty__");
+
+				d.onChange(async (value: string) => {
+					if (value.startsWith("__")) {
+						d.setValue(currentModel || "__local_empty__");
+						return;
+					}
+
+					const provider = localModels.includes(value) ? "local" : detectProvider(value);
+					this.plugin.settings.provider = provider;
+					if (provider === "openai") {
+						this.plugin.settings.model = value;
+					} else if (provider === "anthropic") {
+						this.plugin.settings.claudeModel = value;
+					} else {
+						this.plugin.settings.localModel = value;
+					}
+
+					await this.plugin.saveSettings();
+					this.display();
+				});
+
+				return d;
+			});
+
+		new Setting(el)
+			.setName(t("settings_autodetect_name"))
+			.setDesc(t("settings_autodetect_desc"))
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.autoDetectProvider)
+				.onChange(async (value: boolean) => {
+					this.plugin.settings.autoDetectProvider = value;
+					await this.plugin.saveSettings();
+					this.display();
+				}),
+			);
+
+		this.renderActiveApiKey(el, this.plugin.settings.provider);
+	}
+
+	private getLocalModelOptions(): string[] {
+		const models  = [...(this.plugin.settings.localModelsCache ?? [])];
+		const current = this.plugin.settings.localModel?.trim();
+		if (current && !models.includes(current)) models.unshift(current);
+		return models;
+	}
+
+	private getCurrentActiveModel(): string {
+		const provider = this.plugin.settings.provider;
+		if (provider === "anthropic") return this.plugin.settings.claudeModel ?? "claude-sonnet-4-5";
+		if (provider === "local") return this.plugin.settings.localModel?.trim() ?? "";
+		return this.plugin.settings.model ?? "gpt-4o";
+	}
+
+	private renderActiveApiKey(el: HTMLElement, provider: Provider): void {
 		const keysInSync      = this.plugin.settings.apiKeysInSync;
 		const extEnabled      = this.plugin.externalStorage.isEnabled;
 		const keysStoredLocal = !keysInSync && extEnabled;
 		const keysLocation    = keysStoredLocal ? t("settings_key_local") : t("settings_key_sync");
 
+		if (provider === "openai") {
+			new Setting(el)
+				.setName(t("settings_openai_key_name"))
+				.setDesc(keysLocation)
+				.addText(txt => {
+					txt.inputEl.type = "password";
+					txt.setPlaceholder("sk-...")
+						.setValue(this.plugin.settings.apiKey ?? "")
+						.onChange(async (value: string) => {
+							this.plugin.settings.apiKey = value.trim();
+							await this.plugin.saveSettings();
+						});
+				});
+		} else if (provider === "anthropic") {
+			new Setting(el)
+				.setName(t("settings_claude_key_name"))
+				.setDesc(keysLocation)
+				.addText(txt => {
+					txt.inputEl.type = "password";
+					txt.setPlaceholder("sk-ant-...")
+						.setValue(this.plugin.settings.claudeApiKey ?? "")
+						.onChange(async (value: string) => {
+							this.plugin.settings.claudeApiKey = value.trim();
+							await this.plugin.saveSettings();
+						});
+				});
+		}
+	}
+
+	private renderLocalApiSettings(el: HTMLElement): void {
+		if (this.plugin.settings.provider !== "local") return;
+
+		const localType = this.plugin.settings.localApiType;
+		const placeholder = this.getDefaultLocalBaseUrl(localType);
+		const localModels = this.getLocalModelOptions();
+
 		new Setting(el)
-			.setName(t("settings_openai_title"))
+			.setName(t("settings_local_title"))
+			.setDesc(t("settings_local_desc"))
 			.setHeading();
 
 		new Setting(el)
-			.setName(t("settings_openai_key_name"))
-			.setDesc(keysLocation)
+			.setName(t("settings_local_type_name"))
+			.addDropdown(d => d
+				.addOption("openai-compatible", "OpenAI-compatible")
+				.addOption("ollama", "Ollama")
+				.setValue(localType)
+				.onChange(async (value: string) => {
+					if (!isLocalApiType(value)) return;
+					const previousType = this.plugin.settings.localApiType;
+					this.plugin.settings.localApiType = value;
+
+					const currentBase = this.plugin.settings.localBaseUrl.trim();
+					const previousDefault = this.getDefaultLocalBaseUrl(previousType);
+					if (!currentBase || normalizeLocalBaseUrl(currentBase, previousType) === previousDefault) {
+						this.plugin.settings.localBaseUrl = this.getDefaultLocalBaseUrl(value);
+					}
+
+					await this.plugin.saveSettings();
+					this.display();
+				}),
+			);
+
+		new Setting(el)
+			.setName(t("settings_local_baseurl_name"))
+			.setDesc(t("settings_local_baseurl_desc"))
 			.addText(txt => {
-				txt.inputEl.type = "password";
-				txt.setPlaceholder("sk-…")
-					.setValue(this.plugin.settings.apiKey)
-					.onChange(async (v: string) => {
-						this.plugin.settings.apiKey = v.trim();
+				txt.setPlaceholder(placeholder)
+					.setValue(this.plugin.settings.localBaseUrl ?? "")
+					.onChange(async (value: string) => {
+						this.plugin.settings.localBaseUrl = value.trim();
 						await this.plugin.saveSettings();
 					});
+				txt.inputEl.addClass("gpt-settings-input-full");
 			});
 
 		new Setting(el)
-			.setName(t("settings_openai_model_name"))
-			.addDropdown(d => d
-				.addOption("gpt-5",            "GPT-5 (reasoning, best)")
-				.addOption("gpt-5-mini",       "GPT-5 Mini (reasoning, faster)")
-				.addOption("gpt-5-nano",       t("model_gpt5nano_label"))
-				.addOption("gpt-5-search-api", "GPT-5 Search (web search 🌐)")
-				.addOption("gpt-4o",           "GPT-4o (web search ✓)")
-				.addOption("gpt-4o-mini",      "GPT-4o Mini (web search ✓)")
-				.addOption("gpt-4-turbo",      "GPT-4 Turbo")
-				.setValue(this.plugin.settings.model)
-				.onChange(async (v: string) => {
-					this.plugin.settings.model = v;
-					await this.plugin.saveSettings();
+			.setName(t("settings_local_refresh_name"))
+			.setDesc(t("settings_local_refresh_desc"))
+			.addButton(btn => btn
+				.setButtonText(t("settings_local_refresh_btn"))
+				.setTooltip(t("settings_local_refresh_tip"))
+				.onClick(() => {
+					btn.setButtonText(t("settings_local_refreshing")).setDisabled(true);
+					void this.refreshLocalModelsInSelector()
+						.catch((err: unknown) => {
+							const message = err instanceof Error ? err.message : String(err);
+							console.error("Local API refresh failed:", err);
+							new Notice(t("settings_local_refresh_fail", message), 7000);
+						})
+						.finally(() => {
+							btn.setButtonText(t("settings_local_refresh_btn")).setDisabled(false);
+						});
 				}),
 			);
+
+		new Setting(el)
+			.setName(t("settings_local_model_name"))
+			.setDesc(localModels.length > 0
+				? t("settings_local_model_desc_ok")
+				: t("settings_local_model_desc_empty"))
+			.addDropdown(d => {
+				if (localModels.length === 0) {
+					d.addOption("__local_empty__", t("settings_local_model_empty_opt"));
+					d.setValue("__local_empty__");
+					return d;
+				}
+
+				for (const model of localModels) d.addOption(model, model);
+				d.setValue(this.plugin.settings.localModel || localModels[0]);
+				d.onChange(async (value: string) => {
+					if (value.startsWith("__")) return;
+					this.plugin.settings.localModel = value;
+					await this.plugin.saveSettings();
+					this.display();
+				});
+				return d;
+			});
+	}
+
+	private getDefaultLocalBaseUrl(localApiType: LocalApiType): string {
+		return localApiType === "ollama" ? DEFAULT_LOCAL_OLLAMA_URL : DEFAULT_LOCAL_OPENAI_URL;
+	}
+
+	private async refreshLocalModelsInSelector(): Promise<void> {
+		const defaultBaseUrl = this.getDefaultLocalBaseUrl(this.plugin.settings.localApiType);
+		const normalizedBaseUrl = normalizeLocalBaseUrl(
+			this.plugin.settings.localBaseUrl || defaultBaseUrl,
+			this.plugin.settings.localApiType,
+		);
+		this.plugin.settings.localBaseUrl = normalizedBaseUrl;
+
+		const models = await fetchLocalModels(this.plugin.settings);
+		this.plugin.settings.localModelsCache = models;
+
+		if (!this.plugin.settings.localModel?.trim() && models.length > 0) {
+			this.plugin.settings.localModel = models[0];
+		}
+
+		await this.plugin.saveSettings();
+		new Notice(t("settings_local_models_found", models.length), 3000);
+		this.display();
 	}
 
 	private renderOpenAISettings(el: HTMLElement): void {
@@ -312,43 +540,6 @@ export class GPTSettingsTab extends PluginSettingTab {
 			});
 	}
 
-	private renderClaude(el: HTMLElement): void {
-		const keysInSync      = this.plugin.settings.apiKeysInSync;
-		const extEnabled      = this.plugin.externalStorage.isEnabled;
-		const keysStoredLocal = !keysInSync && extEnabled;
-		const keysLocation    = keysStoredLocal ? t("settings_key_local") : t("settings_key_sync");
-
-		new Setting(el)
-			.setName(t("settings_claude_title"))
-			.setHeading();
-
-		new Setting(el)
-			.setName(t("settings_claude_key_name"))
-			.setDesc(keysLocation)
-			.addText(txt => {
-				txt.inputEl.type = "password";
-				txt.setPlaceholder("sk-ant-…")
-					.setValue(this.plugin.settings.claudeApiKey ?? "")
-					.onChange(async (v: string) => {
-						this.plugin.settings.claudeApiKey = v.trim();
-						await this.plugin.saveSettings();
-					});
-			});
-
-		new Setting(el)
-			.setName(t("settings_claude_model_name"))
-			.addDropdown(d => d
-				.addOption("claude-opus-4-5",   "Claude Opus 4.5 (best)")
-				.addOption("claude-sonnet-4-5", "Claude Sonnet 4.5 (recommended)")
-				.addOption("claude-haiku-4-5",  "Claude Haiku 4.5 (fast / affordable)")
-				.setValue(this.plugin.settings.claudeModel ?? "claude-sonnet-4-5")
-				.onChange(async (v: string) => {
-					this.plugin.settings.claudeModel = v;
-					await this.plugin.saveSettings();
-				}),
-			);
-	}
-
 	private renderRAG(el: HTMLElement): void {
 		new Setting(el)
 			.setName(t("settings_rag_title"))
@@ -418,10 +609,10 @@ export class GPTSettingsTab extends PluginSettingTab {
 			info.empty();
 			info.createEl("strong", { text: t("settings_storage_active") });
 			info.createEl("br");
-			info.appendChild(info.ownerDocument.createTextNode("Obsidian Sync does not sync this data."));
+			info.appendChild(info.ownerDocument.createTextNode(t("settings_storage_no_sync")));
 			info.createEl("br");
 			info.createEl("br");
-			info.createEl("strong", { text: "Location:" });
+			info.createEl("strong", { text: t("settings_storage_location") });
 			info.createEl("br");
 			const pathEl = info.createEl("code", { text: currentPath });
 			pathEl.addClass("gpt-settings-storage-path");
@@ -450,7 +641,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 			.setName(t("settings_storage_path_name"))
 			.setDesc(t("settings_storage_path_desc", defaultPath))
 			.addText(txt => {
-				txt.setPlaceholder("/path/to/folder (empty = auto)")
+				txt.setPlaceholder(t("settings_storage_path_placeholder"))
 					.setValue(this.plugin.settings.externalStoragePath ?? "")
 					.setDisabled(!isDesktop);
 				txt.inputEl.addClass("gpt-settings-input-full");

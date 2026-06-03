@@ -14,6 +14,7 @@ import {
 	THINKING_MODES,
 	WEB_SEARCH_CAPABLE,
 	ModelAccessError,
+	detectProvider,
 	isGPT5,
 	isGPT5Search,
 } from "../models";
@@ -23,6 +24,7 @@ import {
 } from "../utils";
 import { callOpenAI }  from "../api/openai";
 import { callClaude }  from "../api/anthropic";
+import { callLocalApi } from "../api/local";
 import { parseCanvasToText }   from "../rag/canvasParser";
 import { resolveNoteWithLinks } from "../rag/linkResolver";
 import { FallbackModal } from "./FallbackModal";
@@ -30,8 +32,8 @@ import type { ChatMessage } from "../types";
 import type { RAGEngine }      from "../rag/RAGEngine";
 import type { HistoryManager } from "../history/HistoryManager";
 import type { ProjectManager } from "../history/ProjectManager";
-import type { PluginSettings } from "../settings";
-import type { StreamUsage }    from "../api/streaming";
+import type { PluginSettings, Provider } from "../settings";
+import type { StreamResult, StreamUsage } from "../api/streaming";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -65,7 +67,27 @@ interface QuizQuestion {
 
 const RENDER_INTERVAL_MS = 80;
 const MAX_SYSTEM_CHARS   = 120_000;
-const ALL_MODELS = {
+
+interface ModelOption {
+	id:    string;
+	label: string;
+	desc:  () => string;
+}
+
+interface ProviderOption {
+	id:    Provider;
+	label: string;
+	icon:  string;
+	desc:  () => string;
+}
+
+const PROVIDER_OPTIONS: ProviderOption[] = [
+	{ id: "openai",    label: "GPT",    icon: "🤖", desc: () => t("chat_provider_gpt_desc")    },
+	{ id: "anthropic", label: "Claude", icon: "🟣", desc: () => t("chat_provider_claude_desc") },
+	{ id: "local",     label: "Local API", icon: "🖥️", desc: () => t("chat_provider_ollama_desc") },
+];
+
+const ALL_MODELS: Record<"openai" | "anthropic", ModelOption[]> = {
 	openai: [
 		{ id: "gpt-5",            label: "GPT-5",        desc: () => t("model_desc_gpt5")       },
 		{ id: "gpt-5-mini",       label: "GPT-5 Mini",   desc: () => t("model_desc_gpt5mini")   },
@@ -80,7 +102,7 @@ const ALL_MODELS = {
 		{ id: "claude-sonnet-4-5", label: "Sonnet 4.5", desc: () => t("model_desc_sonnet") },
 		{ id: "claude-haiku-4-5",  label: "Haiku 4.5",  desc: () => t("model_desc_haiku")  },
 	],
-} as const;
+};
 
 // ─── GPTChatView ───────────────────────────────────────────────────────────────
 
@@ -96,6 +118,7 @@ export class GPTChatView extends ItemView {
 
 	// Reference to the open model picker and its global mousedown handler
 	private currentPicker:       HTMLElement | null = null;
+	private currentPickerKind:   "model" | "provider" | null = null;
 	private pickerCloseHandler: ((e: MouseEvent) => void) | null = null;
 
 	private lastUsage: StreamUsage | null = null;
@@ -114,9 +137,8 @@ export class GPTChatView extends ItemView {
 	private webSearchBtn!:     HTMLButtonElement;
 	private learnBtn!:         HTMLButtonElement;
 	private codeBtn!:          HTMLButtonElement;
+	private providerSelectorBtn!: HTMLButtonElement;
 	private modelSelectorBtn!: HTMLButtonElement;
-	private gptBtn!:           HTMLButtonElement;
-	private claudeBtn!:        HTMLButtonElement;
 	private projectBar!:       HTMLElement;
 	private projectBarLabel!:  HTMLElement;
 	private manualBar!:        HTMLElement;
@@ -150,6 +172,7 @@ export class GPTChatView extends ItemView {
 		}
 		this.currentPicker?.remove();
 		this.currentPicker = null;
+		this.currentPickerKind = null;
 	}
 
 	// ── Auto-index ─────────────────────────────────────────────────────────────
@@ -214,18 +237,15 @@ export class GPTChatView extends ItemView {
 		const header = root.createEl("div", { cls: "gpt-header" });
 		header.createEl("span", { cls: "gpt-header-icon", text: "✦" });
 
+		this.providerSelectorBtn = header.createEl("button", { cls: "gpt-provider-selector" });
+		this.providerSelectorBtn.onclick = () => this.openProviderPicker();
+
 		this.modelSelectorBtn = header.createEl("button", { cls: "gpt-model-selector" });
 		this.modelSelectorBtn.onclick = () => this.openModelPicker();
-		this.updateModelSelector();
 
 		this.ragBadge = header.createEl("span", { cls: "gpt-rag-badge" });
 		this.updateRagBadge();
 
-		const providerSwitch = header.createEl("div", { cls: "gpt-provider-switch" });
-		this.gptBtn    = providerSwitch.createEl("button", { cls: "gpt-provider-btn", text: "GPT" });
-		this.claudeBtn = providerSwitch.createEl("button", { cls: "gpt-provider-btn", text: "Claude" });
-		this.gptBtn.onclick    = () => this.setProvider("openai");
-		this.claudeBtn.onclick = () => this.setProvider("anthropic");
 		this.updateProviderSwitch();
 
 		const histBtn = header.createEl("button", { cls: "gpt-icon-btn", attr: { "aria-label": t("cmd_open_history") } });
@@ -472,25 +492,143 @@ export class GPTChatView extends ItemView {
 		this.modeLabel.textContent = m ? `${m.label} · ${m.desc}` : "";
 	}
 
+	private getCurrentActiveModel(): string {
+		const provider = this.settings.provider;
+		if (provider === "anthropic") return this.settings.claudeModel ?? "claude-sonnet-4-5";
+		if (provider === "local") return this.settings.localModel?.trim() ?? "";
+		return this.settings.model ?? "gpt-4o";
+	}
+
+	private getEffectiveProvider(model = this.getCurrentActiveModel()): Provider {
+		if (!this.settings.autoDetectProvider) return this.settings.provider;
+		const detected = detectProvider(model);
+		return detected === this.settings.provider ? detected : this.settings.provider;
+	}
+
+	private getProviderLabel(provider: Provider): string {
+		if (provider === "anthropic") return "Claude";
+		if (provider === "local") return "Local API";
+		return "GPT";
+	}
+
+	private getProviderIcon(provider: Provider): string {
+		if (provider === "anthropic") return "🟣";
+		if (provider === "local") return "🖥️";
+		return "🤖";
+	}
+
+	private getProviderOption(provider: Provider): ProviderOption {
+		return PROVIDER_OPTIONS.find(option => option.id === provider) ?? PROVIDER_OPTIONS[0];
+	}
+
+	private getProviderPlaceholder(provider: Provider): string {
+		if (provider === "anthropic") return t("chat_placeholder_claude");
+		if (provider === "local") return t("chat_placeholder_ollama");
+		return t("chat_placeholder");
+	}
+
+	private formatModelLabel(model: string, provider: Provider): string {
+		const known = this.getModelsForProvider(provider).find(option => option.id === model);
+		if (known) return known.label;
+
+		if (provider === "openai") {
+			return model
+				.replace("gpt-", "GPT-")
+				.replace("-search-api", " Search");
+		}
+		if (provider === "anthropic") {
+			return model
+				.replace("claude-", "")
+				.replace(/-4-[56]/g, "");
+		}
+		return model;
+	}
+
+	private getLocalModelsForPicker(): ModelOption[] {
+		const models  = [...(this.settings.localModelsCache ?? [])];
+		const current = this.settings.localModel?.trim();
+		if (current && !models.includes(current)) models.unshift(current);
+		return models.map(model => ({ id: model, label: model, desc: () => t("model_desc_ollama") }));
+	}
+
+	private getModelsForProvider(provider: Provider): ModelOption[] {
+		if (provider === "openai") return [...ALL_MODELS.openai];
+		if (provider === "anthropic") return [...ALL_MODELS.anthropic];
+		return this.getLocalModelsForPicker();
+	}
+
+	private getModelPickerGroups(): Array<{ provider: Provider; title: string; models: ModelOption[] }> {
+		const provider = this.settings.provider;
+		const group = {
+			provider,
+			title: this.getModelPickerTitle(provider),
+			models: this.getModelsForProvider(provider),
+		};
+		const activeModel = this.getCurrentActiveModel();
+		const known = group.models.some(model => model.id === activeModel);
+		if (!known) {
+			group.models.unshift({ id: activeModel, label: activeModel, desc: () => t("model_desc_custom") });
+		}
+
+		return [group];
+	}
+
+	private getModelPickerTitle(provider: Provider): string {
+		if (provider === "anthropic") return t("chat_picker_claude");
+		if (provider === "local") return t("chat_picker_ollama");
+		return t("chat_picker_openai");
+	}
+
+	private setActiveModel(model: string): Provider {
+		const provider = this.settings.provider;
+		this.settings.provider = provider;
+		if (provider === "openai") {
+			this.settings.model = model;
+		} else if (provider === "anthropic") {
+			this.settings.claudeModel = model;
+		} else {
+			this.settings.localModel = model;
+		}
+		return provider;
+	}
+
+	private disableUnsupportedWebSearch(provider: Provider, model: string): void {
+		if (!this.webSearchActive) return;
+		const unsupported =
+			provider === "local" ||
+			(provider === "openai" && !WEB_SEARCH_CAPABLE.has(model));
+		if (!unsupported) return;
+
+		this.webSearchActive = false;
+		this.webSearchBtn?.classList.remove("gpt-websearch-btn--active");
+	}
+
 	toggleWebSearch(): void {
+		const activeModel = this.getCurrentActiveModel();
+		const provider = this.getEffectiveProvider(activeModel);
+
+		if (!this.webSearchActive && provider === "local") {
+			new Notice(t("ws_ollama_unsupported"), 7000);
+			return;
+		}
 		if (
 			!this.webSearchActive &&
-			this.settings.provider === "openai" &&
-			!WEB_SEARCH_CAPABLE.has(this.settings.model)
+			provider === "openai" &&
+			!WEB_SEARCH_CAPABLE.has(activeModel)
 		) {
-			new Notice(t("ws_unsupported", this.settings.model), 7000);
+			new Notice(t("ws_unsupported", activeModel), 7000);
 			return;
 		}
 		this.webSearchActive = !this.webSearchActive;
 		this.webSearchBtn.classList.toggle("gpt-websearch-btn--active", this.webSearchActive);
 
-		if (isGPT5Search(this.settings.model)) {
+		if (isGPT5Search(activeModel)) {
 			new Notice(t("ws_gpt5search_always"), 5000);
-		} else if (this.webSearchActive && this.settings.provider === "anthropic") {
-			new Notice(t("ws_claude_enabled", this.settings.claudeModel ?? "claude-sonnet-4-5"));
+		} else if (this.webSearchActive && provider === "anthropic") {
+			new Notice(t("ws_claude_enabled", activeModel));
 		} else {
 			new Notice(this.webSearchActive
-				? t("ws_enabled", this.settings.model)
+				? t("ws_enabled", activeModel)
 				: t("ws_disabled"));
 		}
 	}
@@ -503,62 +641,65 @@ export class GPTChatView extends ItemView {
 			this.inputEl.placeholder = t("chat_placeholder_learn");
 		} else {
 			new Notice(t("mode_learn_off"));
-			this.inputEl.placeholder = t("chat_placeholder");
+			this.inputEl.placeholder = this.getProviderPlaceholder(this.getEffectiveProvider());
 		}
 	}
 
 	toggleCodeMode(): void {
 		this.codeMode = !this.codeMode;
 		this.codeBtn.classList.toggle("gpt-code-btn--active", this.codeMode);
-		const provName = this.settings.provider === "anthropic" ? "Claude" : "GPT";
+		const provName = this.getProviderLabel(this.getEffectiveProvider());
 		if (this.codeMode) {
 			new Notice(t("mode_code_on", provName));
 			this.inputEl.placeholder = t("chat_placeholder_code");
 		} else {
 			new Notice(t("mode_code_off"));
-			this.inputEl.placeholder = this.settings.provider === "anthropic"
-				? t("chat_placeholder_claude")
-				: t("chat_placeholder");
+			this.inputEl.placeholder = this.getProviderPlaceholder(this.getEffectiveProvider());
 		}
 	}
 
-	setProvider(provider: "openai" | "anthropic"): void {
+	setProvider(provider: Provider): void {
 		this.closePicker();
 		this.settings.provider = provider;
-		void this.plugin.saveSettings();
+		this.plugin.saveSettings()
+			.catch(err => console.error("[AI-Vault] Failed to save provider:", err));
 		this.updateProviderSwitch();
-		if (provider === "anthropic" && this.webSearchActive) {
-			this.webSearchActive = false;
-			this.webSearchBtn.classList.remove("gpt-websearch-btn--active");
-		}
-		new Notice(provider === "openai" ? t("provider_switched_gpt") : t("provider_switched_claude"));
+		const activeModel = this.getCurrentActiveModel();
+		this.disableUnsupportedWebSearch(provider, activeModel);
+		const message =
+			provider === "openai" ? t("provider_switched_gpt") :
+			provider === "anthropic" ? t("provider_switched_claude") :
+			t("provider_switched_ollama");
+		new Notice(message);
 	}
 
 	updateProviderSwitch(): void {
-		if (!this.gptBtn || !this.claudeBtn) return;
-		const isOpenAI = this.settings.provider !== "anthropic";
-		this.gptBtn.classList.toggle("gpt-provider-btn--active", isOpenAI);
-		this.claudeBtn.classList.toggle("gpt-provider-btn--active", !isOpenAI);
-		if (this.inputEl) {
-			this.inputEl.placeholder = isOpenAI
-				? t("chat_placeholder")
-				: t("chat_placeholder_claude");
+		if (!this.providerSelectorBtn) return;
+		const provider = this.settings.provider;
+		const option = this.getProviderOption(provider);
+
+		this.providerSelectorBtn.empty();
+		this.providerSelectorBtn.classList.toggle("gpt-provider-selector--openai", provider === "openai");
+		this.providerSelectorBtn.classList.toggle("gpt-provider-selector--claude", provider === "anthropic");
+		this.providerSelectorBtn.classList.toggle("gpt-provider-selector--ollama", provider === "local");
+		this.providerSelectorBtn.createEl("span", { cls: "gpt-provider-icon", text: option.icon });
+		this.providerSelectorBtn.createEl("span", { cls: "gpt-provider-label", text: option.label });
+		const arrow = this.providerSelectorBtn.createEl("span", { cls: "gpt-provider-arrow" });
+		setIcon(arrow, "chevron-down");
+		this.providerSelectorBtn.title = t("chat_provider_tooltip", option.label);
+
+		if (this.inputEl && !this.codeMode && !this.learnMode) {
+			this.inputEl.placeholder = this.getProviderPlaceholder(provider);
 		}
 		this.updateModelSelector();
 	}
 
 	updateModelSelector(): void {
 		if (!this.modelSelectorBtn) return;
-		const isOpenAI = this.settings.provider !== "anthropic";
-		const icon  = isOpenAI ? "🤖" : "🟣";
-		const model = isOpenAI
-			? (this.settings.model ?? "gpt-4o")
-			: (this.settings.claudeModel ?? "claude-sonnet-4-5");
-		const label = model
-			.replace("claude-", "")
-			.replace(/-4-[56]/g, "")
-			.replace("gpt-", "GPT-")
-			.replace("-search-api", " Search");
+		const model = this.getCurrentActiveModel();
+		const provider = this.settings.provider;
+		const icon = this.getProviderIcon(provider);
+		const label = this.formatModelLabel(model, provider);
 
 		this.modelSelectorBtn.empty();
 		this.modelSelectorBtn.createEl("span", { cls: "gpt-ms-icon", text: icon });
@@ -576,44 +717,49 @@ export class GPTChatView extends ItemView {
 		}
 		this.currentPicker?.remove();
 		this.currentPicker = null;
+		this.currentPickerKind = null;
 	}
 
-	private openModelPicker(): void {
-		// Toggle: if the picker is already open — close it
-		if (this.currentPicker) { this.closePicker(); return; }
+	private openProviderPicker(): void {
+		if (this.currentPicker) {
+			const wasProviderPicker = this.currentPickerKind === "provider";
+			this.closePicker();
+			if (wasProviderPicker) return;
+		}
 
-		const isOpenAI = this.settings.provider !== "anthropic";
-		const models   = ALL_MODELS[isOpenAI ? "openai" : "anthropic"];
-		const activeId = isOpenAI
-			? (this.settings.model       ?? "gpt-4o")
-			: (this.settings.claudeModel ?? "claude-sonnet-4-5");
+		const activeProvider = this.settings.provider;
 		const doc = this.containerEl.ownerDocument;
-
 		const picker = doc.createElement("div");
-		picker.className = "gpt-model-picker";
+		picker.className = "gpt-model-picker gpt-provider-picker";
 		this.currentPicker = picker;
+		this.currentPickerKind = "provider";
 
 		const hdr = doc.createElement("div");
-		hdr.className   = "gpt-mp-header";
-		hdr.textContent = isOpenAI ? t("chat_picker_openai") : t("chat_picker_claude");
+		hdr.className = "gpt-mp-header";
+		hdr.textContent = t("chat_provider_picker_title");
 		picker.appendChild(hdr);
 
-		for (const m of models) {
-			const isActive = m.id === activeId;
+		for (const option of PROVIDER_OPTIONS) {
+			const isActive = option.id === activeProvider;
 			const row = doc.createElement("button");
-			row.className = "gpt-mp-row" + (isActive ? " gpt-mp-row--active" : "");
+			row.className = "gpt-mp-row gpt-provider-row" + (isActive ? " gpt-mp-row--active" : "");
 			row.type = "button";
+
+			const icon = doc.createElement("span");
+			icon.className = "gpt-provider-row-icon";
+			icon.textContent = option.icon;
+			row.appendChild(icon);
 
 			const left = doc.createElement("span");
 			left.className = "gpt-mp-row-left";
 
 			const name = doc.createElement("span");
-			name.className   = "gpt-mp-row-name";
-			name.textContent = m.label;
+			name.className = "gpt-mp-row-name";
+			name.textContent = option.label;
 
 			const desc = doc.createElement("span");
-			desc.className   = "gpt-mp-row-desc";
-			desc.textContent = m.desc();
+			desc.className = "gpt-mp-row-desc";
+			desc.textContent = option.desc();
 
 			left.appendChild(name);
 			left.appendChild(desc);
@@ -621,25 +767,102 @@ export class GPTChatView extends ItemView {
 
 			if (isActive) {
 				const check = doc.createElement("span");
-				check.className   = "gpt-mp-row-check";
+				check.className = "gpt-mp-row-check";
 				check.textContent = "✓";
 				row.appendChild(check);
 			}
 
 			row.addEventListener("mousedown", (e) => e.stopPropagation());
-			row.addEventListener("click", async () => {
-				this.closePicker();
-				if (isOpenAI) {
-					this.plugin.settings.model = m.id;
-				} else {
-					this.plugin.settings.claudeModel = m.id;
-				}
-				await this.plugin.saveSettings();
-				this.updateModelSelector();
-				new Notice(t("notice_model_changed", m.label), 2000);
-			});
-
+			row.addEventListener("click", () => this.setProvider(option.id));
 			picker.appendChild(row);
+		}
+
+		doc.body.appendChild(picker);
+		const rect = this.providerSelectorBtn.getBoundingClientRect();
+		picker.setCssProps({
+			top:  `${rect.bottom + 4}px`,
+			left: `${rect.left}px`,
+		});
+
+		this.pickerCloseHandler = (e: MouseEvent): void => {
+			const target = e.target as Node | null;
+			if (!target) return;
+			const inside = picker.contains(target) || (this.providerSelectorBtn?.contains(target) ?? false);
+			if (!inside) this.closePicker();
+		};
+		window.setTimeout(() => {
+			if (this.pickerCloseHandler) {
+				doc.addEventListener("mousedown", this.pickerCloseHandler);
+			}
+		}, 0);
+	}
+
+	private openModelPicker(): void {
+		// Toggle: if the picker is already open — close it
+		if (this.currentPicker) {
+			const wasModelPicker = this.currentPickerKind === "model";
+			this.closePicker();
+			if (wasModelPicker) return;
+		}
+
+		const groups = this.getModelPickerGroups();
+		const activeId = this.getCurrentActiveModel();
+		const doc = this.containerEl.ownerDocument;
+
+		const picker = doc.createElement("div");
+		picker.className = "gpt-model-picker";
+		this.currentPicker = picker;
+		this.currentPickerKind = "model";
+
+		for (const group of groups) {
+			const hdr = doc.createElement("div");
+			hdr.className   = "gpt-mp-header";
+			hdr.textContent = group.title;
+			picker.appendChild(hdr);
+
+			for (const model of group.models) {
+				const isActive = model.id === activeId;
+				const row = doc.createElement("button");
+				row.className = "gpt-mp-row" + (isActive ? " gpt-mp-row--active" : "");
+				row.type = "button";
+
+				const left = doc.createElement("span");
+				left.className = "gpt-mp-row-left";
+
+				const name = doc.createElement("span");
+				name.className   = "gpt-mp-row-name";
+				name.textContent = model.label;
+
+				const desc = doc.createElement("span");
+				desc.className   = "gpt-mp-row-desc";
+				desc.textContent = model.desc();
+
+				left.appendChild(name);
+				left.appendChild(desc);
+				row.appendChild(left);
+
+				if (isActive) {
+					const check = doc.createElement("span");
+					check.className   = "gpt-mp-row-check";
+					check.textContent = "✓";
+					row.appendChild(check);
+				}
+
+				row.addEventListener("mousedown", (e) => e.stopPropagation());
+				row.addEventListener("click", () => {
+					this.closePicker();
+					const provider = this.setActiveModel(model.id);
+					this.disableUnsupportedWebSearch(provider, model.id);
+					this.plugin.saveSettings()
+						.then(() => {
+							this.updateProviderSwitch();
+							new Notice(t("notice_model_changed", model.label), 2000);
+						})
+						.catch(err => console.error("[AI-Vault] Failed to save selected model:", err));
+				});
+
+				picker.appendChild(row);
+			}
 		}
 
 		// Attach to the view document body — avoids CSS transform issues on Obsidian panels
@@ -696,9 +919,12 @@ export class GPTChatView extends ItemView {
 		const userText = override ?? this.inputEl.value.trim();
 		if (!userText) return;
 
-		const isClaude = this.settings.provider === "anthropic";
-		if (!isClaude && !this.settings.apiKey)      { new Notice(t("err_no_openai_key")); return; }
-		if (isClaude  && !this.settings.claudeApiKey) { new Notice(t("err_no_claude_key")); return; }
+		const activeModel = this.getCurrentActiveModel();
+		const activeProvider = this.getEffectiveProvider(activeModel);
+		const webSearchEnabled = activeProvider !== "local" && this.webSearchActive;
+		if (activeProvider === "openai" && !this.settings.apiKey) { new Notice(t("err_no_openai_key")); return; }
+		if (activeProvider === "anthropic" && !this.settings.claudeApiKey) { new Notice(t("err_no_claude_key")); return; }
+		if (activeProvider === "local" && !this.settings.localBaseUrl.trim()) { new Notice(t("err_no_ollama_url")); return; }
 
 		if (!override) this.inputEl.value = "";
 		this.sendBtn.disabled = true;
@@ -706,7 +932,7 @@ export class GPTChatView extends ItemView {
 		this.appendMessage("user", userText);
 
 		const bubble = this.appendMessage("assistant", "");
-		this.setLoading(bubble, true, this.webSearchActive);
+		this.setLoading(bubble, true, webSearchEnabled);
 
 		try {
 			const systemMsg  = await this.buildSystemMessage(userText);
@@ -736,23 +962,32 @@ export class GPTChatView extends ItemView {
 			};
 
 			const activeMode = this.currentMode ?? this.settings.thinkingMode;
-			const result = isClaude
-				? await callClaude(
+			let result: StreamResult;
+			if (activeProvider === "anthropic") {
+				result = await callClaude(
 					this.settings.claudeApiKey,
-					this.settings.claudeModel ?? "claude-sonnet-4-5",
+					activeModel,
 					msgs,
 					activeMode,
-					this.webSearchActive, onChunk, this.abortController.signal,
-					this.getMaxTokensForMode(activeMode),
-				)
-				: await callOpenAI(
-					this.settings.apiKey,
-					this.settings.model,
-					msgs,
-					activeMode,
-					this.webSearchActive, onChunk, this.abortController.signal,
+					webSearchEnabled, onChunk, this.abortController.signal,
 					this.getMaxTokensForMode(activeMode),
 				);
+			} else if (activeProvider === "local") {
+				const text = await callLocalApi(this.settings, msgs, {
+					maxTokens: this.getMaxTokensForMode(activeMode),
+				});
+				onChunk(text);
+				result = { text, usage: null };
+			} else {
+				result = await callOpenAI(
+					this.settings.apiKey,
+					activeModel,
+					msgs,
+					activeMode,
+					webSearchEnabled, onChunk, this.abortController.signal,
+					this.getMaxTokensForMode(activeMode),
+				);
+			}
 
 			const { text: reply, usage } = result;
 			this.setLoading(bubble, false);
@@ -802,17 +1037,18 @@ export class GPTChatView extends ItemView {
 			} else if (isAbort) {
 				this.messages.pop();
 				bubble.parentElement?.remove();
-			} else if (err instanceof ModelAccessError && this.settings.provider === "openai") {
+			} else if (err instanceof ModelAccessError && activeProvider === "openai") {
 				this.messages.pop();
 				bubble.parentElement?.remove();
 				const failed   = error.message;
-				const failedModel  = (err as ModelAccessError).model ?? this.settings.model;
+				const failedModel  = (err as ModelAccessError).model ?? activeModel;
 				const fallbackModel = isGPT5(failedModel) ? "gpt-4o" : "gpt-4o-mini";
 				new FallbackModal(this.plugin.app, {
 					failedModel,
 					fallbackModel,
 					errorMessage: failed,
 					onAccept: async (saveAsDefault: boolean) => {
+						this.plugin.settings.provider = "openai";
 						this.plugin.settings.model = fallbackModel;
 						if (saveAsDefault) await this.plugin.saveSettings();
 						new Notice(t("notice_fallback_switched", fallbackModel));
@@ -824,7 +1060,7 @@ export class GPTChatView extends ItemView {
 				if (contentEl) {
 					contentEl.empty();
 					contentEl.createEl("div", { cls: "gpt-msg-error-line", text: `❌ ${t("err_stream")}: ${error.message}` });
-					contentEl.createEl("div", { cls: "gpt-msg-error-detail", text: `Model: ${this.settings.model} · Mode: ${this.currentMode}` });
+					contentEl.createEl("div", { cls: "gpt-msg-error-detail", text: `Model: ${activeModel} · Mode: ${this.currentMode}` });
 					contentEl.addClass("gpt-error");
 				}
 				console.error("[AI-Vault] sendMessage error:", error.message, err);
@@ -935,10 +1171,10 @@ export class GPTChatView extends ItemView {
 
 		// Footer with copy button
 		const footer     = msgEl.createEl("div", { cls: "gpt-msg-footer" });
-		const assistLabel = this.settings.provider === "anthropic" ? "Claude" : "GPT";
-		footer.createEl("span", { cls: "gpt-msg-label", text: role === "user" ? "You" : assistLabel });
+		const assistLabel = this.getProviderLabel(this.getEffectiveProvider());
+		footer.createEl("span", { cls: "gpt-msg-label", text: role === "user" ? t("chat_role_you") : assistLabel });
 
-		const copyBtn = footer.createEl("button", { cls: "gpt-copy-btn", attr: { title: "Copy", "aria-label": "Copy" } });
+		const copyBtn = footer.createEl("button", { cls: "gpt-copy-btn", attr: { title: t("chat_copy"), "aria-label": t("chat_copy") } });
 		this.setButtonIcon(copyBtn, "copy");
 		copyBtn.onclick   = async () => {
 			await navigator.clipboard.writeText(bubble.dataset.raw ?? contentEl.innerText);
@@ -973,11 +1209,11 @@ export class GPTChatView extends ItemView {
 			if (this.stopBtn) return;
 			this.stopBtn = this.sendBtn.parentElement!.createEl("button", {
 				cls:  "gpt-stop-btn",
-				text: "⏹ Stop",
+				text: `⏹ ${t("chat_stop")}`,
 			});
 			this.stopBtn.onclick = () => {
 				this.abortController?.abort();
-				new Notice("⏹ Generation stopped");
+				new Notice(t("chat_generation_stopped"));
 			};
 			this.sendBtn.addClass("gpt-ctx-hidden");
 		} else {
@@ -1026,7 +1262,7 @@ export class GPTChatView extends ItemView {
 
 	async exportToNote(): Promise<void> {
 		if (!this.messages.length) { new Notice(t("export_no_messages")); return; }
-		const provName  = this.settings.provider === "anthropic" ? "Claude" : "GPT";
+		const provName  = this.getProviderLabel(this.getEffectiveProvider());
 		const title     = this.plugin.currentSession?.title ?? "Conversation";
 		const date      = formatDate(Date.now());
 		let md          = `# ${title}\n\n> Export from ${provName} · ${date}\n\n---\n\n`;
@@ -1206,10 +1442,21 @@ export class GPTChatView extends ItemView {
 					} else {
 						try {
 							const prompt = t("quiz_eval_prompt", q.question, q.answer, ans);
-							const isClaude = this.settings.provider === "anthropic";
-							const r = isClaude
-								? await callClaude(this.settings.claudeApiKey, this.settings.claudeModel ?? "claude-sonnet-4-5", [{ role: "user", content: prompt }], "fast")
-								: await callOpenAI(this.settings.apiKey, this.settings.model, [{ role: "user", content: prompt }], "fast");
+							const activeModel = this.getCurrentActiveModel();
+							const provider = this.getEffectiveProvider(activeModel);
+							let r: StreamResult;
+							if (provider === "anthropic") {
+								r = await callClaude(this.settings.claudeApiKey, activeModel, [{ role: "user", content: prompt }], "fast");
+							} else if (provider === "local") {
+								const text = await callLocalApi(
+									this.settings,
+									[{ role: "user", content: prompt }],
+									{ maxTokens: this.getMaxTokensForMode("fast") },
+								);
+								r = { text, usage: null };
+							} else {
+								r = await callOpenAI(this.settings.apiKey, activeModel, [{ role: "user", content: prompt }], "fast");
+							}
 							const ev = JSON.parse(r.text.replace(/```json|```/g, "").trim()) as { correct: boolean; feedback: string };
 							card.createEl("div", { cls: ev.correct ? "gpt-quiz-fb gpt-quiz-fb--ok" : "gpt-quiz-fb gpt-quiz-fb--err", text: (ev.correct ? "✅ " : "❌ ") + (ev.feedback ?? "") });
 						} catch { card.createEl("div", { cls: "gpt-quiz-fb gpt-quiz-fb--err", text: t("quiz_eval_error") }); }
