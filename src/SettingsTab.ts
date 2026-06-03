@@ -168,12 +168,12 @@ export class GPTSettingsTab extends PluginSettingTab {
 		const knownModels  = new Set<string>();
 
 		new Setting(el)
-			.setName("Model")
+			.setName(t("settings_model_heading"))
 			.setHeading();
 
 		new Setting(el)
-			.setName("Provider")
-			.setDesc("Select the active AI provider.")
+			.setName(t("settings_provider_name"))
+			.setDesc(t("settings_provider_desc"))
 			.addDropdown(d => d
 				.addOption("openai", "OpenAI")
 				.addOption("anthropic", "Anthropic")
@@ -188,8 +188,8 @@ export class GPTSettingsTab extends PluginSettingTab {
 			);
 
 		new Setting(el)
-			.setName("Active model")
-			.setDesc("Provider is detected automatically from the model name.")
+			.setName(t("settings_active_model_name"))
+			.setDesc(t("settings_active_model_desc"))
 			.addDropdown(d => {
 				const addModel = (id: string, label: string): void => {
 					knownModels.add(id);
@@ -213,7 +213,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 				d.addOption("__local_header__", "--- Local API ---");
 				for (const model of localModels) addModel(model, model);
 				if (localModels.length === 0) {
-					d.addOption("__local_empty__", "(no models - click Refresh)");
+					d.addOption("__local_empty__", t("settings_local_empty_paren"));
 				}
 
 				if (currentModel && !knownModels.has(currentModel)) addModel(currentModel, currentModel);
@@ -243,8 +243,8 @@ export class GPTSettingsTab extends PluginSettingTab {
 			});
 
 		new Setting(el)
-			.setName("Auto-detect provider")
-			.setDesc("Automatically detect AI provider from model name: claude-* -> Anthropic, gpt-* -> OpenAI, others -> Local API.")
+			.setName(t("settings_autodetect_name"))
+			.setDesc(t("settings_autodetect_desc"))
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.autoDetectProvider)
 				.onChange(async (value: boolean) => {
@@ -279,7 +279,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 
 		if (provider === "openai") {
 			new Setting(el)
-				.setName("OpenAI API Key")
+				.setName(t("settings_openai_key_name"))
 				.setDesc(keysLocation)
 				.addText(txt => {
 					txt.inputEl.type = "password";
@@ -292,7 +292,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 				});
 		} else if (provider === "anthropic") {
 			new Setting(el)
-				.setName("Anthropic API Key")
+				.setName(t("settings_claude_key_name"))
 				.setDesc(keysLocation)
 				.addText(txt => {
 					txt.inputEl.type = "password";
@@ -314,12 +314,12 @@ export class GPTSettingsTab extends PluginSettingTab {
 		const localModels = this.getLocalModelOptions();
 
 		new Setting(el)
-			.setName("Local API")
-			.setDesc("Use local models through LM Studio, Ollama or other local servers.")
+			.setName(t("settings_local_title"))
+			.setDesc(t("settings_local_desc"))
 			.setHeading();
 
 		new Setting(el)
-			.setName("Local API Type")
+			.setName(t("settings_local_type_name"))
 			.addDropdown(d => d
 				.addOption("openai-compatible", "OpenAI-compatible")
 				.addOption("ollama", "Ollama")
@@ -341,8 +341,8 @@ export class GPTSettingsTab extends PluginSettingTab {
 			);
 
 		new Setting(el)
-			.setName("Base URL")
-			.setDesc("LM Studio usually uses http://localhost:1234/v1. Ollama usually uses http://localhost:11434.")
+			.setName(t("settings_local_baseurl_name"))
+			.setDesc(t("settings_local_baseurl_desc"))
 			.addText(txt => {
 				txt.setPlaceholder(placeholder)
 					.setValue(this.plugin.settings.localBaseUrl ?? "")
@@ -354,33 +354,33 @@ export class GPTSettingsTab extends PluginSettingTab {
 			});
 
 		new Setting(el)
-			.setName("Refresh models")
-			.setDesc("Fetch available models from your selected local server.")
+			.setName(t("settings_local_refresh_name"))
+			.setDesc(t("settings_local_refresh_desc"))
 			.addButton(btn => btn
-				.setButtonText("Refresh models")
-				.setTooltip("Fetch available models from your local server")
+				.setButtonText(t("settings_local_refresh_btn"))
+				.setTooltip(t("settings_local_refresh_tip"))
 				.onClick(() => {
-					btn.setButtonText("Refreshing...").setDisabled(true);
+					btn.setButtonText(t("settings_local_refreshing")).setDisabled(true);
 					void this.refreshLocalModelsInSelector()
 						.catch((err: unknown) => {
 							const message = err instanceof Error ? err.message : String(err);
 							console.error("Local API refresh failed:", err);
-							new Notice(`Local API refresh failed: ${message}`, 7000);
+							new Notice(t("settings_local_refresh_fail", message), 7000);
 						})
 						.finally(() => {
-							btn.setButtonText("Refresh models").setDisabled(false);
+							btn.setButtonText(t("settings_local_refresh_btn")).setDisabled(false);
 						});
 				}),
 			);
 
 		new Setting(el)
-			.setName("Model")
+			.setName(t("settings_local_model_name"))
 			.setDesc(localModels.length > 0
-				? "Select the local model used for chat."
-				: "Click Refresh models after starting your local server.")
+				? t("settings_local_model_desc_ok")
+				: t("settings_local_model_desc_empty"))
 			.addDropdown(d => {
 				if (localModels.length === 0) {
-					d.addOption("__local_empty__", "No models loaded");
+					d.addOption("__local_empty__", t("settings_local_model_empty_opt"));
 					d.setValue("__local_empty__");
 					return d;
 				}
@@ -417,7 +417,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 		}
 
 		await this.plugin.saveSettings();
-		new Notice(`Found ${models.length} Local API model(s)`, 3000);
+		new Notice(t("settings_local_models_found", models.length), 3000);
 		this.display();
 	}
 

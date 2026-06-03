@@ -69,6 +69,34 @@ const en: TranslationDict = {
 	settings_lang_name:          "Language",
 	settings_lang_desc:          "Interface language for the plugin.",
 
+	// Model selector
+	settings_model_heading:      "Model",
+	settings_provider_name:      "Provider",
+	settings_provider_desc:      "Select the active AI provider.",
+	settings_active_model_name:  "Active model",
+	settings_active_model_desc:  "Provider is detected automatically from the model name.",
+	settings_local_empty_paren:  "(no models - click Refresh)",
+	settings_autodetect_name:    "Auto-detect provider",
+	settings_autodetect_desc:    "Automatically detect AI provider from model name: claude-* -> Anthropic, gpt-* -> OpenAI, others -> Local API.",
+
+	// Local API
+	settings_local_title:        "🖥️ Local API",
+	settings_local_desc:         "Use local models through LM Studio, Ollama or other local servers.",
+	settings_local_type_name:    "Local API Type",
+	settings_local_baseurl_name: "Base URL",
+	settings_local_baseurl_desc: "LM Studio usually uses http://localhost:1234/v1. Ollama usually uses http://localhost:11434.",
+	settings_local_refresh_name: "Refresh models",
+	settings_local_refresh_desc: "Fetch available models from your selected local server.",
+	settings_local_refresh_btn:  "Refresh models",
+	settings_local_refresh_tip:  "Fetch available models from your local server",
+	settings_local_refreshing:   "Refreshing...",
+	settings_local_refresh_fail: (m: string) => `Local API refresh failed: ${m}`,
+	settings_local_model_name:   "Model",
+	settings_local_model_desc_ok:    "Select the local model used for chat.",
+	settings_local_model_desc_empty: "Click Refresh models after starting your local server.",
+	settings_local_model_empty_opt:  "No models loaded",
+	settings_local_models_found: (n: number) => `Found ${n} Local API model(s)`,
+
 	// Chat view
 	chat_new:                    "New",
 	chat_history:                "History",
@@ -357,6 +385,34 @@ const pl: TranslationDict = {
 	settings_keys_local_warning_html: "🔒 <strong>Klucze API są zapisywane lokalnie</strong> w folderze pluginu wewnątrz Twojego vaulta (plain text). Jeśli synchronizujesz vault — klucze też się synchronizują.",
 	settings_lang_name:          "Język / Language",
 	settings_lang_desc:          "Język interfejsu wtyczki.",
+
+	// Model selector
+	settings_model_heading:      "Model",
+	settings_provider_name:      "Dostawca",
+	settings_provider_desc:      "Wybierz aktywnego dostawcę AI.",
+	settings_active_model_name:  "Aktywny model",
+	settings_active_model_desc:  "Dostawca jest wykrywany automatycznie na podstawie nazwy modelu.",
+	settings_local_empty_paren:  "(brak modeli — kliknij Odśwież)",
+	settings_autodetect_name:    "Auto-wykrywanie dostawcy",
+	settings_autodetect_desc:    "Automatycznie wykrywaj dostawcę AI z nazwy modelu: claude-* → Anthropic, gpt-* → OpenAI, pozostałe → Lokalne API.",
+
+	// Local API
+	settings_local_title:        "🖥️ Lokalne API",
+	settings_local_desc:         "Używaj lokalnych modeli przez LM Studio, Ollama lub inne lokalne serwery.",
+	settings_local_type_name:    "Typ lokalnego API",
+	settings_local_baseurl_name: "Base URL",
+	settings_local_baseurl_desc: "LM Studio zwykle używa http://localhost:1234/v1. Ollama zwykle używa http://localhost:11434.",
+	settings_local_refresh_name: "Odśwież modele",
+	settings_local_refresh_desc: "Pobierz dostępne modele z wybranego lokalnego serwera.",
+	settings_local_refresh_btn:  "Odśwież modele",
+	settings_local_refresh_tip:  "Pobierz dostępne modele z lokalnego serwera",
+	settings_local_refreshing:   "Odświeżanie…",
+	settings_local_refresh_fail: (m: string) => `Odświeżanie lokalnego API nie powiodło się: ${m}`,
+	settings_local_model_name:   "Model",
+	settings_local_model_desc_ok:    "Wybierz lokalny model używany do czatu.",
+	settings_local_model_desc_empty: "Kliknij Odśwież modele po uruchomieniu lokalnego serwera.",
+	settings_local_model_empty_opt:  "Brak załadowanych modeli",
+	settings_local_models_found: (n: number) => `Znaleziono ${n} modeli lokalnego API`,
 
 	// Chat view
 	chat_new:                    "Nowa",
