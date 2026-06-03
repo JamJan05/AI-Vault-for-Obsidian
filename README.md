@@ -58,7 +58,6 @@ Any model served by an OpenAI-compatible or Ollama endpoint, including:
 
 - LM Studio
 - Ollama
-- Jan
 - LocalAI
 - llama.cpp server
 - vLLM
