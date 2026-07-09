@@ -84,7 +84,7 @@ Use **Provider → Local API** to chat with models running on your own machine. 
 4. Set **Base URL** to `http://localhost:11434` (no `/v1` — AI-Vault uses Ollama's native endpoints).
 5. Click **Refresh models** and select a model from the list.
 
-> Web search is not available for local models. Local API requests are sent only to the Base URL you configure and never leave your machine.
+> Web search is not available for Local API models. Local API requests are sent only to the Base URL you configure. If your Base URL points to a cloud service or third-party gateway, your chat messages and Local API key are sent to that endpoint. Leave **Local API key** empty for local Ollama or LM Studio.
 
 ---
 
@@ -165,7 +165,7 @@ Data is sent to model providers only when it is part of a request, for example:
 - project context,
 - web-search requests.
 
-AI-Vault does not use its own backend server. Requests go directly from Obsidian to the configured OpenAI or Anthropic API, or to the Local API Base URL you set.
+AI-Vault does not use its own backend server. Requests go directly from Obsidian to the configured OpenAI or Anthropic API, or to the Local API Base URL you set. Local API can be a local server such as Ollama or LM Studio, or a user-configured authenticated Ollama/OpenAI-compatible gateway such as Ollama Cloud, LiteLLM, LocalAI, or vLLM.
 
 ---
 

@@ -130,9 +130,11 @@ export class GPTSettingsTab extends PluginSettingTab {
 				.onChange(async (v: boolean) => {
 					const oldApiKey       = this.plugin.settings.apiKey;
 					const oldClaudeApiKey = this.plugin.settings.claudeApiKey;
+					const oldLocalApiKey  = this.plugin.settings.localApiKey;
 					this.plugin.settings.apiKeysInSync = v;
 					this.plugin.settings.apiKey        = oldApiKey;
 					this.plugin.settings.claudeApiKey  = oldClaudeApiKey;
+					this.plugin.settings.localApiKey   = oldLocalApiKey;
 					await this.plugin.saveSettings();
 
 					if (v) {
@@ -146,6 +148,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 						if (d) {
 							delete d.apiKey;
 							delete d.claudeApiKey;
+							delete d.localApiKey;
 							await this.plugin.saveData(d);
 						}
 						new Notice(t("notice_keys_moved_local"), 5000);
@@ -354,6 +357,19 @@ export class GPTSettingsTab extends PluginSettingTab {
 			});
 
 		new Setting(el)
+			.setName(t("settings_local_api_key_name"))
+			.setDesc(t("settings_local_api_key_desc"))
+			.addText(txt => {
+				txt.inputEl.type = "password";
+				txt.setValue(this.plugin.settings.localApiKey ?? "")
+					.onChange(async (value: string) => {
+						this.plugin.settings.localApiKey = value.trim();
+						await this.plugin.saveSettings();
+					});
+				txt.inputEl.addClass("gpt-settings-input-full");
+			});
+
+		new Setting(el)
 			.setName(t("settings_local_refresh_name"))
 			.setDesc(t("settings_local_refresh_desc"))
 			.addButton(btn => btn
@@ -364,7 +380,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 					void this.refreshLocalModelsInSelector()
 						.catch((err: unknown) => {
 							const message = err instanceof Error ? err.message : String(err);
-							console.error("Local API refresh failed:", err);
+							console.error("Local API refresh failed:", message);
 							new Notice(t("settings_local_refresh_fail", message), 7000);
 						})
 						.finally(() => {

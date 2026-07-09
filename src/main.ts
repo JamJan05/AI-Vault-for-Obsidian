@@ -328,9 +328,11 @@ export default class GPTPlugin extends Plugin {
 			await this.externalStorage.writeJson(keysPath, {
 				apiKey:       this.settings.apiKey       ?? "",
 				claudeApiKey: this.settings.claudeApiKey ?? "",
+				localApiKey:  this.settings.localApiKey  ?? "",
 			});
 			delete toSave.apiKey;
 			delete toSave.claudeApiKey;
+			delete toSave.localApiKey;
 			await this.saveData(toSave);
 		}
 	}
@@ -358,18 +360,21 @@ export default class GPTPlugin extends Plugin {
 		// keys the user has in memory/data.json (the migration branch below
 		// will still run for legacy data.json keys).
 		if (!(await this.externalStorage.exists(keysPath))) {
-			const hasOld = this.settings.apiKey || this.settings.claudeApiKey;
+			const hasOld = this.settings.apiKey || this.settings.claudeApiKey || this.settings.localApiKey;
 			if (hasOld) {
 				// Migration: data.json → keys.json
 				await this.externalStorage.writeJson(keysPath, {
 					apiKey:       this.settings.apiKey       ?? "",
 					claudeApiKey: this.settings.claudeApiKey ?? "",
+					localApiKey:  this.settings.localApiKey  ?? "",
 				});
 				delete (this.settings as unknown as Record<string, unknown>).apiKey;
 				delete (this.settings as unknown as Record<string, unknown>).claudeApiKey;
+				delete (this.settings as unknown as Record<string, unknown>).localApiKey;
 				await this.saveData({ ...this.settings });
 				this.settings.apiKey       = this.settings.apiKey       ?? "";
 				this.settings.claudeApiKey = this.settings.claudeApiKey ?? "";
+				this.settings.localApiKey  = this.settings.localApiKey  ?? "";
 				new Notice(t("notice_keys_migrated"), 4000);
 			}
 			return;
@@ -378,7 +383,7 @@ export default class GPTPlugin extends Plugin {
 		// keys.json exists — read it. Only overwrite settings on a successful
 		// read; on a transient read failure preserve the in-memory values to
 		// avoid wiping the user's keys.
-		const stored = await this.externalStorage.readJson<{ apiKey?: string; claudeApiKey?: string } | null>(keysPath, null);
+		const stored = await this.externalStorage.readJson<{ apiKey?: string; claudeApiKey?: string; localApiKey?: string } | null>(keysPath, null);
 		if (!stored) {
 			console.warn("[AI-Vault] _loadApiKeys: keys.json unreadable, preserving in-memory keys");
 			return;
@@ -386,6 +391,7 @@ export default class GPTPlugin extends Plugin {
 
 		this.settings.apiKey       = stored.apiKey       ?? this.settings.apiKey       ?? "";
 		this.settings.claudeApiKey = stored.claudeApiKey ?? this.settings.claudeApiKey ?? "";
+		this.settings.localApiKey  = stored.localApiKey  ?? this.settings.localApiKey  ?? "";
 	}
 
 	// ── Auto-migration ─────────────────────────────────────────────────────────
