@@ -1,9 +1,9 @@
 name: Validate version
 
 # Guards against the classic mistake: bumping the version in manifest.json by hand
-# without a matching release tag. The release workflow sets the version FROM the tag,
-# so manifest.json must always correspond to a real release. This job fails fast with
-# a clear message instead of letting Obsidian reject the plugin later.
+# without a matching stable release tag. Pre-releases are built from beta/test
+# branches and must not update main. This job fails fast with a clear message
+# instead of letting Obsidian reject the plugin later.
 
 on:
   push:
@@ -39,9 +39,9 @@ jobs:
           const version = manifest.version;
           const errors = [];
 
-          // 1. Tag format must be semver.
-          if (!/^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/.test(version)) {
-            errors.push(`manifest.json version "${version}" is not valid semver (expected x.y.z or x.y.z-prerelease).`);
+          // 1. main must point at a stable semver release only.
+          if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(version)) {
+            errors.push(`manifest.json version "${version}" is not a stable semver version (expected x.y.z). Use GitHub pre-releases for beta/test branches.`);
           }
 
           // 2. package.json must match manifest.json.
