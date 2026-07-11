@@ -10,9 +10,27 @@ import type { PluginStorage, ListResult } from "./PluginStorage";
 import type { PluginSettings } from "../settings";
 import type { Plugin } from "obsidian";
 
-// Node.js types — available only on desktop
-type FSPromises = typeof import("fs/promises");
-type NodePath   = typeof import("path");
+interface NodeDirent {
+	name: string;
+	isDirectory(): boolean;
+}
+
+interface NodeFsPromises {
+	mkdir(path: string, options: { recursive: true }): Promise<unknown>;
+	access(path: string): Promise<void>;
+	readFile(path: string, encoding: "utf-8"): Promise<string>;
+	writeFile(path: string, data: string, encoding: "utf-8"): Promise<void>;
+	rename(oldPath: string, newPath: string): Promise<void>;
+	unlink(path: string): Promise<void>;
+	readdir(path: string, options: { withFileTypes: true }): Promise<NodeDirent[]>;
+}
+
+interface NodePathApi {
+	resolve(path: string): string;
+	dirname(path: string): string;
+	basename(path: string): string;
+	join(...paths: string[]): string;
+}
 
 interface MigrateResult {
 	moved:   number;
@@ -33,6 +51,22 @@ function errorCode(error: unknown): string | null {
 	return typeof error.code === "string" ? error.code : null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function hasFunctions(value: unknown, names: string[]): value is Record<string, (...args: unknown[]) => unknown> {
+	return isRecord(value) && names.every(name => typeof value[name] === "function");
+}
+
+function isNodeFsPromises(value: unknown): value is NodeFsPromises {
+	return hasFunctions(value, ["mkdir", "access", "readFile", "writeFile", "rename", "unlink", "readdir"]);
+}
+
+function isNodePathApi(value: unknown): value is NodePathApi {
+	return hasFunctions(value, ["resolve", "dirname", "basename", "join"]);
+}
+
 /**
  * Storage that writes data to a local system directory NEXT TO the vault folder.
  * Obsidian Sync does NOT synchronize these files.
@@ -44,8 +78,8 @@ function errorCode(error: unknown): string | null {
  * Can be overridden via settings.externalStoragePath.
  */
 export class ExternalStorage {
-	private _fs:      FSPromises | null = null;
-	private _path:    NodePath   | null = null;
+	private _fs:      NodeFsPromises | null = null;
+	private _path:    NodePathApi     | null = null;
 	private _desktop  = false;
 	private _baseDir: string | null = null;
 	private _enabled  = false;
@@ -61,8 +95,13 @@ export class ExternalStorage {
 		try {
 			// External paths are outside the vault adapter's sandbox. These modules are
 			// loaded only on desktop and are the reason manifest.json is desktop-only.
-			this._fs = await import("fs/promises");
-			this._path = await import("path");
+			const fsModule: unknown = await import("fs/promises");
+			const pathModule: unknown = await import("path");
+			if (!isNodeFsPromises(fsModule) || !isNodePathApi(pathModule)) {
+				throw new Error("Unexpected Node module shape");
+			}
+			this._fs = fsModule;
+			this._path = pathModule;
 			this._desktop = true;
 			return true;
 		} catch (e) {
@@ -74,12 +113,12 @@ export class ExternalStorage {
 		}
 	}
 
-	private get nodeFs(): FSPromises {
+	private get nodeFs(): NodeFsPromises {
 		if (!this._fs) throw new Error("Node fs is unavailable");
 		return this._fs;
 	}
 
-	private get nodePath(): NodePath {
+	private get nodePath(): NodePathApi {
 		if (!this._path) throw new Error("Node path is unavailable");
 		return this._path;
 	}
@@ -275,7 +314,7 @@ export class ExternalStorage {
 					result.errors.push(t("storage_save_error", fname));
 				}
 			} catch (e) {
-				result.errors.push(`${fname}: ${(e as Error)?.message ?? e}`);
+				result.errors.push(`${fname}: ${errorMessage(e)}`);
 			}
 		}
 
