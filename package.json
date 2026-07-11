@@ -6,14 +6,18 @@
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc --noEmit --skipLibCheck && node esbuild.config.mjs production",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit --skipLibCheck"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@typescript-eslint/parser": "^8.0.0",
     "@types/node": "^22.19.18",
     "esbuild": "^0.21.5",
+    "eslint": "^9.0.0",
+    "eslint-plugin-obsidianmd": "^0.4.1",
     "obsidian": "^1.12.3",
     "tslib": "^2.6.3",
     "typescript": "^5.9.3"

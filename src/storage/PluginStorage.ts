@@ -85,7 +85,7 @@ export class PluginStorage {
 		try {
 			const a = this.plugin.app.vault.adapter;
 			if (!(await a.exists(dirPath))) return { files: [], folders: [] };
-			return await a.list(dirPath) as ListResult;
+			return await a.list(dirPath);
 		} catch {
 			return { files: [], folders: [] };
 		}

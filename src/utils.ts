@@ -86,7 +86,7 @@ export function sanitizeUrl(url: string): string {
 
 /** UTF-8 safe base64 encode */
 export function utf8ToBase64(str: string): string {
-	return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) =>
+	return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_match: string, p1: string) =>
 		String.fromCharCode(parseInt(p1, 16)),
 	));
 }
@@ -149,7 +149,7 @@ export function tokenize(text: string): string[] {
 
 /** Builds a term-frequency map for a document (cached on the entry) */
 export function buildTermFreq(tokens: string[]): Record<string, number> {
-	const tf: Record<string, number> = Object.create(null);
+	const tf: Record<string, number> = {};
 	for (const token of tokens) tf[token] = (tf[token] || 0) + 1;
 	return tf;
 }

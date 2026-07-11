@@ -6,7 +6,9 @@ on:
       - published
 
 permissions:
+  attestations: write
   contents: write
+  id-token: write
 
 jobs:
   build:
@@ -81,6 +83,13 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            styles.css
 
       - name: Commit updated version files to main
         if: ${{ !github.event.release.prerelease }}

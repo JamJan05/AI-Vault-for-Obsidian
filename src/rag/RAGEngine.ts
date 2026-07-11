@@ -90,10 +90,10 @@ export class RAGEngine {
 		if (
 			data &&
 			!Array.isArray(data) &&
-			(data as RAGIndex)._version === 2 &&
-			Array.isArray((data as RAGIndex).entries)
+			data._version === 2 &&
+			Array.isArray(data.entries)
 		) {
-			const idx = data as RAGIndex;
+			const idx = data;
 			this.index       = idx.entries;
 			this.fileHashes  = idx.hashes ?? {};
 			this.indexed     = true;
@@ -104,7 +104,7 @@ export class RAGEngine {
 
 		// Old format (migration) — flat array
 		if (Array.isArray(data) && data.length) {
-			this.index       = data as RAGEntry[];
+			this.index       = data;
 			this.fileHashes  = {};
 			this.indexed     = true;
 			this.recalcAvgLen();
@@ -195,10 +195,10 @@ export class RAGEngine {
 		this.indexing = true;
 
 		try {
-			const mdFiles     = this.plugin.app.vault.getMarkdownFiles();
-			const canvasFiles = this.plugin.app.vault.getFiles()
-				.filter((f: TFile) => f.extension === "canvas");
-			const files       = [...mdFiles, ...canvasFiles];
+			// A full list is required here to build the user-enabled vault-wide RAG index
+			// and remove index entries for deleted notes. File contents are read incrementally.
+			const files = this.plugin.app.vault.getFiles()
+				.filter((file: TFile) => file.extension === "md" || file.extension === "canvas");
 			const currentPaths = new Set(files.map((f: TFile) => f.path));
 
 			// Remove entries for files that no longer exist
@@ -211,7 +211,7 @@ export class RAGEngine {
 
 			const newHashes:     Record<string, string> = {};
 			let pendingChunks:   PendingChunk[] = [];
-			let done = 0, skipped = 0, reindexed = 0;
+			let done = 0;
 
 			const flushEmbeddings = async (): Promise<void> => {
 				if (!pendingChunks.length || !this.apiKey) { pendingChunks = []; return; }
@@ -245,7 +245,6 @@ export class RAGEngine {
 
 					// Skip files that have not changed
 					if (this.fileHashes[file.path] === hash) {
-						skipped++;
 						done++;
 						onProgress?.(done, files.length);
 						continue;
@@ -253,7 +252,6 @@ export class RAGEngine {
 
 					this.index = this.index.filter(e => e.path !== file.path);
 					if (!content.trim()) { done++; continue; }
-					reindexed++;
 
 					for (const chunk of chunkText(content)) {
 						const tokens = tokenize(chunk);
@@ -287,10 +285,6 @@ export class RAGEngine {
 			await this.saveIndexNow();
 			this.indexed = true;
 
-			console.info(
-				`[GPT RAG] Incremental: ${reindexed} reindexed,`,
-				`${skipped} skipped, ${removedPaths.length} removed`,
-			);
 		} finally {
 			this.indexing = false;
 		}

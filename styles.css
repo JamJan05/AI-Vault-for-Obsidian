@@ -179,6 +179,9 @@
   display: flex; align-items: center; gap: 6px;
   padding: 5px 12px; border-bottom: 1px solid transparent;
   font-size: 11px; flex-shrink: 0;
+  --gpt-project-color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--gpt-project-color) 10%, var(--background-secondary));
+  border-bottom-color: color-mix(in srgb, var(--gpt-project-color) 25%, transparent);
 }
 .gpt-project-bar-label {
   color: var(--text-muted); flex: 1; overflow: hidden;
@@ -446,6 +449,7 @@
   font-size: 12px; color: var(--text-normal);
 }
 .gpt-modal-row:hover { background: var(--background-modifier-hover); }
+.gpt-modal-checkbox { accent-color: var(--interactive-accent); }
 .gpt-modal-row-label { font-size: 12px; }
 .gpt-modal-more { font-size: 11px; color: var(--text-faint); padding: 4px 6px; }
 .gpt-modal-btns    { display: flex; gap: 8px; justify-content: flex-end; margin-top: 2px; }

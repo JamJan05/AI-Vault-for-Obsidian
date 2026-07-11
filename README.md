@@ -14,7 +14,7 @@ AI-Vault turns your Obsidian workspace into an AI assistant that can use your no
 - 📎 **Manual note context** - attach specific notes or canvases to a conversation.
 - 🗂️ **Projects** - group related chats with custom prompts and shared project context.
 - 🕘 **Conversation history** - automatically save and reopen previous chats.
-- ⚡ **Streaming responses** - see answers as they are generated.
+- ⚡ **Cancelable responses** - stop an in-progress conversation from the chat view.
 - 🧠 **Thinking modes** - choose Fast, Normal, or Think mode.
 - 🎓 **Learn mode** - generate study-friendly answers and interactive quiz-style responses.
 - 💻 **Code mode** - get programming-focused answers with code formatting.
@@ -30,7 +30,7 @@ AI-Vault turns your Obsidian workspace into an AI assistant that can use your no
 - 🔑 OpenAI API key and/or Anthropic API key — **or** a local model server (LM Studio, Ollama, …)
 - 📡 Internet access for cloud model calls, embeddings, and web search (local models can run offline)
 
-> AI-Vault is desktop-only because streaming and external local storage rely on desktop APIs.
+> AI-Vault is desktop-only because optional storage outside the vault requires desktop file-system APIs.
 
 ---
 
@@ -99,6 +99,8 @@ Canvas files are parsed into readable text using their nodes and edges, so the m
 
 The RAG engine combines keyword search and embeddings when available. If no OpenAI key is configured for embeddings, lexical search can still provide useful matches.
 
+Building the enabled vault-wide RAG index enumerates Markdown and Canvas files. File contents are read incrementally for indexing; ordinary wikilink resolution uses Obsidian's metadata cache and does not scan the vault.
+
 ---
 
 ## 🗂️ Projects
@@ -150,6 +152,8 @@ By default, AI-Vault stores plugin data outside your vault in a local folder nex
 
 This keeps data out of Obsidian Sync by default.
 
+Storage location is configurable. API keys have their own **Obsidian Sync / local** choice. Conversation history, projects, and the RAG index use the external-storage setting and can instead be kept in the plugin folder inside the vault for Obsidian Sync.
+
 Stored locally:
 
 - 🔑 API keys
@@ -166,6 +170,8 @@ Data is sent to model providers only when it is part of a request, for example:
 - web-search requests.
 
 AI-Vault does not use its own backend server. Requests go directly from Obsidian to the configured OpenAI or Anthropic API, or to the Local API Base URL you set. Local API can be a local server such as Ollama or LM Studio, or a user-configured authenticated Ollama/OpenAI-compatible gateway such as Ollama Cloud, LiteLLM, LocalAI, or vLLM.
+
+Desktop Node.js `fs` and `path` access is limited to the optional external storage directory. Clipboard access is write-only and runs only when you press a message or code copy button. The plugin never reads clipboard contents.
 
 ---
 
@@ -233,6 +239,12 @@ Run typecheck:
 
 ```bash
 npm run typecheck
+```
+
+Run the Obsidian and TypeScript lint rules:
+
+```bash
+npm run lint
 ```
 
 Create a production build:

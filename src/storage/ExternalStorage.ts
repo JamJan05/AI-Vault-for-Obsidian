@@ -1,4 +1,4 @@
-import type { Plugin } from "obsidian";
+import { FileSystemAdapter, Platform } from "obsidian";
 import { t } from "../i18n";
 import {
 	DIR_HISTORY,
@@ -7,6 +7,8 @@ import {
 	FILE_RAG_INDEX,
 } from "../constants";
 import type { PluginStorage, ListResult } from "./PluginStorage";
+import type { PluginSettings } from "../settings";
+import type { Plugin } from "obsidian";
 
 // Node.js types — available only on desktop
 type FSPromises = typeof import("fs/promises");
@@ -16,6 +18,19 @@ interface MigrateResult {
 	moved:   number;
 	skipped: number;
 	errors:  string[];
+}
+
+interface ExternalStoragePlugin extends Plugin {
+	settings: Pick<PluginSettings, "externalStorageEnabled" | "externalStoragePath">;
+}
+
+function errorMessage(error: unknown): string {
+	return error instanceof Error ? error.message : String(error);
+}
+
+function errorCode(error: unknown): string | null {
+	if (typeof error !== "object" || error === null || !("code" in error)) return null;
+	return typeof error.code === "string" ? error.code : null;
 }
 
 /**
@@ -36,30 +51,37 @@ export class ExternalStorage {
 	private _enabled  = false;
 
 	constructor(
-		private readonly plugin:   Plugin,
+		private readonly plugin:   ExternalStoragePlugin,
 		private readonly fallback: PluginStorage,
-	) {
-		// Detect desktop — Obsidian on desktop exposes Node via require()
-		// NOTE: Using Node.js fs/path for external storage outside the vault.
-		// This requires desktop Obsidian. See manifest.json: isDesktopOnly = true.
+	) {}
+
+	private async _loadNodeModules(): Promise<boolean> {
+		if (!Platform.isDesktopApp) return false;
+
 		try {
-			if (
-				typeof process !== "undefined" &&
-				process.versions &&
-				process.versions.node
-			) {
-				// eslint-disable-next-line @typescript-eslint/no-require-imports -- Node.js fs is required for desktop-only external storage.
-				this._fs      = require("fs/promises") as FSPromises;
-				// eslint-disable-next-line @typescript-eslint/no-require-imports -- Node.js path is required for desktop-only external storage.
-				this._path    = require("path") as NodePath;
-				this._desktop = true;
-			}
+			// External paths are outside the vault adapter's sandbox. These modules are
+			// loaded only on desktop and are the reason manifest.json is desktop-only.
+			this._fs = await import("fs/promises");
+			this._path = await import("path");
+			this._desktop = true;
+			return true;
 		} catch (e) {
 			console.warn(
-				"[AI-Vault] Node fs unavailable — external storage disabled (mobile?)",
-				(e as Error)?.message,
+				"[AI-Vault] Node fs unavailable; external storage disabled",
+				errorMessage(e),
 			);
+			return false;
 		}
+	}
+
+	private get nodeFs(): FSPromises {
+		if (!this._fs) throw new Error("Node fs is unavailable");
+		return this._fs;
+	}
+
+	private get nodePath(): NodePath {
+		if (!this._path) throw new Error("Node path is unavailable");
+		return this._path;
 	}
 
 	// ── Getters ────────────────────────────────────────────────────────────────
@@ -75,21 +97,19 @@ export class ExternalStorage {
 	 * @returns true if external storage is active, false = we use the fallback
 	 */
 	async init(): Promise<boolean> {
-		if (!this._desktop) {
+		if (!(await this._loadNodeModules())) {
 			this._enabled = false;
 			return false;
 		}
 
-		// Read settings through a narrowed plugin shape because the base Plugin type is generic here.
-		const settings = (this.plugin as unknown as { settings: { externalStorageEnabled: boolean } }).settings;
-		if (!settings.externalStorageEnabled) {
+		if (!this.plugin.settings.externalStorageEnabled) {
 			this._enabled = false;
 			return false;
 		}
 
 		try {
 			this._baseDir = this._resolveBaseDir();
-			await this._fs!.mkdir(this._baseDir, { recursive: true });
+			await this.nodeFs.mkdir(this._baseDir, { recursive: true });
 			this._enabled = true;
 			return true;
 		} catch (e) {
@@ -106,24 +126,16 @@ export class ExternalStorage {
 	 * Or uses settings.externalStoragePath if set.
 	 */
 	private _resolveBaseDir(): string {
-		const settings = (this.plugin as unknown as {
-			settings: { externalStoragePath: string };
-		}).settings;
+		const custom = this.plugin.settings.externalStoragePath.trim();
+		if (custom) return this.nodePath.resolve(custom);
 
-		const custom = (settings.externalStoragePath || "").trim();
-		if (custom) return this._path!.resolve(custom);
+		const adapter = this.plugin.app.vault.adapter;
+		if (!(adapter instanceof FileSystemAdapter)) throw new Error("Cannot determine vault path");
+		const vaultPath = adapter.getBasePath();
 
-		// vault.adapter.basePath exists on desktop
-		const adapter   = this.plugin.app.vault.adapter as unknown as {
-			basePath?: string;
-			getBasePath?: () => string;
-		};
-		const vaultPath = adapter.basePath ?? adapter.getBasePath?.();
-		if (!vaultPath) throw new Error("Cannot determine vault path");
-
-		const parent    = this._path!.dirname(vaultPath);
-		const vaultName = this._path!.basename(vaultPath);
-		return this._path!.join(parent, `${vaultName}-gpt-data`);
+		const parent    = this.nodePath.dirname(vaultPath);
+		const vaultName = this.nodePath.basename(vaultPath);
+		return this.nodePath.join(parent, `${vaultName}-gpt-data`);
 	}
 
 	/** Returns the default path or an empty string when unavailable */
@@ -134,7 +146,7 @@ export class ExternalStorage {
 
 	/** Resolves a path relative to baseDir — falls back to PluginStorage when disabled */
 	resolve(...parts: string[]): string {
-		if (this.isEnabled) return this._path!.join(this._baseDir!, ...parts);
+		if (this.isEnabled && this._baseDir) return this.nodePath.join(this._baseDir, ...parts);
 		return this.fallback.resolve(...parts);
 	}
 
@@ -142,8 +154,8 @@ export class ExternalStorage {
 
 	async ensureDir(dirPath: string): Promise<void> {
 		if (this.isEnabled) {
-			try { await this._fs!.mkdir(dirPath, { recursive: true }); }
-			catch (e) { console.warn("[AI-Vault] ensureDir failed:", dirPath, (e as Error)?.message); }
+			try { await this.nodeFs.mkdir(dirPath, { recursive: true }); }
+			catch (e) { console.warn("[AI-Vault] ensureDir failed:", dirPath, errorMessage(e)); }
 			return;
 		}
 		return this.fallback.ensureDir(dirPath);
@@ -151,7 +163,7 @@ export class ExternalStorage {
 
 	async exists(filePath: string): Promise<boolean> {
 		if (this.isEnabled) {
-			try { await this._fs!.access(filePath); return true; }
+			try { await this.nodeFs.access(filePath); return true; }
 			catch { return false; }
 		}
 		return this.fallback.exists(filePath);
@@ -160,12 +172,12 @@ export class ExternalStorage {
 	async readJson<T>(filePath: string, fallback: T): Promise<T> {
 		if (this.isEnabled) {
 			try {
-				const raw = await this._fs!.readFile(filePath, "utf-8");
-				return JSON.parse(raw) as T;
+				const raw = await this.nodeFs.readFile(filePath, "utf-8");
+				const parsed: unknown = JSON.parse(raw);
+				return parsed as T;
 			} catch (e) {
-				const err = e as NodeJS.ErrnoException;
-				if (err.code !== "ENOENT") {
-					console.warn("[AI-Vault] readJson failed:", filePath, err?.message);
+				if (errorCode(e) !== "ENOENT") {
+					console.warn("[AI-Vault] readJson failed:", filePath, errorMessage(e));
 				}
 				return fallback;
 			}
@@ -176,13 +188,13 @@ export class ExternalStorage {
 	async writeJson(filePath: string, data: unknown): Promise<boolean> {
 		if (this.isEnabled) {
 			try {
-				const dir = this._path!.dirname(filePath);
-				await this._fs!.mkdir(dir, { recursive: true });
+				const dir = this.nodePath.dirname(filePath);
+				await this.nodeFs.mkdir(dir, { recursive: true });
 
 				// Atomic write: temp → rename (guards against corrupted JSON)
 				const tmp = `${filePath}.tmp`;
-				await this._fs!.writeFile(tmp, JSON.stringify(data), "utf-8");
-				await this._fs!.rename(tmp, filePath);
+				await this.nodeFs.writeFile(tmp, JSON.stringify(data), "utf-8");
+				await this.nodeFs.rename(tmp, filePath);
 				return true;
 			} catch (e) {
 				console.error("[AI-Vault] writeJson failed:", filePath, e);
@@ -194,11 +206,10 @@ export class ExternalStorage {
 
 	async remove(filePath: string): Promise<void> {
 		if (this.isEnabled) {
-			try { await this._fs!.unlink(filePath); }
+			try { await this.nodeFs.unlink(filePath); }
 			catch (e) {
-				const err = e as NodeJS.ErrnoException;
-				if (err.code !== "ENOENT") {
-					console.warn("[AI-Vault] remove failed:", filePath, err?.message);
+				if (errorCode(e) !== "ENOENT") {
+					console.warn("[AI-Vault] remove failed:", filePath, errorMessage(e));
 				}
 			}
 			return;
@@ -209,12 +220,12 @@ export class ExternalStorage {
 	async list(dirPath: string): Promise<ListResult> {
 		if (this.isEnabled) {
 			try {
-				const entries = await this._fs!.readdir(dirPath, { withFileTypes: true });
+				const entries = await this.nodeFs.readdir(dirPath, { withFileTypes: true });
 				const files: string[]   = [];
 				const folders: string[] = [];
 
 				for (const ent of entries) {
-					const full = this._path!.join(dirPath, ent.name);
+					const full = this.nodePath.join(dirPath, ent.name);
 					if (ent.isDirectory()) folders.push(full);
 					else files.push(full);
 				}
@@ -280,7 +291,7 @@ export class ExternalStorage {
 				for (const srcFile of files) {
 					try {
 						const fileName = srcFile.split("/").pop() ?? "";
-						const dstFile  = this._path!.join(dstDir, fileName);
+						const dstFile  = this.nodePath.join(dstDir, fileName);
 
 						const data = await vault.readJson<unknown>(srcFile, null);
 						if (data === null) continue;
@@ -291,22 +302,19 @@ export class ExternalStorage {
 							result.moved++;
 						}
 					} catch (e) {
-						result.errors.push(`history/${srcFile}: ${(e as Error)?.message}`);
+						result.errors.push(`history/${srcFile}: ${errorMessage(e)}`);
 					}
 				}
 
 				// Try to remove the now-empty history/ folder from the vault
 				try {
-					const adapter = this.plugin.app.vault.adapter as unknown as {
-						rmdir?: (path: string, recursive: boolean) => Promise<void>;
-					};
-					await adapter.rmdir?.(srcDir, false);
+					await this.plugin.app.vault.adapter.rmdir(srcDir, false);
 				} catch {
 					// Harmless if the folder is not empty or the operation is unsupported
 				}
 			}
 		} catch (e) {
-			result.errors.push(`history dir: ${(e as Error)?.message}`);
+			result.errors.push(`history dir: ${errorMessage(e)}`);
 		}
 
 		return result;

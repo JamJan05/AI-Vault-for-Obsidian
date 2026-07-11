@@ -14,20 +14,9 @@ export async function resolveNoteWithLinks(
 	file:    TFile,
 	depth    = 1,
 	visited  = new Set<string>(),
-	fileMap?: Map<string, TFile>,
 ): Promise<ResolvedNote[]> {
 	if (visited.has(file.path)) return [];
 	visited.add(file.path);
-
-	// Build the map once — basename → TFile, path → TFile
-	if (!fileMap) {
-		fileMap = new Map<string, TFile>();
-		for (const f of app.vault.getMarkdownFiles()) {
-			fileMap.set(f.basename, f);
-			fileMap.set(f.path, f);
-			fileMap.set(f.path.replace(/\.md$/, ""), f);
-		}
-	}
 
 	const results: ResolvedNote[] = [];
 
@@ -43,12 +32,10 @@ export async function resolveNoteWithLinks(
 
 		while ((match = linkRegex.exec(content)) !== null) {
 			const linkName = match[1].trim();
-			const linked   =
-				fileMap.get(linkName) ??
-				fileMap.get(linkName + ".md");
+			const linked = app.metadataCache.getFirstLinkpathDest(linkName, file.path);
 
 			if (linked && !visited.has(linked.path)) {
-				const sub = await resolveNoteWithLinks(app, linked, depth - 1, visited, fileMap);
+				const sub = await resolveNoteWithLinks(app, linked, depth - 1, visited);
 				results.push(...sub);
 			}
 		}

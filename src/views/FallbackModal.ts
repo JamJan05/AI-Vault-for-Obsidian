@@ -41,7 +41,7 @@ export class FallbackModal extends Modal {
 
 		// Hint for GPT-5 — most common cause: no Tier 1 access
 		if (isGPT5(this.failedModel)) {
-			const parts = (t("fallback_tier1") as string).split(": ");
+			const parts = t("fallback_tier1").split(": ");
 			const hint  = desc.createEl("div", { cls: "gpt-fallback-hint" });
 			hint.createEl("strong", { text: parts[0] + ": " });
 			hint.appendText(parts.slice(1).join(": "));
@@ -61,7 +61,7 @@ export class FallbackModal extends Modal {
 		const checkbox = checkRow.createEl("input", {
 			type: "checkbox",
 			attr: { id: "gpt-fallback-save-default" },
-		}) as HTMLInputElement;
+		});
 		checkRow.createEl("label", {
 			text: " " + t("fallback_save_default", this.fallbackModel),
 			attr: { for: "gpt-fallback-save-default" },
@@ -80,14 +80,18 @@ export class FallbackModal extends Modal {
 			cls:  "mod-cta",
 			text: t("fallback_accept", this.fallbackModel),
 		});
-		acceptBtn.addEventListener("click", async () => {
+		acceptBtn.addEventListener("click", () => {
 			this.close();
-			try {
-				await this.onAccept?.(this.saveAsDefault);
-			} catch (e) {
-				console.error("[AI-Vault] Fallback retry failed:", e);
-			}
+			void this.acceptFallback();
 		});
+	}
+
+	private async acceptFallback(): Promise<void> {
+		try {
+			await this.onAccept?.(this.saveAsDefault);
+		} catch (e) {
+			console.error("[AI-Vault] Fallback retry failed:", e);
+		}
 	}
 
 	onClose(): void {

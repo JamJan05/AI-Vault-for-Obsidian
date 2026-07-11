@@ -291,7 +291,7 @@ export default class GPTPlugin extends Plugin {
 			await this.saveData(d);
 		}
 
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, d) as PluginSettings;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, d);
 
 		// Migrate the legacy standalone "ollama" provider → unified Local API
 		if (d) this._migrateLegacyOllamaSettings(d);

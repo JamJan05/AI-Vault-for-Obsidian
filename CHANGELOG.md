@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.7] - 2026-07-11
+
+### Fixed
+- Replaced direct `fetch()` calls with Obsidian `requestUrl()` for OpenAI and Anthropic requests.
+- Moved static chat-view styles to CSS and kept only dynamic values in `setCssProps()` or `setCssStyles()`.
+- Removed unsafe Node module loading and tightened external-storage response and error types.
+- Fixed fallback modal promise handling, unused imports, empty expressions, and unnecessary type assertions.
+- Replaced vault-wide wikilink lookup with Obsidian `MetadataCache` resolution.
+
+### Security and release
+- Documented the narrowly scoped uses of desktop file access, vault enumeration, and clipboard writes.
+- Added build provenance attestations for `main.js` and `styles.css` release assets.
+
 ## [1.0.2] - 2026-05-21
 
 ### Fixed

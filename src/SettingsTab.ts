@@ -698,21 +698,5 @@ export class GPTSettingsTab extends PluginSettingTab {
 				}),
 			);
 
-		new Setting(el)
-			.setName(t("settings_storage_open_name"))
-			.setDesc(t("settings_storage_open_desc"))
-			.addButton(b => b
-				.setButtonText(t("settings_storage_open_btn"))
-				.setDisabled(!isActive)
-				.onClick(() => {
-					try {
-						// eslint-disable-next-line @typescript-eslint/no-require-imports -- Electron shell is only available at runtime in Obsidian desktop.
-						const { shell } = require("electron") as { shell: { openPath: (p: string) => void } };
-						shell.openPath(this.plugin.externalStorage.baseDir ?? "");
-					} catch (e) {
-						new Notice(t("notice_storage_open_fail", (e as Error)?.message));
-					}
-				}),
-			);
 	}
 }

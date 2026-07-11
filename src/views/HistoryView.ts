@@ -1,5 +1,5 @@
 import { ItemView, setIcon, WorkspaceLeaf } from "obsidian";
-import { HISTORY_VIEW_TYPE, PROJECTS_VIEW_TYPE } from "../constants";
+import { HISTORY_VIEW_TYPE } from "../constants";
 import { t } from "../i18n";
 import { formatDate } from "../utils";
 import { ConfirmModal } from "./ConfirmModal";

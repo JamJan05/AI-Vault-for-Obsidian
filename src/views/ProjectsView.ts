@@ -242,7 +242,7 @@ export class GPTProjectsView extends ItemView {
 	// ── Dialog tworzenia / edycji projektu ─────────────────────────────────────
 
 	showCreateDialog(editProject?: Project): void {
-		const isEdit  = !!editProject;
+		const isEdit  = editProject !== undefined;
 		const doc     = this.containerEl.ownerDocument;
 		const overlay = doc.createElement("div");
 		overlay.className = "gpt-modal-overlay";
@@ -252,14 +252,14 @@ export class GPTProjectsView extends ItemView {
 
 		box.createEl("p", {
 			cls:  "gpt-modal-title",
-			text: isEdit ? t("projects_modal_edit_title", editProject!.name) : t("projects_modal_new_title"),
+			text: editProject ? t("projects_modal_edit_title", editProject.name) : t("projects_modal_new_title"),
 		});
 
 		const nameInput = box.createEl("input", {
 			cls:  "gpt-modal-input",
 			attr: { type: "text", placeholder: t("projects_name_placeholder") },
-		}) as HTMLInputElement;
-		if (isEdit) nameInput.value = editProject!.name;
+		});
+		if (editProject) nameInput.value = editProject.name;
 
 		const promptLabel = box.createEl("div", { cls: "gpt-modal-prompt-label" });
 		this.setIconText(promptLabel, "pencil", t("projects_prompt_label"));
@@ -267,8 +267,8 @@ export class GPTProjectsView extends ItemView {
 		const promptInput = box.createEl("textarea", {
 			cls:  "gpt-modal-input gpt-modal-prompt-area",
 			attr: { placeholder: t("projects_prompt_placeholder") },
-		}) as HTMLTextAreaElement;
-		if (isEdit) promptInput.value = editProject!.systemPrompt ?? "";
+		});
+		if (editProject) promptInput.value = editProject.systemPrompt ?? "";
 
 		box.createEl("div", { cls: "gpt-modal-prompt-hint", text: t("projects_prompt_hint") });
 
@@ -288,8 +288,8 @@ export class GPTProjectsView extends ItemView {
 			const name = nameInput.value.trim();
 			if (!name) { nameInput.addClass("gpt-modal-input-error"); return; }
 
-			if (isEdit) {
-				await this.plugin.projects.updateProject(editProject!.id, {
+			if (editProject) {
+				await this.plugin.projects.updateProject(editProject.id, {
 					name,
 					systemPrompt: promptInput.value.trim(),
 				});

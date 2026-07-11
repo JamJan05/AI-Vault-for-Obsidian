@@ -1,18 +1,19 @@
 import { THINKING_MODES } from "../models";
 import { withRetry } from "../utils";
-import { streamSSE } from "./streaming";
+import { requestCompletion } from "./streaming";
 import type { ChatMessage } from "../types";
 import type { StreamResult } from "./streaming";
 
+function isUnknownArray(value: unknown): value is unknown[] {
+	return Array.isArray(value);
+}
+
 /**
- * Calls the Anthropic Claude API via SSE streaming.
+ * Calls the Anthropic Claude API through Obsidian requestUrl.
  *
  * Supports:
  * - Extended thinking (mode === "think") — budget_tokens from cfg
  * - Web search — server tool web_search_20260209 (Anthropic runs the searches on its side)
- *
- * Note: anthropic-dangerous-direct-browser-access is required when the
- * request goes directly from the browser (Obsidian desktop/mobile).
  */
 export async function callClaude(
 	apiKey:         string,
@@ -38,7 +39,7 @@ export async function callClaude(
 		max_tokens: isThinking ? tokens + 8000 : tokens,
 		system:     systemMsg?.content ?? undefined,
 		messages:   inputMsgs,
-		stream:     true,
+		stream:     false,
 	};
 
 	if (isThinking) {
@@ -46,29 +47,30 @@ export async function callClaude(
 	}
 
 	// Web search — server tool: Anthropic runs the searches on its side.
-	// One request, one stream — no agentic loop needed.
+	// Anthropic runs the search within the same request.
 	if (webSearch) {
 		body.tools = [{ type: "web_search_20260209", name: "web_search" }];
 	}
 
 	return withRetry(() =>
-		streamSSE(
+		requestCompletion(
 			"https://api.anthropic.com/v1/messages",
 			{
-				"x-api-key":                                  apiKey,
-				"anthropic-version":                          "2023-06-01",
-				"anthropic-dangerous-direct-browser-access":  "true",
+				"x-api-key":         apiKey,
+				"anthropic-version": "2023-06-01",
 			},
 			body,
 			(event) => {
-				// Extract only text_delta — ignore thinking_delta (internal reasoning)
-				if (
-					event.type === "content_block_delta" &&
-					(event.delta as { type?: string } | undefined)?.type === "text_delta"
-				) {
-					return (event.delta as { text?: string }).text ?? null;
+				if (!isUnknownArray(event.content)) return null;
+				const fragments: string[] = [];
+				for (const block of event.content) {
+					if (
+						typeof block === "object" && block !== null &&
+						"type" in block && block.type === "text" &&
+						"text" in block && typeof block.text === "string"
+					) fragments.push(block.text);
 				}
-				return null;
+				return fragments.join("") || null;
 			},
 			onChunk,
 			signal,

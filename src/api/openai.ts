@@ -1,9 +1,16 @@
-import { t } from "../i18n";
 import { THINKING_MODES, isGPT5, isGPT5Search, mapEffortForGPT5, WEB_SEARCH_CAPABLE } from "../models";
 import { withRetry } from "../utils";
-import { streamSSE, throwHttpError } from "./streaming";
+import { requestCompletion } from "./streaming";
 import type { ChatMessage } from "../types";
-import type { StreamResult, StreamUsage } from "./streaming";
+import type { StreamResult } from "./streaming";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function isUnknownArray(value: unknown): value is unknown[] {
+	return Array.isArray(value);
+}
 
 // ─── Chat Completions ─────────────────────────────────────────────────────────
 
@@ -51,8 +58,7 @@ export async function callOpenAI(
 			messages: chatMessages,
 			max_tokens: tokens,
 			web_search_options: {},
-			stream: true,
-			stream_options: { include_usage: true },
+				stream: false,
 		};
 	} else if (gpt5) {
 		// GPT-5/Mini/Nano without web search — Chat Completions with reasoning_effort
@@ -67,8 +73,7 @@ export async function callOpenAI(
 			messages: chatMessages,
 			max_completion_tokens: tokenBudget,
 			reasoning_effort: effort,
-			stream: true,
-			stream_options: { include_usage: true },
+				stream: false,
 		};
 	} else {
 		// GPT-4o, GPT-4-turbo and other classic models
@@ -76,8 +81,7 @@ export async function callOpenAI(
 			model,
 			messages: chatMessages,
 			max_tokens: tokens,
-			stream: true,
-			stream_options: { include_usage: true },
+				stream: false,
 		};
 		if (webSearch && WEB_SEARCH_CAPABLE.has(model)) {
 			body.tools = [{ type: "web_search" }];
@@ -85,13 +89,15 @@ export async function callOpenAI(
 	}
 
 	return withRetry(() =>
-		streamSSE(
+		requestCompletion(
 			"https://api.openai.com/v1/chat/completions",
 			{ "Authorization": `Bearer ${apiKey}` },
 			body,
 			(event) => {
-				const choices = event.choices as Array<{ delta?: { content?: string } }> | undefined;
-				return choices?.[0]?.delta?.content ?? null;
+					if (!isUnknownArray(event.choices)) return null;
+					const first = event.choices[0];
+					if (!isRecord(first) || !isRecord(first.message)) return null;
+					return typeof first.message.content === "string" ? first.message.content : null;
 			},
 			onChunk,
 			signal,
@@ -142,101 +148,27 @@ export async function callOpenAIResponses(
 		max_output_tokens: tokenBudget,
 		reasoning:         { effort },
 		tools:             [{ type: "web_search" }],
-		stream:            true,
+		stream:            false,
 	};
 
-	return withRetry(async () => {
-		// NOTE: Using fetch() for Responses API SSE streaming as requestUrl() doesn't support streaming.
-		// This requires isDesktopOnly: true in manifest.json.
-		const response = await fetch("https://api.openai.com/v1/responses", {
-			method:  "POST",
-			headers: {
-				"Content-Type":  "application/json",
-				"Authorization": `Bearer ${apiKey}`,
-			},
-			body:   JSON.stringify(body),
-			signal: signal ?? undefined,
-		});
-
-		if (!response.ok) await throwHttpError(response, model);
-
-		const reader  = response.body!.getReader();
-		const decoder = new TextDecoder();
-		let fullText = "";
-		let buffer   = "";
-		let finished = false;
-		let chunksDelivered = false;
-		let usage: StreamUsage | null = null;
-
-		const abortError = (): Error => {
-			const e = new Error("Aborted by user");
-			e.name = "AbortError";
-			return e;
-		};
-
-		try {
-			while (!finished) {
-				if (signal?.aborted) throw abortError();
-				const { done, value } = await reader.read();
-				if (done) break;
-
-				buffer += decoder.decode(value, { stream: true });
-				const lines = buffer.split("\n");
-				buffer = lines.pop() ?? "";
-
-				for (const line of lines) {
-					if (signal?.aborted) throw abortError();
-					if (!line.startsWith("data: ")) continue;
-					const data = line.slice(6).trim();
-					if (data === "[DONE]") { finished = true; break; }
-
-					let event: Record<string, unknown>;
-					try { event = JSON.parse(data) as Record<string, unknown>; }
-					catch { continue; }
-
-					// Responses API stream events:
-					// response.output_text.delta → response text
-					// response.completed         → usage including reasoning tokens
-					if (event.type === "response.output_text.delta") {
-						const delta = (event.delta as string) ?? "";
-						if (delta) {
-							fullText += delta;
-							chunksDelivered = true;
-							onChunk?.(fullText);
-						}
-					} else if (event.type === "response.completed") {
-						const r = event.response as {
-							usage?: {
-								input_tokens?: number;
-								output_tokens?: number;
-								output_tokens_details?: { reasoning_tokens?: number };
-							};
-						} | undefined;
-						if (r?.usage) {
-							usage = {
-								input:     r.usage.input_tokens  ?? 0,
-								output:    r.usage.output_tokens ?? 0,
-								reasoning: r.usage.output_tokens_details?.reasoning_tokens ?? 0,
-							};
-						}
-					} else if (event.type === "error" || event.error) {
-						const err = event.error as { message?: string } | undefined;
-						throw new Error(err?.message ?? (event.message as string) ?? t("err_stream_responses"));
+	return withRetry(() => requestCompletion(
+		"https://api.openai.com/v1/responses",
+		{ "Authorization": `Bearer ${apiKey}` },
+		body,
+		(response) => {
+			if (!isUnknownArray(response.output)) return null;
+			const fragments: string[] = [];
+			for (const item of response.output) {
+				if (!isRecord(item) || !isUnknownArray(item.content)) continue;
+				for (const content of item.content) {
+					if (isRecord(content) && content.type === "output_text" && typeof content.text === "string") {
+						fragments.push(content.text);
 					}
 				}
 			}
-		} catch (err) {
-			if (chunksDelivered && (err as { name?: string }).name !== "AbortError") {
-				(err as { noRetry?: boolean }).noRetry = true;
-			}
-			throw err;
-		} finally {
-			if (!finished) {
-				try { await reader.cancel(); } catch { /* ignore */ }
-			}
-		}
-
-		if (!fullText.trim()) throw new Error(t("err_empty_response"));
-		return { text: fullText.trim(), usage };
-	});
+			return fragments.join("") || null;
+		},
+		onChunk,
+		signal,
+	));
 }

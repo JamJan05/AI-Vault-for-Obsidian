@@ -339,7 +339,7 @@ export class GPTChatView extends ItemView {
 		this.inputEl = area.createEl("textarea", {
 			cls:  "gpt-input",
 			attr: { placeholder: t("chat_placeholder"), rows: "3" },
-		}) as HTMLTextAreaElement;
+		});
 		// registerDomEvent instead of addEventListener — lets Obsidian know this element handles the keyboard
 		// prevents Obsidian's global handler from intercepting Enter/shortcuts
 		this.registerDomEvent(this.inputEl, "keydown", (e: KeyboardEvent) => {
@@ -366,9 +366,10 @@ export class GPTChatView extends ItemView {
 	// ── Note picker ─────────────────────────────────────────────────────────────
 
 	private openNotePicker(): void {
-		const mdFiles     = this.plugin.app.vault.getMarkdownFiles();
-		const canvasFiles = this.plugin.app.vault.getFiles().filter((f: TFile) => f.extension === "canvas");
-		const files       = [...mdFiles, ...canvasFiles].sort((a, b) => a.basename.localeCompare(b.basename));
+		// The picker intentionally lists eligible vault files after explicit user action.
+		const files = this.plugin.app.vault.getFiles()
+			.filter((file: TFile) => file.extension === "md" || file.extension === "canvas")
+			.sort((a, b) => a.basename.localeCompare(b.basename));
 		const doc         = this.containerEl.ownerDocument;
 
 		const overlay = doc.createElement("div");
@@ -381,7 +382,7 @@ export class GPTChatView extends ItemView {
 		const searchInput = box.createEl("input", {
 			cls:  "gpt-modal-input",
 			attr: { type: "text", placeholder: t("chat_notes_search") },
-		}) as HTMLInputElement;
+		});
 
 		const list     = box.createEl("div", { cls: "gpt-modal-list" });
 		const selected = new Set(this.manualNotes.map(f => f.path));
@@ -391,10 +392,12 @@ export class GPTChatView extends ItemView {
 			const filtered = files.filter(f => f.basename.toLowerCase().includes(filter.toLowerCase()));
 			for (const f of filtered.slice(0, 50)) {
 				const row = list.createEl("label", { cls: "gpt-modal-row" });
-				const cb  = row.createEl("input", { attr: { type: "checkbox" } }) as HTMLInputElement;
+				const cb  = row.createEl("input", { cls: "gpt-modal-checkbox", attr: { type: "checkbox" } });
 				cb.checked        = selected.has(f.path);
-				cb.setCssProps({ "accent-color": "var(--interactive-accent)" });
-				cb.onchange = () => { selected.has(f.path) ? selected.delete(f.path) : selected.add(f.path); };
+				cb.onchange = () => {
+					if (selected.has(f.path)) selected.delete(f.path);
+					else selected.add(f.path);
+				};
 				const icon = f.extension === "canvas" ? "🗂️ " : "";
 				row.createEl("span", { cls: "gpt-modal-row-label", text: icon + f.basename });
 			}
@@ -468,10 +471,7 @@ export class GPTChatView extends ItemView {
 		if (!proj) { this.projectBar.addClass("gpt-ctx-hidden"); return; }
 
 		this.projectBar.removeClass("gpt-ctx-hidden");
-		this.projectBar.setCssProps({
-			background:            `color-mix(in srgb,${proj.color} 10%,var(--background-secondary))`,
-			"border-bottom-color": `color-mix(in srgb,${proj.color} 25%,transparent)`,
-		});
+		this.projectBar.setCssProps({ "--gpt-project-color": proj.color });
 
 		const sessions    = this.plugin.projects.getProjectSessions(proj.id);
 		const promptBadge = proj.systemPrompt ? " " + t("projects_custom_prompt_badge") : "";
@@ -779,7 +779,7 @@ export class GPTChatView extends ItemView {
 
 		doc.body.appendChild(picker);
 		const rect = this.providerSelectorBtn.getBoundingClientRect();
-		picker.setCssProps({
+		picker.setCssStyles({
 			top:  `${rect.bottom + 4}px`,
 			left: `${rect.left}px`,
 		});
@@ -868,7 +868,7 @@ export class GPTChatView extends ItemView {
 		// Attach to the view document body — avoids CSS transform issues on Obsidian panels
 		doc.body.appendChild(picker);
 		const rect = this.modelSelectorBtn.getBoundingClientRect();
-		picker.setCssProps({
+		picker.setCssStyles({
 			top:  `${rect.bottom + 4}px`,
 			left: `${rect.left}px`,
 		});
@@ -941,7 +941,7 @@ export class GPTChatView extends ItemView {
 			const ctxLimit  = this.settings.maxContextMessages ?? 0;
 			const histMsgs  = ctxLimit > 0 ? this.messages.slice(-ctxLimit) : this.messages;
 			const msgs: ChatMessage[] = [{ role: "system", content: systemMsg }, ...histMsgs];
-			const contentEl           = bubble.querySelector(".gpt-msg-content") as HTMLElement | null;
+			const contentEl = bubble.querySelector<HTMLElement>(".gpt-msg-content");
 
 			this.abortController = new AbortController();
 			this.showStopBtn(true);
@@ -1023,7 +1023,7 @@ export class GPTChatView extends ItemView {
 			this.setLoading(bubble, false);
 			const error     = err as Error & { name?: string };
 			const isAbort   = error.name === "AbortError";
-			const contentEl = bubble.querySelector(".gpt-msg-content") as HTMLElement | null;
+			const contentEl = bubble.querySelector<HTMLElement>(".gpt-msg-content");
 			const partial   = contentEl?.innerText?.trim() ?? "";
 
 			if (isAbort && partial) {
@@ -1041,7 +1041,7 @@ export class GPTChatView extends ItemView {
 				this.messages.pop();
 				bubble.parentElement?.remove();
 				const failed   = error.message;
-				const failedModel  = (err as ModelAccessError).model ?? activeModel;
+				const failedModel  = err.model ?? activeModel;
 				const fallbackModel = isGPT5(failedModel) ? "gpt-4o" : "gpt-4o-mini";
 				new FallbackModal(this.plugin.app, {
 					failedModel,
@@ -1176,10 +1176,13 @@ export class GPTChatView extends ItemView {
 
 		const copyBtn = footer.createEl("button", { cls: "gpt-copy-btn", attr: { title: t("chat_copy"), "aria-label": t("chat_copy") } });
 		this.setButtonIcon(copyBtn, "copy");
-		copyBtn.onclick   = async () => {
-			await navigator.clipboard.writeText(bubble.dataset.raw ?? contentEl.innerText);
-			this.setButtonIcon(copyBtn, "check");
-			window.setTimeout(() => { this.setButtonIcon(copyBtn, "copy"); }, 2000);
+		copyBtn.onclick = () => {
+			void navigator.clipboard.writeText(bubble.dataset.raw ?? contentEl.innerText)
+				.then(() => {
+					this.setButtonIcon(copyBtn, "check");
+					window.setTimeout(() => { this.setButtonIcon(copyBtn, "copy"); }, 2000);
+				})
+				.catch(error => console.error("[AI-Vault] Copy failed:", error));
 		};
 
 		if (content) bubble.dataset.raw = content;
@@ -1384,10 +1387,11 @@ export class GPTChatView extends ItemView {
 		container.empty();
 		if (quiz.title) container.createEl("div", { cls: "gpt-quiz-title", text: quiz.title });
 
+		const questionCount = quiz.questions.length;
 		quiz.questions.forEach((q, qi) => {
 			this.normalizeQuestion(q);
 			const card = container.createEl("div", { cls: "gpt-quiz-card" });
-			card.createEl("div", { cls: "gpt-quiz-qnum",  text: `Question ${qi + 1} of ${quiz!.questions.length}` });
+			card.createEl("div", { cls: "gpt-quiz-qnum",  text: `Question ${qi + 1} of ${questionCount}` });
 			card.createEl("div", { cls: "gpt-quiz-qtext", text: q.question || t("quiz_no_question") });
 
 			let answered = false;
@@ -1425,7 +1429,7 @@ export class GPTChatView extends ItemView {
 				const inp = card.createEl("textarea", {
 					cls:  "gpt-quiz-input",
 					attr: { placeholder: q.type === "fill" ? t("quiz_fill_placeholder") : t("quiz_open_placeholder"), rows: "2" },
-				}) as HTMLTextAreaElement;
+				});
 				const checkBtn = card.createEl("button", { cls: "gpt-quiz-check", text: t("quiz_check_btn") });
 				checkBtn.onclick = async () => {
 					if (answered) return;
@@ -1469,7 +1473,7 @@ export class GPTChatView extends ItemView {
 	}
 
 	private normalizeQuestion(q: QuizQuestion): void {
-		if (!q.question) q.question = String(q["text"] ?? q["prompt"] ?? q["content"] ?? "");
+		if (!q.question) q.question = this.stringValue(q["text"] ?? q["prompt"] ?? q["content"]);
 		if (!q.type) {
 			if (q.options?.length === 2 && q.options.every(o => /^(true|false|yes|no)$/i.test(o))) q.type = "truefalse";
 			else if (q.options?.length) q.type = "choice";
@@ -1499,8 +1503,14 @@ export class GPTChatView extends ItemView {
 		}
 		if ((q.type === "choice" || q.type === "truefalse") && q.correct === undefined) q.correct = 0;
 		if (!q.answer && (q.type === "open" || q.type === "fill")) {
-			q.answer = String(ca ?? q["expected_answer"] ?? "");
+			q.answer = this.stringValue(ca ?? q["expected_answer"]);
 		}
+	}
+
+	private stringValue(value: unknown): string {
+		return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+			? String(value)
+			: "";
 	}
 
 	private getMaxTokensForMode(mode: string): number {
