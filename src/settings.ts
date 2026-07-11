@@ -15,6 +15,7 @@ export interface PluginSettings {
 	// API Keys
 	apiKey:                 string;
 	claudeApiKey:           string;
+	localApiKey:            string;
 	apiKeysInSync:          boolean;
 
 	// Models
@@ -67,6 +68,7 @@ export const DEFAULT_SYSTEM_PROMPTS: Record<Language, string> = {
 export const DEFAULT_SETTINGS: PluginSettings = {
 	apiKey:                  "",
 	claudeApiKey:            "",
+	localApiKey:             "",
 	provider:                "openai",
 	model:                   "gpt-4o",
 	claudeModel:             "claude-sonnet-4-5",

@@ -34,6 +34,20 @@ function errorMessage(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
 }
 
+function isAuthenticationFailure(status: number): boolean {
+	return status === 401 || status === 403;
+}
+
+export function buildLocalApiHeaders(settings: PluginSettings, includeJsonContentType = false): Record<string, string> {
+	const headers: Record<string, string> = {};
+	if (includeJsonContentType) headers["Content-Type"] = "application/json";
+
+	const localApiKey = settings.localApiKey?.trim();
+	if (localApiKey) headers["Authorization"] = `Bearer ${localApiKey}`;
+
+	return headers;
+}
+
 async function requestLocal(options: {
 	url: string;
 	method: "GET" | "POST";
@@ -95,7 +109,14 @@ export async function fetchLocalModels(settings: PluginSettings): Promise<string
 
 	const url  = settings.localApiType === "ollama" ? `${base}/api/tags` : `${base}/models`;
 
-	const response = await requestLocal({ url, method: "GET" });
+	const response = await requestLocal({
+		url,
+		method:  "GET",
+		headers: buildLocalApiHeaders(settings),
+	});
+	if (isAuthenticationFailure(response.status)) {
+		throw new Error("Authentication failed. Check your Local API key and Base URL.");
+	}
 	if (response.status < 200 || response.status >= 300) {
 		throw new Error(`Local API error ${response.status}: ${response.text || "Check that the Base URL and API type are correct."}`);
 	}
@@ -109,14 +130,17 @@ export async function fetchLocalModels(settings: PluginSettings): Promise<string
 
 // ─── Send a chat request ────────────────────────────────────────────────────────
 
-async function postLocal(url: string, body: Record<string, unknown>): Promise<unknown> {
+async function postLocal(settings: PluginSettings, url: string, body: Record<string, unknown>): Promise<unknown> {
 	const response = await requestLocal({
 		url,
 		method:  "POST",
-		headers: { "Content-Type": "application/json" },
+		headers: buildLocalApiHeaders(settings, true),
 		body:    JSON.stringify(body),
 	});
 
+	if (isAuthenticationFailure(response.status)) {
+		throw new Error("Authentication failed. Check your Local API key and Base URL.");
+	}
 	if (response.status < 200 || response.status >= 300) {
 		throw new Error(`Local API error ${response.status}: ${response.text}`);
 	}
@@ -166,7 +190,7 @@ export async function callLocalApi(
 			messages: payloadMessages,
 			stream:   false,
 		};
-		const data    = await postLocal(`${base}/api/chat`, body);
+		const data    = await postLocal(settings, `${base}/api/chat`, body);
 		const content = extractOllamaContent(data);
 		if (!content) throw new Error("Invalid Ollama response. Expected message.content.");
 		return content;
@@ -180,7 +204,7 @@ export async function callLocalApi(
 	};
 	if (typeof options.maxTokens === "number") body.max_tokens = options.maxTokens;
 
-	const data    = await postLocal(`${base}/chat/completions`, body);
+	const data    = await postLocal(settings, `${base}/chat/completions`, body);
 	const content = extractOpenAIContent(data);
 	if (!content) throw new Error("Invalid OpenAI-compatible response. Expected choices[0].message.content.");
 	return content;
