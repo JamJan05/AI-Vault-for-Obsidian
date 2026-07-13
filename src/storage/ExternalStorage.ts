@@ -1,4 +1,6 @@
 import { FileSystemAdapter, Platform } from "obsidian";
+import * as nodeFsModule from "fs/promises";
+import * as nodePathModule from "path";
 import { t } from "../i18n";
 import {
 	DIR_HISTORY,
@@ -68,6 +70,20 @@ function isNodePathApi(value: unknown): value is NodePathApi {
 }
 
 /**
+ * Node built-ins do not have one consistent runtime shape across the Electron
+ * versions used by Obsidian. Native ESM exposes the methods directly, while
+ * CommonJS interop can put the whole module under `default`.
+ */
+function getModuleApi<T>(
+	value: unknown,
+	isApi: (candidate: unknown) => candidate is T,
+): T | null {
+	if (isApi(value)) return value;
+	if (isRecord(value) && isApi(value.default)) return value.default;
+	return null;
+}
+
+/**
  * Storage that writes data to a local system directory NEXT TO the vault folder.
  * Obsidian Sync does NOT synchronize these files.
  *
@@ -83,6 +99,7 @@ export class ExternalStorage {
 	private _desktop  = false;
 	private _baseDir: string | null = null;
 	private _enabled  = false;
+	private _lastError: string | null = null;
 
 	constructor(
 		private readonly plugin:   ExternalStoragePlugin,
@@ -91,23 +108,30 @@ export class ExternalStorage {
 
 	private async _loadNodeModules(): Promise<boolean> {
 		if (!Platform.isDesktopApp) return false;
-
-		try {
-			// External paths are outside the vault adapter's sandbox. These modules are
-			// loaded only on desktop and are the reason manifest.json is desktop-only.
-			const fsModule: unknown = await import("fs/promises");
-			const pathModule: unknown = await import("path");
-			if (!isNodeFsPromises(fsModule) || !isNodePathApi(pathModule)) {
-				throw new Error("Unexpected Node module shape");
-			}
-			this._fs = fsModule;
-			this._path = pathModule;
+		if (this._fs && this._path) {
 			this._desktop = true;
 			return true;
+		}
+
+		try {
+			// Static imports are bundled as CommonJS require calls, which is the module
+			// system used by Obsidian plugins. Native dynamic imports are unreliable in
+			// some Electron versions and previously left the settings toggles disabled.
+			const fsApi = getModuleApi(nodeFsModule, isNodeFsPromises);
+			const pathApi = getModuleApi(nodePathModule, isNodePathApi);
+			if (!fsApi || !pathApi) {
+				throw new Error("Unexpected Node module shape");
+			}
+			this._fs = fsApi;
+			this._path = pathApi;
+			this._desktop = true;
+			this._lastError = null;
+			return true;
 		} catch (e) {
+			this._lastError = errorMessage(e);
 			console.warn(
 				"[AI-Vault] Node fs unavailable; external storage disabled",
-				errorMessage(e),
+				this._lastError,
 			);
 			return false;
 		}
@@ -125,9 +149,10 @@ export class ExternalStorage {
 
 	// ── Getters ────────────────────────────────────────────────────────────────
 
-	get isDesktop(): boolean { return this._desktop; }
+	get isDesktop(): boolean { return Platform.isDesktopApp; }
 	get isEnabled(): boolean { return this._enabled && this._desktop; }
 	get baseDir():   string | null { return this._baseDir; }
+	get lastError(): string | null { return this._lastError; }
 
 	// ── Initialization ─────────────────────────────────────────────────────────
 
@@ -150,12 +175,19 @@ export class ExternalStorage {
 			this._baseDir = this._resolveBaseDir();
 			await this.nodeFs.mkdir(this._baseDir, { recursive: true });
 			this._enabled = true;
+			this._lastError = null;
 			return true;
 		} catch (e) {
+			this._lastError = errorMessage(e);
 			console.error("[AI-Vault] Failed to init external storage:", e);
 			this._enabled = false;
 			return false;
 		}
+	}
+
+	disable(): void {
+		this._enabled = false;
+		this._baseDir = null;
 	}
 
 	// ── Paths ──────────────────────────────────────────────────────────────────

@@ -119,45 +119,65 @@ export class GPTSettingsTab extends PluginSettingTab {
 
 	private renderApiKeySync(el: HTMLElement): void {
 		const keysInSync = this.plugin.settings.apiKeysInSync;
-		const extEnabled = this.plugin.externalStorage.isEnabled;
+		const isDesktop = this.plugin.externalStorage.isDesktop;
 
 		new Setting(el)
 			.setName(t("settings_keys_sync_name"))
 			.setDesc(keysInSync ? t("settings_keys_sync_desc_on") : t("settings_keys_sync_desc_off"))
 			.addToggle(tog => tog
 				.setValue(keysInSync)
-				.setDisabled(!extEnabled)
+				.setDisabled(!isDesktop)
 				.onChange(async (v: boolean) => {
-					const oldApiKey       = this.plugin.settings.apiKey;
-					const oldClaudeApiKey = this.plugin.settings.claudeApiKey;
-					const oldLocalApiKey  = this.plugin.settings.localApiKey;
-					this.plugin.settings.apiKeysInSync = v;
-					this.plugin.settings.apiKey        = oldApiKey;
-					this.plugin.settings.claudeApiKey  = oldClaudeApiKey;
-					this.plugin.settings.localApiKey   = oldLocalApiKey;
-					await this.plugin.saveSettings();
-
-					if (v) {
-						// Switched to Sync → remove keys.json
-						const keysPath = this.plugin.externalStorage.resolve(FILE_API_KEYS);
-						await this.plugin.externalStorage.remove(keysPath);
-						new Notice(t("notice_keys_moved_sync"), 5000);
-					} else {
-						// Switched to local → keys saved via saveSettings, remove from data.json
-						const d = await this.plugin.loadData();
-						if (d) {
-							delete d.apiKey;
-							delete d.claudeApiKey;
-							delete d.localApiKey;
-							await this.plugin.saveData(d);
+					tog.setDisabled(true);
+					try {
+						// Local-only keys require a working folder outside the vault. Try
+						// to initialize it here instead of permanently disabling the toggle.
+						if (!v && !this.plugin.externalStorage.isEnabled) {
+							if (!this.plugin.settings.externalStorageEnabled) {
+								new Notice(t("notice_keys_need_external"), 6000);
+								return;
+							}
+							if (!(await this.plugin.externalStorage.init())) {
+								new Notice(t("notice_storage_init_failed", this.plugin.externalStorage.lastError ?? "unknown error"), 7000);
+								return;
+							}
 						}
-						new Notice(t("notice_keys_moved_local"), 5000);
+
+						const oldApiKey       = this.plugin.settings.apiKey;
+						const oldClaudeApiKey = this.plugin.settings.claudeApiKey;
+						const oldLocalApiKey  = this.plugin.settings.localApiKey;
+						this.plugin.settings.apiKeysInSync = v;
+						this.plugin.settings.apiKey        = oldApiKey;
+						this.plugin.settings.claudeApiKey  = oldClaudeApiKey;
+						this.plugin.settings.localApiKey   = oldLocalApiKey;
+						await this.plugin.saveSettings();
+
+						if (v) {
+							// Switched to Sync → remove keys.json
+							const keysPath = this.plugin.externalStorage.resolve(FILE_API_KEYS);
+							await this.plugin.externalStorage.remove(keysPath);
+							new Notice(t("notice_keys_moved_sync"), 5000);
+						} else {
+							// Switched to local → keys saved via saveSettings, remove from data.json
+							const d = await this.plugin.loadData();
+							if (d) {
+								delete d.apiKey;
+								delete d.claudeApiKey;
+								delete d.localApiKey;
+								await this.plugin.saveData(d);
+							}
+							new Notice(t("notice_keys_moved_local"), 5000);
+						}
+					} catch (e) {
+						console.error("[AI-Vault] Failed to change API key sync setting:", e);
+						new Notice(t("notice_setting_change_failed", (e as Error)?.message ?? String(e)), 7000);
+					} finally {
+						this.display();
 					}
-					this.display();
 				}),
 			);
 
-		if (!extEnabled) {
+		if (!isDesktop) {
 			el.createEl("div", {
 				cls:  "gpt-settings-note",
 				text: t("settings_keys_mobile_note"),
@@ -643,10 +663,27 @@ export class GPTSettingsTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.externalStorageEnabled)
 				.setDisabled(!isDesktop)
 				.onChange(async (v: boolean) => {
-					this.plugin.settings.externalStorageEnabled = v;
-					await this.plugin.saveSettings();
-					new Notice(t("notice_restart_required"), 6000);
-					this.display();
+					tog.setDisabled(true);
+					try {
+						this.plugin.settings.externalStorageEnabled = v;
+						if (v) {
+							if (!(await this.plugin.externalStorage.init())) {
+								this.plugin.settings.externalStorageEnabled = false;
+								await this.plugin.saveSettings();
+								new Notice(t("notice_storage_init_failed", this.plugin.externalStorage.lastError ?? "unknown error"), 7000);
+								return;
+							}
+						} else {
+							this.plugin.externalStorage.disable();
+						}
+						await this.plugin.saveSettings();
+						new Notice(t(v ? "notice_storage_enabled" : "notice_storage_disabled"), 5000);
+					} catch (e) {
+						console.error("[AI-Vault] Failed to change external storage setting:", e);
+						new Notice(t("notice_setting_change_failed", (e as Error)?.message ?? String(e)), 7000);
+					} finally {
+						this.display();
+					}
 				}),
 			);
 
