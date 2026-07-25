@@ -1098,6 +1098,10 @@ export class GPTChatView extends ItemView {
 
 		const ragSources: string[] = [];
 
+		// Notes excluded from RAG. Manually attached notes are an explicit user choice and
+		// stay allowed; everything reached implicitly — wikilinks and RAG hits — is filtered.
+		const ragIgnored = (path: string): boolean => this.rag.isIgnoredPath(path);
+
 		// Manually selected notes
 		if (this.manualNotes.length) {
 			const allNotes: { file: TFile; content: string }[] = [];
@@ -1109,7 +1113,7 @@ export class GPTChatView extends ItemView {
 						allNotes.push({ file: f, content: parseCanvasToText(raw, f.basename) });
 					} catch (e) { console.warn("[AI-Vault] canvas read failed:", f.path, (e as Error)?.message); }
 				} else {
-					const resolved = await resolveNoteWithLinks(this.plugin.app, f, 1, visited);
+					const resolved = await resolveNoteWithLinks(this.plugin.app, f, 1, visited, ragIgnored);
 					allNotes.push(...resolved);
 				}
 			}
@@ -1125,7 +1129,10 @@ export class GPTChatView extends ItemView {
 		// Auto-RAG
 		if (this.settings.ragEnabled && this.rag.indexed && userText) {
 			const results  = await this.rag.search(userText, RAG_TOP_K);
-			const filtered = results.filter(r => !this.manualNotes.some(f => f.path === r.path));
+			// The engine already filters, but this is the last point before the text
+			// leaves the device — and it also keeps the source chips below in sync.
+			const filtered = results.filter(r =>
+				!this.manualNotes.some(f => f.path === r.path) && !ragIgnored(r.path));
 			if (filtered.length) {
 				const ctx = filtered.map(r => `### ${r.basename}\n${r.chunk}`).join("\n\n---\n\n");
 				sys += `\n\n---\nVAULT CONTEXT (RAG):\n\n${ctx}\n---`;

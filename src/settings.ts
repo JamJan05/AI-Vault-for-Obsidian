@@ -41,6 +41,8 @@ export interface PluginSettings {
 	ragEnabled:             boolean;
 	ragAutoIndex:           boolean;
 	ragSearchMode:          RAGSearchMode;
+	/** One ignore pattern per line — see src/rag/ignorePaths.ts for the semantics. */
+	ragExcludedPaths:       string;
 
 	// External storage
 	externalStorageEnabled: boolean;
@@ -85,6 +87,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	ragEnabled:              true,
 	ragAutoIndex:            true,
 	ragSearchMode:           "hybrid",
+	ragExcludedPaths:        "",
 	externalStorageEnabled:  true,
 	externalStoragePath:     "",
 	apiKeysInSync:           false,

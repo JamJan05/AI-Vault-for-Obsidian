@@ -101,6 +101,27 @@ The RAG engine combines keyword search and embeddings when available. If no Open
 
 Building the enabled vault-wide RAG index enumerates Markdown and Canvas files. File contents are read incrementally for indexing; ordinary wikilink resolution uses Obsidian's metadata cache and does not scan the vault.
 
+### 🚫 Ignored RAG paths
+
+**Settings → AI-Vault → RAG → Ignored RAG paths** takes one pattern per line and keeps matching notes out of RAG entirely — they are not indexed, not sent to the embeddings model, not used as context and not listed as sources:
+
+```text
+Assets/**
+Unsorted/**
+Templates/**
+*.canvas
+# lines starting with a hash are comments
+```
+
+- Patterns are matched case-insensitively against vault-relative paths.
+- A pattern without `/` matches that file name at any depth, and a top-level folder of that name; a pattern containing `/` is anchored at the vault root.
+- `*` matches within one path segment, `**` crosses segments. A pattern without wildcards also covers everything below it, so `Assets` behaves like `Assets/**`.
+- Ignored notes are also skipped when they would be reached through a `[[wikilink]]` from an attached note.
+- Notes you attach manually with the paperclip are **still sent** — that is an explicit choice, not automatic retrieval.
+- Changing the list takes effect immediately for search and removes stored chunks of newly ignored notes; re-index to fully rebuild.
+
+This only affects AI-Vault's RAG. It does not hide anything inside Obsidian.
+
 ---
 
 ## 🗂️ Projects

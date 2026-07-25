@@ -6,6 +6,8 @@ import {
 	contentHash, withRetry,
 } from "../utils";
 import { parseCanvasToText } from "./canvasParser";
+import { parseRagIgnorePatterns } from "./ignorePaths";
+import type { RagIgnoreMatcher } from "./ignorePaths";
 import type { ExternalStorage } from "../storage/ExternalStorage";
 import type { RAGEntry, RAGIndex, RAGSearchResult } from "../types";
 
@@ -22,6 +24,7 @@ interface PluginWithDeps {
 		apiKey:    string;
 		ragAutoIndex: boolean;
 		ragSearchMode: "hybrid" | "semantic" | "exact" | "recent";
+		ragExcludedPaths: string;
 	};
 }
 
@@ -70,6 +73,16 @@ export class RAGEngine {
 	private get apiKey():   string { return this.plugin.settings.apiKey; }
 	private get indexPath(): string { return this.storage.resolve(FILE_RAG_INDEX); }
 
+	/** Compiled ignore list — cached per settings value, so this is cheap to call in loops. */
+	private get ignored(): RagIgnoreMatcher {
+		return parseRagIgnorePatterns(this.plugin.settings.ragExcludedPaths ?? "");
+	}
+
+	/** True when the path is excluded from RAG by the user's ignore list. */
+	isIgnoredPath(path: string): boolean {
+		return this.ignored.matches(path);
+	}
+
 	get stats(): RAGStats {
 		return {
 			files:      new Set(this.index.map(e => e.path)).size,
@@ -97,6 +110,9 @@ export class RAGEngine {
 			this.index       = idx.entries;
 			this.fileHashes  = idx.hashes ?? {};
 			this.indexed     = true;
+			// A stored index may predate the current ignore list — drop excluded
+			// chunks before anything can read or send them.
+			if (this.purgeIgnoredEntries()) this.scheduleSave();
 			this.recalcAvgLen();
 			for (const e of this.index) this.ensureEntryCache(e);
 			return true;
@@ -107,6 +123,7 @@ export class RAGEngine {
 			this.index       = data;
 			this.fileHashes  = {};
 			this.indexed     = true;
+			if (this.purgeIgnoredEntries()) this.scheduleSave();
 			this.recalcAvgLen();
 			for (const e of this.index) this.ensureEntryCache(e);
 			return true;
@@ -197,17 +214,26 @@ export class RAGEngine {
 		try {
 			// A full list is required here to build the user-enabled vault-wide RAG index
 			// and remove index entries for deleted notes. File contents are read incrementally.
+			// Ignored paths are dropped up front, so their contents are never read.
+			const ignored = this.ignored;
 			const files = this.plugin.app.vault.getFiles()
-				.filter((file: TFile) => file.extension === "md" || file.extension === "canvas");
+				.filter((file: TFile) =>
+					(file.extension === "md" || file.extension === "canvas") &&
+					!ignored.matches(file.path));
 			const currentPaths = new Set(files.map((f: TFile) => f.path));
 
-			// Remove entries for files that no longer exist
+			// Remove entries for files that no longer exist — and, because the list above
+			// is already filtered, for files that are now ignored.
 			const removedPaths = Object.keys(this.fileHashes).filter(p => !currentPaths.has(p));
 			if (removedPaths.length) {
 				const removedSet = new Set(removedPaths);
 				this.index = this.index.filter(e => !removedSet.has(e.path));
 				for (const p of removedPaths) delete this.fileHashes[p];
 			}
+
+			// Belt and braces: an index migrated from the legacy flat-array format has no
+			// hashes, so the sweep above cannot reach its entries.
+			this.purgeIgnoredEntries();
 
 			const newHashes:     Record<string, string> = {};
 			let pendingChunks:   PendingChunk[] = [];
@@ -303,6 +329,14 @@ export class RAGEngine {
 		const qt     = tokenize(query);
 		if (!qt.length) return [];
 
+		// Retrieval-time filter — covers indexes built before the current ignore list,
+		// and runs before scoring so excluded chunks cannot influence the RRF ranks.
+		const ignored    = this.ignored;
+		const candidates = ignored.isEmpty
+			? this.index
+			: this.index.filter(e => !ignored.matches(e.path));
+		if (!candidates.length) return [];
+
 		const avgLen = this.cachedAvgLen;
 		const mode = this.plugin.settings.ragSearchMode ?? "hybrid";
 		const useEmbedding = mode !== "exact";
@@ -313,7 +347,7 @@ export class RAGEngine {
 		let qEmb:  number[] | null = null;
 		let qNorm  = 0;
 
-		if (useEmbedding && this.apiKey && this.index.some(e => e.embedding)) {
+		if (useEmbedding && this.apiKey && candidates.some(e => e.embedding)) {
 			try {
 				qEmb  = await this.getEmbedding(query);
 				qNorm = vectorNorm(qEmb);
@@ -323,7 +357,7 @@ export class RAGEngine {
 		}
 
 		// Compute both scores for each chunk
-		const scored = this.index.map(e => {
+		const scored = candidates.map(e => {
 			this.ensureEntryCache(e);
 			const bm  = useLexical ? bm25Score(qt, e._tf ?? {}, e.tokens.length, avgLen) : 0;
 			const cos = (useEmbedding && qEmb && e.embedding)
@@ -377,6 +411,13 @@ export class RAGEngine {
 	// ── Incremental updates ────────────────────────────────────────────────────
 
 	async updateFile(file: TFile): Promise<void> {
+		// Bail out before the vault read and before any embedding request, so an ignored
+		// note is never loaded, never sent anywhere and never re-enters the index.
+		if (this.isIgnoredPath(file.path)) {
+			this.removeFile(file.path);
+			return;
+		}
+
 		try {
 			const raw     = await this.plugin.app.vault.cachedRead(file);
 			const content = file.extension === "canvas"
@@ -443,6 +484,14 @@ export class RAGEngine {
 	}
 
 	renameFile(oldPath: string, newPath: string, basename: string): void {
+		// Moved into an ignored location — drop the entries instead of re-pointing them.
+		// The reverse case (leaving an ignored folder) is picked up by the next
+		// updateFile() or a full reindex.
+		if (this.isIgnoredPath(newPath)) {
+			this.removeFile(oldPath);
+			return;
+		}
+
 		let changed = false;
 
 		for (const e of this.index) {
@@ -462,7 +511,40 @@ export class RAGEngine {
 		if (changed) this.scheduleSave();
 	}
 
+	/**
+	 * Applies the current ignore list to the in-memory index and persists the result,
+	 * so chunks of newly ignored notes stop being retrievable — and stop being stored —
+	 * without waiting for a full reindex.
+	 */
+	applyIgnorePatterns(): void {
+		if (!this.purgeIgnoredEntries()) return;
+		this.recalcAvgLen();
+		this.scheduleSave();
+	}
+
 	// ── Helpers ────────────────────────────────────────────────────────────────
+
+	/**
+	 * Removes index entries and hashes for paths that the ignore list now excludes.
+	 * @returns true when anything was removed
+	 */
+	private purgeIgnoredEntries(): boolean {
+		const ignored = this.ignored;
+		if (ignored.isEmpty) return false;
+
+		const before = this.index.length;
+		this.index = this.index.filter(e => !ignored.matches(e.path));
+
+		let hashesChanged = false;
+		for (const path of Object.keys(this.fileHashes)) {
+			if (ignored.matches(path)) {
+				delete this.fileHashes[path];
+				hashesChanged = true;
+			}
+		}
+
+		return this.index.length !== before || hashesChanged;
+	}
 
 	private recalcAvgLen(): void {
 		this.cachedAvgLen = this.index.length

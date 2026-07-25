@@ -8,12 +8,16 @@ export interface ResolvedNote {
 /**
  * Recursively follows [[wiki-links]] in a note.
  * Returns an array of {file, content} for the main note and linked notes (up to `depth`).
+ *
+ * `isIgnored` filters linked notes only — the note passed in was chosen explicitly by
+ * the user, while links are followed implicitly and must respect the RAG ignore list.
  */
 export async function resolveNoteWithLinks(
 	app:     App,
 	file:    TFile,
 	depth    = 1,
 	visited  = new Set<string>(),
+	isIgnored: (path: string) => boolean = () => false,
 ): Promise<ResolvedNote[]> {
 	if (visited.has(file.path)) return [];
 	visited.add(file.path);
@@ -34,8 +38,8 @@ export async function resolveNoteWithLinks(
 			const linkName = match[1].trim();
 			const linked = app.metadataCache.getFirstLinkpathDest(linkName, file.path);
 
-			if (linked && !visited.has(linked.path)) {
-				const sub = await resolveNoteWithLinks(app, linked, depth - 1, visited);
+			if (linked && !visited.has(linked.path) && !isIgnored(linked.path)) {
+				const sub = await resolveNoteWithLinks(app, linked, depth - 1, visited, isIgnored);
 				results.push(...sub);
 			}
 		}
