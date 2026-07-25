@@ -1,6 +1,6 @@
 {
   "name": "ai-vault",
-  "version": "1.0.9",
+  "version": "1.1.0",
   "description": "AI-Vault — chat with GPT & Claude inside Obsidian, powered by your vault",
   "main": "main.js",
   "scripts": {
