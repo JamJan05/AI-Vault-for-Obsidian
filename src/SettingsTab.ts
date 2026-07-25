@@ -4,6 +4,7 @@ import { DEFAULT_SYSTEM_PROMPTS, DEFAULT_LOCAL_OPENAI_URL, DEFAULT_LOCAL_OLLAMA_
 import { detectProvider } from "./models";
 import { fetchLocalModels, normalizeLocalBaseUrl } from "./api/local";
 import { FILE_API_KEYS } from "./constants";
+import { debounce } from "./utils";
 import type { ExternalStorage } from "./storage/ExternalStorage";
 import type { HistoryManager }  from "./history/HistoryManager";
 import type { ProjectManager }  from "./history/ProjectManager";
@@ -39,6 +40,12 @@ function isLocalApiType(value: string): value is LocalApiType {
 // ─── SettingsTab ───────────────────────────────────────────────────────────────
 
 export class GPTSettingsTab extends PluginSettingTab {
+	/**
+	 * Purging the index is O(index size), while onChange fires per keystroke — so the
+	 * setting is saved immediately and the index is swept once the user stops typing.
+	 */
+	private readonly purgeIgnoredRagPaths = debounce(() => this.plugin.rag.applyIgnorePatterns(), 800);
+
 	constructor(app: App, private readonly plugin: PluginWithDeps) {
 		super(app, plugin as never);
 	}
@@ -602,6 +609,21 @@ export class GPTSettingsTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}),
 			);
+
+		new Setting(el)
+			.setName(t("settings_rag_ignored_name"))
+			.setDesc(t("settings_rag_ignored_desc"))
+			.addTextArea(ta => {
+				ta.inputEl.rows = 5;
+				ta.inputEl.addClass("gpt-settings-input-full");
+				ta.setPlaceholder(t("settings_rag_ignored_placeholder"))
+					.setValue(this.plugin.settings.ragExcludedPaths ?? "")
+					.onChange(async (v: string) => {
+						this.plugin.settings.ragExcludedPaths = v;
+						await this.plugin.saveSettings();
+						this.purgeIgnoredRagPaths();
+					});
+			});
 
 		// Status RAG
 		const s   = this.plugin.rag.stats;

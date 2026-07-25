@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Ignored RAG paths** (`Settings → AI-Vault → RAG`): exclude folders or files from RAG with one pattern
+  per line, for example `Assets/**`, `Unsorted/**` or `*.canvas`. Matching notes are never indexed,
+  never sent to the embeddings model, never used as RAG context and never listed as sources.
+  Patterns support `*`, `**` and comments (`#`), and are matched case-insensitively against
+  vault-relative paths.
+
+### Changed
+- Notes excluded from RAG are no longer pulled in indirectly by `[[wikilink]]` expansion of a manually
+  attached note. Notes attached manually are still sent, as an explicit user choice.
+- Existing indexes are filtered at query time and swept on load, so the setting takes effect before a
+  reindex and stored chunks of newly ignored notes are removed from `rag-index.json`.
+
 ## [1.0.7] - 2026-07-11
 
 ### Fixed
