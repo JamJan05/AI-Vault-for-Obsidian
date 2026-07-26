@@ -13,12 +13,12 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@typescript-eslint/parser": "^8.0.0",
     "@types/node": "^22.19.18",
+    "@typescript-eslint/parser": "^8.0.0",
     "esbuild": "^0.21.5",
     "eslint": "^9.0.0",
     "eslint-plugin-obsidianmd": "^0.4.1",
-    "obsidian": "^1.12.3",
+    "obsidian": "^1.13.1",
     "tslib": "^2.6.3",
     "typescript": "^5.9.3"
   }

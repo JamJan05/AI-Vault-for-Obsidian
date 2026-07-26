@@ -17,7 +17,7 @@
 | i18n | 296 keys × 2 languages; 35 keys unreferenced |
 | Stylesheet | `styles.css` — 652 lines, 228 `.gpt-*` selectors |
 | `npm run typecheck` | clean |
-| `npm run lint` | 0 errors, 138 warnings — 126 `prefer-create-el`, 11 `ui/sentence-case`, 1 `settings-tab/prefer-setting-definitions`; 104 auto-fixable |
+| `npm run lint` | 0 errors, 131 warnings — 122 `prefer-create-el`, 9 `ui/sentence-case`; 100 auto-fixable |
 | Test suite | none |
 | Runtime dependencies | none |
 | `any` in source | none — external payloads go through type guards |
@@ -326,21 +326,38 @@ riskiest logic in the codebase:
 `ExternalStorage` is also testable in isolation because its Node API is behind the
 `NodeFsPromises`/`NodePathApi` interfaces — a fake object satisfies the type guards.
 
-### F-19 · Low · Settings will not appear in Obsidian's settings search (1.13.0+)
+### F-19 · Low · Settings will not appear in Obsidian's settings search (1.13.0+) — **fixed**
 
-`obsidianmd/settings-tab/prefer-setting-definitions` fires on `GPTSettingsTab`
-(`src/SettingsTab.ts:41`): the tab does not implement `getSettingDefinitions()`, so on Obsidian 1.13.0
-and later none of the plugin's ~25 settings are discoverable through the global settings search. This is
-the only lint warning with real user-facing consequences — adopting the declarative settings API (or at
-least adding definitions alongside the imperative `display()`) restores it.
+Originally `obsidianmd/settings-tab/prefer-setting-definitions` fired on `GPTSettingsTab`: the tab did
+not implement `getSettingDefinitions()`, so on Obsidian 1.13.0 and later none of the plugin's settings
+were discoverable through the global settings search.
+
+`src/SettingsTab.ts` now builds the tab from `getSettingDefinitions()`
+(`src/SettingsTab.ts:71`), which returns one heading row, three top-level rows and seven groups —
+24 searchable rows in total. Each row is a `SettingDefinitionRender`, so the imperative control logic is
+unchanged; only the `name` / `desc` metadata moved out where Obsidian can index it. Two consequences of
+the API contract shaped the design:
+
+- `display()` is **not called** when `getSettingDefinitions()` returns a non-empty array, so the two
+  cannot coexist as independent renderers. `display()` therefore delegates to `renderLegacy()`, which
+  walks the same definitions imperatively — the fallback path for Obsidian &lt; 1.13, still required
+  because `manifest.json` declares `minAppVersion: 1.7.2`.
+- The ten former `this.display()` re-render calls became `this.rerender()`, which prefers `update()`
+  (1.13+) and falls back to `renderLegacy()`.
+
+Obsidian 1.13 also added `settings?: unknown` to `Plugin`, which collided with the subclass field in
+`src/main.ts`; it is now `declare settings: PluginSettings` (TS2612).
 
 ### F-20 · Informational · Lint warnings and repo hygiene
 
-- 138 lint warnings: 126 `obsidianmd/prefer-create-el` (`createEl("div", …)` → `createDiv(…)`),
-  104 of them auto-fixable with `eslint --fix`; 11 `obsidianmd/ui/sentence-case` — all false positives
+- 131 lint warnings: 122 `obsidianmd/prefer-create-el` (`createEl("div", …)` → `createDiv(…)`),
+  100 of them auto-fixable with `eslint --fix`; 9 `obsidianmd/ui/sentence-case` — all false positives
   on the brand name and key placeholders (`"AI-Vault Chat"` → *"Ai-vault chat"*, `"sk-..."` →
-  *"Sk-..."*), so they should be suppressed rather than "fixed"; 1 substantive warning covered in F-19.
-  Clearing the noise is worthwhile so genuine warnings stay visible.
+  *"Sk-..."*), so they should be suppressed rather than "fixed". No warning left has user-facing
+  consequences; clearing the noise is still worthwhile so genuine warnings stay visible.
+- Note that `eslint-comments/no-restricted-disable` forbids disabling
+  `@typescript-eslint/no-deprecated`, so deprecated APIs have to be reached indirectly rather than
+  suppressed — that is why `rerender()` calls `renderLegacy()` instead of `display()`.
 - Log prefixes are inconsistent: `[AI-Vault]` almost everywhere but `[GPT RAG]` in
   `src/rag/RAGEngine.ts:225`, `:274`, `:321`, `:423`, `:431`.
 - Class and view-type names still carry the pre-rename `GPT`/`gpt-` prefix (`GPTPlugin`, `GPTChatView`,
@@ -371,7 +388,7 @@ least adding definitions alongside the imperative `display()`) restores it.
 | 8 | **F-9** align message state with DOM | ~1 h | regenerate can corrupt the visible transcript |
 | 9 | **F-7** debounce text-field saves | ~1 h | large reduction in disk writes |
 | 10 | **F-12** move remaining strings into i18n | ~1 h | the bilingual claim is a headline feature |
-| 10b | **F-19** add `getSettingDefinitions()` | ~1 h | settings are invisible to search on Obsidian 1.13+ |
+| ~~10b~~ | ~~**F-19** add `getSettingDefinitions()`~~ | done | settings are now indexed by search on Obsidian 1.13+ |
 | 11 | **F-17** delete dead code, barrels and unused keys | ~1 h | shrinks bundle and review surface |
 | 12 | **F-18** add a test runner + the pure-function suite | ~half day | first real regression net |
 | 13 | **F-14 / F-13** unify model catalogue and constants | ~half day | removes the two-places-to-edit trap |
@@ -383,7 +400,7 @@ least adding definitions alongside the imperative `display()`) restores it.
 
 Everything above was checked against the working tree, not inferred:
 
-- `npm run typecheck` → clean; `npm run lint` → `✖ 138 problems (0 errors, 138 warnings)`.
+- `npm run typecheck` → clean; `npm run lint` → `✖ 131 problems (0 errors, 131 warnings)`.
 - Dead-code claims verified with repo-wide greps for each identifier, excluding its own definition
   (barrels: no file imports `./index` or any `*/index` path; `.gpt-code-block`/`data-rawcode`: the only
   producer would be a custom renderer that no longer exists — the sole match is the query selector at

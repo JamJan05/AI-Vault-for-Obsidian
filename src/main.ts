@@ -17,7 +17,9 @@ import type { PluginSettings }     from "./settings";
 import type { ChatMessage }        from "./types";
 
 export default class GPTPlugin extends Plugin {
-	settings!:        PluginSettings;
+	// Obsidian 1.13 declares `settings?: unknown` on Plugin — narrow it here rather
+	// than shadowing the base property.
+	declare settings: PluginSettings;
 	storage!:         PluginStorage;
 	externalStorage!: ExternalStorage;
 	rag!:             RAGEngine;

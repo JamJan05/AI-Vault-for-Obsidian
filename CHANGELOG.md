@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Changed
+- Settings are now declared through `getSettingDefinitions()`, so every setting is discoverable in
+  Obsidian's settings search on 1.13.0 and later. The imperative `display()` remains as the rendering
+  path for Obsidian versions older than 1.13, driven by the same definitions.
+- Narrowed the `settings` field to `declare settings: PluginSettings`, because Obsidian 1.13 declares
+  `settings?: unknown` on `Plugin`.
+- Raised the `obsidian` development dependency to 1.13.1 for the declarative settings typings.
+  `minAppVersion` is unchanged at 1.7.2.
+
+## [1.1.0] - 2026-07-25
+
 ### Added
 - **Ignored RAG paths** (`Settings → AI-Vault → RAG`): exclude folders or files from RAG with one pattern
   per line, for example `Assets/**`, `Unsorted/**` or `*.canvas`. Matching notes are never indexed,
