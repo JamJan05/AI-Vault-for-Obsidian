@@ -58,7 +58,7 @@ manifest.json ──────▶  manifest.json
 | Command | What it does |
 | --- | --- |
 | `npm run typecheck` | `tsc --noEmit --skipLibCheck` — currently clean |
-| `npm run lint` | `eslint src` with `eslint-plugin-obsidianmd` — 0 errors, 138 warnings (nearly all `prefer-create-el`) |
+| `npm run lint` | `eslint src` with `eslint-plugin-obsidianmd` — 0 errors, 131 warnings (nearly all `prefer-create-el`) |
 | `npm run build` | typecheck + minified bundle |
 
 **CI (`.github/workflows/`)**
