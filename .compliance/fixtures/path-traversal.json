@@ -1,0 +1,16 @@
+{
+  "description": "Storage path segments. `allowed: false` means safeJoinInside() must return null.",
+  "base": "/home/user/vault-gpt-data",
+  "cases": [
+    { "id": "plain-file", "segments": ["keys.json"], "allowed": true },
+    { "id": "nested-file", "segments": ["history", "session-1700000000000.json"], "allowed": true },
+    { "id": "parent-escape", "segments": ["..", "keys.json"], "allowed": false },
+    { "id": "deep-escape", "segments": ["../../.ssh/id_rsa"], "allowed": false },
+    { "id": "absolute-path", "segments": ["/etc/passwd"], "allowed": false },
+    { "id": "windows-drive", "segments": ["C:/Windows/System32/config"], "allowed": false },
+    { "id": "backslash-escape", "segments": ["..\\..\\keys.json"], "allowed": false },
+    { "id": "embedded-escape", "segments": ["history/../../keys.json"], "allowed": false },
+    { "id": "current-dir", "segments": ["./keys.json"], "allowed": false },
+    { "id": "empty-segment", "segments": [""], "allowed": false }
+  ]
+}

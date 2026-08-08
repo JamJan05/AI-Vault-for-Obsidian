@@ -1,0 +1,40 @@
+{
+  "description": "Record of clean-room build verifications against published release assets. The compliance runner cites this record but does not treat it as a pass: verifying a published artefact needs network access and a chosen tag, so `release-reproducibility` stays MANUAL_REVIEW and must be re-run before each release. The procedure is in docs/SECURITY-PRIVACY-CHECKS.md.",
+  "verifications": [
+    {
+      "tag": "1.1.1",
+      "commit": "76706e4",
+      "verifiedOn": "2026-08-08",
+      "method": "git worktree add <tmp> 1.1.1 && npm ci && npm run build, compared against the assets downloaded from the GitHub release",
+      "toolchain": {
+        "node": "v26.5.1",
+        "npm": "12.0.1",
+        "esbuild": "0.21.5",
+        "typescript": "5.9.3"
+      },
+      "artifacts": {
+        "main.js": {
+          "sha256": "d0725ea1d0c7d58296eaad7d1b5138aef786c2c0dbf5c0b1daf2d2a16172201c",
+          "bytes": 146800,
+          "match": "exact",
+          "attested": true
+        },
+        "styles.css": {
+          "sha256": "d527eff81c5bc82595bf10c35143c2604a69e107459c1cd3edf29157a29618d2",
+          "bytes": 35989,
+          "match": "exact",
+          "attested": true
+        },
+        "manifest.json": {
+          "sha256": "111bac51b6f1afa823b4a1e8a84b0ae90d2943402e149d05e64f8c802995965f",
+          "bytes": 322,
+          "match": "exact",
+          "attested": false,
+          "note": "Published as a release asset but not covered by the build provenance attestation at the time of this release. `gh attestation verify manifest.json` returned HTTP 404. Fixed for future releases by adding manifest.json to the attestation subject-path in .github/workflows/release.yml."
+        }
+      },
+      "result": "All three published assets reproduced byte for byte from the tagged source with the pinned toolchain. No undeclared endpoint, secret or unaccounted-for code was found in the bundle.",
+      "caveat": "Reproducibility is tied to the toolchain above. An esbuild major bump changes the bytes of main.js; that is why esbuild majors are excluded from Dependabot and are handled as a deliberate release-time decision (EXC-2026-001)."
+    }
+  ]
+}

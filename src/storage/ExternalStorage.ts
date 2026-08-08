@@ -8,6 +8,7 @@ import {
 	FILE_PROJECTS,
 	FILE_RAG_INDEX,
 } from "../constants";
+import { isPathInside, isUnsafePathSegment } from "../security/paths";
 import type { PluginStorage, ListResult } from "./PluginStorage";
 import type { PluginSettings } from "../settings";
 import type { Plugin } from "obsidian";
@@ -25,6 +26,20 @@ interface NodeFsPromises {
 	rename(oldPath: string, newPath: string): Promise<void>;
 	unlink(path: string): Promise<void>;
 	readdir(path: string, options: { withFileTypes: true }): Promise<NodeDirent[]>;
+	/** Optional: absent or a no-op on platforms without POSIX permission bits. */
+	chmod?(path: string, mode: number): Promise<void>;
+}
+
+/** Owner-only read/write — applied to files that hold API keys. */
+const OWNER_ONLY_MODE = 0o600;
+
+export interface WriteJsonOptions {
+	/**
+	 * Restrict the file to the current user where the platform supports it.
+	 * Failure is logged and ignored: on Windows `chmod` has no meaningful effect
+	 * and must not turn a successful write into a failed one.
+	 */
+	restrictPermissions?: boolean;
 }
 
 interface NodePathApi {
@@ -215,16 +230,46 @@ export class ExternalStorage {
 		catch { return ""; }
 	}
 
-	/** Resolves a path relative to baseDir — falls back to PluginStorage when disabled */
+	/**
+	 * Resolves a path relative to baseDir — falls back to PluginStorage when disabled.
+	 *
+	 * Every part must be a plain relative segment and the result must stay inside
+	 * baseDir. A part containing `..`, an absolute path or a NUL byte is a bug or an
+	 * attack, so it throws rather than silently writing somewhere else.
+	 */
 	resolve(...parts: string[]): string {
-		if (this.isEnabled && this._baseDir) return this.nodePath.join(this._baseDir, ...parts);
+		if (this.isEnabled && this._baseDir) {
+			const unsafe = parts.find(isUnsafePathSegment);
+			if (unsafe !== undefined) {
+				throw new Error("Refusing to resolve an unsafe storage path segment");
+			}
+
+			const joined = this.nodePath.join(this._baseDir, ...parts);
+			if (!isPathInside(this._baseDir, joined)) {
+				throw new Error("Refusing to resolve a storage path outside the data directory");
+			}
+			return joined;
+		}
 		return this.fallback.resolve(...parts);
 	}
 
 	// ── CRUD ───────────────────────────────────────────────────────────────────
 
+	/**
+	 * Second line of defence for paths that were built by string concatenation
+	 * rather than through {@link resolve}. Returns false instead of throwing so a
+	 * rejected path degrades to "operation refused", not "plugin crashes".
+	 */
+	private _insideBase(filePath: string): boolean {
+		if (!this._baseDir) return false;
+		if (isPathInside(this._baseDir, filePath)) return true;
+		console.warn("[AI-Vault] Refused a storage path outside the data directory");
+		return false;
+	}
+
 	async ensureDir(dirPath: string): Promise<void> {
 		if (this.isEnabled) {
+			if (!this._insideBase(dirPath)) return;
 			try { await this.nodeFs.mkdir(dirPath, { recursive: true }); }
 			catch (e) { console.warn("[AI-Vault] ensureDir failed:", dirPath, errorMessage(e)); }
 			return;
@@ -234,6 +279,7 @@ export class ExternalStorage {
 
 	async exists(filePath: string): Promise<boolean> {
 		if (this.isEnabled) {
+			if (!this._insideBase(filePath)) return false;
 			try { await this.nodeFs.access(filePath); return true; }
 			catch { return false; }
 		}
@@ -242,6 +288,7 @@ export class ExternalStorage {
 
 	async readJson<T>(filePath: string, fallback: T): Promise<T> {
 		if (this.isEnabled) {
+			if (!this._insideBase(filePath)) return fallback;
 			try {
 				const raw = await this.nodeFs.readFile(filePath, "utf-8");
 				const parsed: unknown = JSON.parse(raw);
@@ -256,8 +303,9 @@ export class ExternalStorage {
 		return this.fallback.readJson(filePath, fallback);
 	}
 
-	async writeJson(filePath: string, data: unknown): Promise<boolean> {
+	async writeJson(filePath: string, data: unknown, options: WriteJsonOptions = {}): Promise<boolean> {
 		if (this.isEnabled) {
+			if (!this._insideBase(filePath)) return false;
 			try {
 				const dir = this.nodePath.dirname(filePath);
 				await this.nodeFs.mkdir(dir, { recursive: true });
@@ -265,18 +313,35 @@ export class ExternalStorage {
 				// Atomic write: temp → rename (guards against corrupted JSON)
 				const tmp = `${filePath}.tmp`;
 				await this.nodeFs.writeFile(tmp, JSON.stringify(data), "utf-8");
+				// Tighten the temp file before the rename, so the final path is never
+				// briefly world-readable with secrets in it.
+				if (options.restrictPermissions) await this._restrictPermissions(tmp);
 				await this.nodeFs.rename(tmp, filePath);
+				if (options.restrictPermissions) await this._restrictPermissions(filePath);
 				return true;
 			} catch (e) {
-				console.error("[AI-Vault] writeJson failed:", filePath, e);
+				// The path and the raw error are logged; the payload never is, because
+				// this same method writes keys.json.
+				console.error("[AI-Vault] writeJson failed:", filePath, errorMessage(e));
 				return false;
 			}
 		}
 		return this.fallback.writeJson(filePath, data);
 	}
 
+	private async _restrictPermissions(filePath: string): Promise<void> {
+		const fs = this._fs;
+		if (!fs?.chmod) return;
+		try {
+			await fs.chmod(filePath, OWNER_ONLY_MODE);
+		} catch (e) {
+			console.warn("[AI-Vault] Could not restrict file permissions:", errorMessage(e));
+		}
+	}
+
 	async remove(filePath: string): Promise<void> {
 		if (this.isEnabled) {
+			if (!this._insideBase(filePath)) return;
 			try { await this.nodeFs.unlink(filePath); }
 			catch (e) {
 				if (errorCode(e) !== "ENOENT") {
@@ -290,6 +355,7 @@ export class ExternalStorage {
 
 	async list(dirPath: string): Promise<ListResult> {
 		if (this.isEnabled) {
+			if (!this._insideBase(dirPath)) return { files: [], folders: [] };
 			try {
 				const entries = await this.nodeFs.readdir(dirPath, { withFileTypes: true });
 				const files: string[]   = [];
@@ -361,7 +427,13 @@ export class ExternalStorage {
 
 				for (const srcFile of files) {
 					try {
+						// The file name comes from a vault listing, so it is treated as
+						// untrusted: only a plain segment may be appended to dstDir.
 						const fileName = srcFile.split("/").pop() ?? "";
+						if (isUnsafePathSegment(fileName)) {
+							result.errors.push(`history/${fileName}: unsafe file name, skipped`);
+							continue;
+						}
 						const dstFile  = this.nodePath.join(dstDir, fileName);
 
 						const data = await vault.readJson<unknown>(srcFile, null);

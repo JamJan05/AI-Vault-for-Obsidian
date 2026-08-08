@@ -1,0 +1,311 @@
+name: Security and privacy
+
+# Automated check of selected safeguards and compliance evidence for AI-Vault.
+# This is not a certification of GDPR compliance and it does not mean the plugin
+# has been approved by Obsidian.
+#
+# Design constraints:
+# - Every action is pinned to a full, verified 40-character commit SHA.
+# - Pull-request jobs receive no repository secrets and never use
+#   pull_request_target, so a fork cannot reach anything privileged.
+# - Nothing is masked with `|| true`; a failing critical check fails the job.
+# - The report is always produced, even when an earlier step failed, but
+#   producing it never turns a failed job into a passing one.
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  schedule:
+    # Weekly, so a newly published advisory is caught even without a push.
+    - cron: "17 5 * * 1"
+
+# Least privilege by default. Individual jobs widen this only where they must.
+permissions:
+  contents: read
+
+concurrency:
+  group: security-privacy-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  build-test:
+    name: Build, lint and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # This job never pushes, so the token must not be left in .git/config.
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install from the lockfile
+        # `npm ci` fails when package.json and package-lock.json disagree, which
+        # is exactly the integrity property we want from a clean install.
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Verify the build produced main.js
+        run: |
+          set -euo pipefail
+          if [ ! -s main.js ]; then
+            echo "::error::main.js is missing or empty after npm run build."
+            exit 1
+          fi
+          echo "main.js: $(wc -c < main.js) bytes, sha256 $(sha256sum main.js | cut -d' ' -f1)"
+
+      - name: Check manifest, versions and release artefacts
+        run: node scripts/compliance/verify-release-artifacts.mjs
+
+      - name: Record the build digest
+        run: |
+          set -euo pipefail
+          {
+            echo "### Build"
+            echo ""
+            echo "| Artefact | Bytes | SHA-256 |"
+            echo "|---|---:|---|"
+            for file in main.js manifest.json styles.css; do
+              [ -f "$file" ] || continue
+              printf '| %s | %s | `%s` |\n' "$file" "$(wc -c < "$file")" "$(sha256sum "$file" | cut -d' ' -f1)"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  compliance:
+    name: Security and privacy compliance
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          # Full history so the version/tag consistency check can see the tags.
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install from the lockfile
+        run: npm ci
+
+      - name: Build the bundle for inspection
+        # The bundle checks and the bundle secret scan need a real main.js.
+        # A missing bundle is reported as BLOCKED, never as a pass.
+        run: npm run build
+
+      - name: Run the compliance checks
+        id: compliance
+        run: npm run compliance
+
+      - name: Publish the report to the job summary
+        # `always()` so the report survives a failing check. This step only
+        # uploads; it cannot change the outcome of the step above.
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          for report in security-privacy-failure-report.md security-privacy-success-report.md; do
+            if [ -f "$report" ]; then
+              echo "Report generated: $report"
+              exit 0
+            fi
+          done
+          echo "::error::No compliance report was generated. The missing report is itself a publication blocker."
+          exit 1
+
+      - name: Upload the compliance report
+        if: ${{ always() && (hashFiles('security-privacy-failure-report.md') != '' || hashFiles('security-privacy-success-report.md') != '') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: compliance-report-${{ github.run_id }}
+          path: |
+            security-privacy-failure-report.md
+            security-privacy-success-report.md
+            compliance-report.json
+            compliance-report.sarif
+            sbom.cdx.json
+          # Short, explicit retention: the report names files and rule ids, and
+          # there is no reason to keep it around beyond triage.
+          retention-days: 7
+          if-no-files-found: error
+
+  code-scanning:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      # Required to upload the analysis. On a public repository this is available
+      # without GitHub Advanced Security.
+      security-events: write
+      actions: read
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+          config: |
+            paths:
+              - src
+              - scripts
+            paths-ignore:
+              - node_modules
+              - main.js
+
+      - name: Install and build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        with:
+          category: "/language:javascript-typescript"
+
+  dependency-review:
+    name: Dependency review
+    # Only meaningful on a pull request: it diffs the dependency change.
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          # Kept in step with licensePolicy.deniedDependencyLicenses in
+          # .compliance/ai-vault-policy.json.
+          deny-licenses: AGPL-1.0-only, AGPL-1.0-or-later, AGPL-3.0-only, AGPL-3.0-or-later, SSPL-1.0, BUSL-1.1
+          comment-summary-in-pr: on-failure
+
+  gate:
+    name: Publication gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # `always()` so the gate reports even when a needed job failed or was
+    # skipped. The gate is fail-closed: anything other than success or an
+    # intentional skip stops the run.
+    if: ${{ always() }}
+    needs:
+      - build-test
+      - compliance
+      - code-scanning
+      - dependency-review
+    permissions:
+      contents: read
+
+    steps:
+      - name: Evaluate the gate
+        env:
+          BUILD_TEST: ${{ needs.build-test.result }}
+          COMPLIANCE: ${{ needs.compliance.result }}
+          CODE_SCANNING: ${{ needs.code-scanning.result }}
+          DEPENDENCY_REVIEW: ${{ needs.dependency-review.result }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+
+          failed=0
+          {
+            echo "## Publication gate"
+            echo ""
+            echo "| Job | Result | Blocks publication |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          check() {
+            name="$1"
+            result="$2"
+            skippable="$3"
+            blocks="yes"
+            case "$result" in
+              success) ;;
+              skipped)
+                if [ "$skippable" = "yes" ]; then
+                  blocks="no (not applicable to this event)"
+                else
+                  failed=1
+                fi
+                ;;
+              *) failed=1 ;;
+            esac
+            printf '| %s | %s | %s |\n' "$name" "$result" "$blocks" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          # dependency-review only runs on pull requests; a skip there is expected.
+          check "Build, lint and test" "$BUILD_TEST" "no"
+          check "Compliance" "$COMPLIANCE" "no"
+          check "CodeQL" "$CODE_SCANNING" "no"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            check "Dependency review" "$DEPENDENCY_REVIEW" "no"
+          else
+            check "Dependency review" "$DEPENDENCY_REVIEW" "yes"
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$failed" -ne 0 ]; then
+            echo "**Decision: NO-GO — do not publish.**" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Publication gate failed. See the compliance report artifact for the per-check detail."
+            exit 1
+          fi
+
+          echo "**Decision: GO — technically ready to be considered for publication.**" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "This is a technical recommendation to the repository owner. It is not approval by Obsidian and it publishes nothing." >> "$GITHUB_STEP_SUMMARY"

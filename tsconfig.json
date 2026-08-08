@@ -16,5 +16,5 @@
     "noUnusedParameters": false,
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
-  "include": ["src/**/*.ts", "src/main.ts"]
+  "include": ["src/**/*.ts", "src/main.ts", "tests/**/*.ts"]
 }

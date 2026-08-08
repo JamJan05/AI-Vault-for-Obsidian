@@ -1,12 +1,9 @@
 import { THINKING_MODES } from "../models";
 import { withRetry } from "../utils";
 import { requestCompletion } from "./streaming";
+import { extractAnthropicText } from "./contracts";
 import type { ChatMessage } from "../types";
 import type { StreamResult } from "./streaming";
-
-function isUnknownArray(value: unknown): value is unknown[] {
-	return Array.isArray(value);
-}
 
 /**
  * Calls the Anthropic Claude API through Obsidian requestUrl.
@@ -60,18 +57,7 @@ export async function callClaude(
 				"anthropic-version": "2023-06-01",
 			},
 			body,
-			(event) => {
-				if (!isUnknownArray(event.content)) return null;
-				const fragments: string[] = [];
-				for (const block of event.content) {
-					if (
-						typeof block === "object" && block !== null &&
-						"type" in block && block.type === "text" &&
-						"text" in block && typeof block.text === "string"
-					) fragments.push(block.text);
-				}
-				return fragments.join("") || null;
-			},
+			extractAnthropicText,
 			onChunk,
 			signal,
 		),

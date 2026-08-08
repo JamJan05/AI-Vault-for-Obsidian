@@ -91,6 +91,15 @@ const en: TranslationDict = {
 	settings_local_type_name:    "Local API Type",
 	settings_local_baseurl_name: "Base URL",
 	settings_local_baseurl_desc: "LM Studio usually uses http://localhost:1234/v1. Ollama usually uses http://localhost:11434.",
+	settings_local_baseurl_remote_http: (host: string) =>
+		`⚠️ ${host} is not a loopback address and this Base URL uses plain HTTP. Your messages, note excerpts, RAG chunks and Local API key will be sent unencrypted over the network. Use https:// unless the server runs on this machine.`,
+	settings_local_baseurl_bad_scheme: (scheme: string) =>
+		`⛔ Unsupported scheme "${scheme}" in the Base URL. Only http:// and https:// are allowed; requests will be refused.`,
+	settings_local_baseurl_invalid:
+		"⛔ The Base URL is not a valid http:// or https:// address. Requests will be refused until it is corrected.",
+	settings_local_baseurl_credentials:
+		"⚠️ The Base URL contains a username and password. Put the credential in the Local API key field instead — URLs end up in logs and error messages.",
+	settings_local_refresh_generic: "the Local API did not respond as expected",
 	settings_local_api_key_name: "Local API key",
 	settings_local_api_key_desc: "Optional. Required only for authenticated Ollama/OpenAI-compatible endpoints such as Ollama Cloud or third-party LLM gateways. Leave empty for local Ollama or LM Studio.",
 	settings_local_refresh_name: "Refresh models",
@@ -433,6 +442,15 @@ const pl: TranslationDict = {
 	settings_local_type_name:    "Typ lokalnego API",
 	settings_local_baseurl_name: "Base URL",
 	settings_local_baseurl_desc: "LM Studio zwykle używa http://localhost:1234/v1. Ollama zwykle używa http://localhost:11434.",
+	settings_local_baseurl_remote_http: (host: string) =>
+		`⚠️ ${host} nie jest adresem loopback, a ten Base URL używa zwykłego HTTP. Twoje wiadomości, fragmenty notatek, fragmenty RAG i klucz Local API zostaną wysłane przez sieć bez szyfrowania. Użyj https://, chyba że serwer działa na tym komputerze.`,
+	settings_local_baseurl_bad_scheme: (scheme: string) =>
+		`⛔ Nieobsługiwany schemat „${scheme}” w Base URL. Dozwolone są wyłącznie http:// i https://; żądania zostaną odrzucone.`,
+	settings_local_baseurl_invalid:
+		"⛔ Base URL nie jest poprawnym adresem http:// ani https://. Żądania będą odrzucane do czasu poprawienia adresu.",
+	settings_local_baseurl_credentials:
+		"⚠️ Base URL zawiera nazwę użytkownika i hasło. Wpisz poświadczenie w polu klucza Local API — adresy URL trafiają do logów i komunikatów o błędach.",
+	settings_local_refresh_generic: "lokalne API nie odpowiedziało zgodnie z oczekiwaniem",
 	settings_local_api_key_name: "Local API key",
 	settings_local_api_key_desc: "Optional. Required only for authenticated Ollama/OpenAI-compatible endpoints such as Ollama Cloud or third-party LLM gateways. Leave empty for local Ollama or LM Studio.",
 	settings_local_refresh_name: "Odśwież modele",
