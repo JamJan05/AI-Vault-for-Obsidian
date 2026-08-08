@@ -36,13 +36,19 @@ updates:
         patterns:
           - "@types/*"
     ignore:
-      # esbuild majors change the bytes of main.js and therefore break
-      # byte-for-byte reproducibility against an already published release.
-      # Bumping it is a deliberate, release-time decision — see EXC-2026-001 in
+      # esbuild changes the bytes of main.js and therefore breaks byte-for-byte
+      # reproducibility against an already published release. Bumping it is a
+      # deliberate, release-time decision — see EXC-2026-001 in
       # .compliance/ai-vault-policy.json — not an automatic pull request.
+      #
+      # Both major AND minor are ignored on purpose. esbuild is a 0.x package, so
+      # 0.21 -> 0.28 is a *minor* bump by semver arithmetic even though esbuild
+      # treats 0.x minors as breaking. Ignoring only `semver-major` lets exactly
+      # the bump we care about through, which is how PR #16 was opened.
       - dependency-name: esbuild
         update-types:
           - version-update:semver-major
+          - version-update:semver-minor
       # The obsidian typings floor is tied to manifest.minAppVersion. Raising it
       # is a product decision about which Obsidian versions stay supported.
       - dependency-name: obsidian
