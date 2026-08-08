@@ -271,14 +271,27 @@ worth requiring if you only require one.
 ## Repository settings that CI cannot set
 
 These are account-level settings, not files, and must be enabled by the owner in
-**Settings → Code security**:
+**Settings → Code security**. Enable them in this order — the later ones depend on
+the earlier ones.
 
-- **Dependabot alerts** — currently disabled. Without them, an advisory published
-  between scheduled runs is not reported until the next weekly run.
-- **Dependabot security updates** — automatic fix pull requests.
-- **Private vulnerability reporting** — required for the flow described in
-  `SECURITY.md`.
-- **Code scanning** — the CodeQL job uploads results here.
+| Setting | Required by | What breaks without it |
+|---|---|---|
+| **Dependency graph** | `Dependency review` job | The job fails with *"Dependency review is not supported on this repository"*. The action diffs the dependency graph between the pull request's base and head; with no graph there is nothing to diff. |
+| **Dependabot alerts** | — | An advisory published between scheduled runs is not reported until the next weekly `npm audit`. Requires the dependency graph. |
+| **Dependabot security updates** | — | No automatic fix pull requests. Requires alerts. |
+| **Secret scanning** and **push protection** | — | Free on public repositories. Push protection rejects a commit containing a credential before it reaches the remote — the `secret-scan` check only catches it afterwards. |
+| **Private vulnerability reporting** | `SECURITY.md` | The reporting flow documented in `SECURITY.md` is unavailable, and reporters fall back to public issues. |
+| **Code scanning** | `CodeQL` job | The analysis runs but has nowhere to upload its results. |
+
+> The dependency graph is enabled by default on most public repositories, but it
+> can be turned off, and a repository converted from private does not always have
+> it on. Verify rather than assume:
+>
+> ```bash
+> gh api repos/<owner>/<repo>/dependency-graph/sbom --jq '.sbom.name'
+> ```
+>
+> A `404` means the graph is off and the `Dependency review` job will fail.
 
 ---
 
