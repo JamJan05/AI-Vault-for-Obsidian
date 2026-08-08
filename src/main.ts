@@ -325,13 +325,15 @@ export default class GPTPlugin extends Plugin {
 		if (this.settings.apiKeysInSync || !this.externalStorage.isEnabled) {
 			await this.saveData(toSave);
 		} else {
-			// Keys go to keys.json outside the vault, the rest to data.json
+			// Keys go to keys.json outside the vault, the rest to data.json.
+			// restrictPermissions tightens the file to the current user where the OS
+			// supports it — this is the only file the plugin writes that holds secrets.
 			const keysPath = this.externalStorage.resolve(FILE_API_KEYS);
 			await this.externalStorage.writeJson(keysPath, {
 				apiKey:       this.settings.apiKey       ?? "",
 				claudeApiKey: this.settings.claudeApiKey ?? "",
 				localApiKey:  this.settings.localApiKey  ?? "",
-			});
+			}, { restrictPermissions: true });
 			delete toSave.apiKey;
 			delete toSave.claudeApiKey;
 			delete toSave.localApiKey;
@@ -364,19 +366,36 @@ export default class GPTPlugin extends Plugin {
 		if (!(await this.externalStorage.exists(keysPath))) {
 			const hasOld = this.settings.apiKey || this.settings.claudeApiKey || this.settings.localApiKey;
 			if (hasOld) {
-				// Migration: data.json → keys.json
-				await this.externalStorage.writeJson(keysPath, {
+				// Migration: data.json → keys.json.
+				// The values are captured first: the block below strips them from the
+				// object that goes to data.json, and the in-memory settings must keep
+				// working for the rest of the session.
+				const migrated = {
 					apiKey:       this.settings.apiKey       ?? "",
 					claudeApiKey: this.settings.claudeApiKey ?? "",
 					localApiKey:  this.settings.localApiKey  ?? "",
-				});
-				delete (this.settings as unknown as Record<string, unknown>).apiKey;
-				delete (this.settings as unknown as Record<string, unknown>).claudeApiKey;
-				delete (this.settings as unknown as Record<string, unknown>).localApiKey;
-				await this.saveData({ ...this.settings });
-				this.settings.apiKey       = this.settings.apiKey       ?? "";
-				this.settings.claudeApiKey = this.settings.claudeApiKey ?? "";
-				this.settings.localApiKey  = this.settings.localApiKey  ?? "";
+				};
+				const written = await this.externalStorage.writeJson(
+					keysPath,
+					migrated,
+					{ restrictPermissions: true },
+				);
+				if (!written) {
+					// keys.json could not be written — leave data.json untouched so the
+					// keys are not dropped on the floor.
+					console.error("[AI-Vault] Key migration aborted: keys.json could not be written");
+					return;
+				}
+
+				const withoutKeys = { ...this.settings } as unknown as Record<string, unknown>;
+				delete withoutKeys.apiKey;
+				delete withoutKeys.claudeApiKey;
+				delete withoutKeys.localApiKey;
+				await this.saveData(withoutKeys);
+
+				this.settings.apiKey       = migrated.apiKey;
+				this.settings.claudeApiKey = migrated.claudeApiKey;
+				this.settings.localApiKey  = migrated.localApiKey;
 				new Notice(t("notice_keys_migrated"), 4000);
 			}
 			return;

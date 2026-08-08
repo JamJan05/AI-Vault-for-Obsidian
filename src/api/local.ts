@@ -1,41 +1,38 @@
 import { requestUrl } from "obsidian";
 
+import {
+	extractOllamaContent,
+	extractOpenAIContent,
+	normalizeLocalBaseUrl,
+	parseLocalModelList,
+} from "./contracts";
+import { assessLocalBaseUrl } from "../security/urlPolicy";
+import { sanitizeErrorDetail, safeErrorMessage } from "../security/redact";
 import type { ChatMessage } from "../types";
-import type { LocalApiType, PluginSettings } from "../settings";
+import type { PluginSettings } from "../settings";
 
-// ─── Response shapes (validated with type guards) ───────────────────────────────
-
-interface OpenAIModelsResponse {
-	data?: Array<{ id?: unknown }>;
-}
-
-interface OllamaModelsResponse {
-	models?: Array<{ name?: unknown }>;
-}
-
-interface OpenAIChatResponse {
-	choices?: Array<{ message?: { content?: unknown } }>;
-}
-
-interface OllamaChatResponse {
-	message?: { content?: unknown };
-}
+// Re-exported so existing importers (SettingsTab, tests) keep one entry point.
+export { normalizeLocalBaseUrl, parseLocalModelList } from "./contracts";
 
 export interface LocalCallOptions {
 	temperature?: number;
 	maxTokens?:   number;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null;
-}
-
-function errorMessage(err: unknown): string {
-	return err instanceof Error ? err.message : String(err);
-}
-
 function isAuthenticationFailure(status: number): boolean {
 	return status === 401 || status === 403;
+}
+
+/**
+ * Fixed, secret-free message for a non-2xx Local API response.
+ *
+ * The response body comes from an endpoint the user configured and that this
+ * plugin does not control, so only a sanitized, length-capped fragment is ever
+ * attached — never the raw body.
+ */
+function localHttpError(status: number, body: unknown, fallbackHint: string): Error {
+	const detail = sanitizeErrorDetail(body);
+	return new Error(`Local API error ${status}: ${detail || fallbackHint}`);
 }
 
 export function buildLocalApiHeaders(settings: PluginSettings, includeJsonContentType = false): Record<string, string> {
@@ -57,56 +54,40 @@ async function requestLocal(options: {
 	try {
 		return await requestUrl({ ...options, throw: false });
 	} catch (err: unknown) {
-		throw new Error(
-			`Could not connect to Local API. Check that LM Studio/Ollama is running and the Base URL is correct. ${errorMessage(err)}`,
-		);
+		throw new Error(safeErrorMessage(
+			"Could not connect to Local API. Check that LM Studio/Ollama is running and the Base URL is correct.",
+			err,
+		));
 	}
 }
-
-// ─── URL normalization ──────────────────────────────────────────────────────────
 
 /**
- * Normalizes a local Base URL.
- * - Strips trailing slashes.
- * - For "openai-compatible": ensures the URL ends with /v1.
- * - For "ollama": leaves the host as-is (endpoints are /api/tags, /api/chat).
+ * Resolves the Base URL and refuses anything the URL policy rejects.
+ *
+ * A remote plaintext endpoint is NOT blocked here — the user may legitimately run
+ * a server on their LAN — but the settings UI warns before the value is saved and
+ * PRIVACY.md documents the consequence.
  */
-export function normalizeLocalBaseUrl(baseUrl: string, localApiType: LocalApiType): string {
-	const url = (baseUrl ?? "").trim().replace(/\/+$/, "");
-	if (localApiType === "openai-compatible" && url.length > 0 && !/\/v1$/i.test(url)) {
-		return `${url}/v1`;
-	}
-	return url;
-}
+function resolveBaseUrl(settings: PluginSettings): string {
+	const base = normalizeLocalBaseUrl(settings.localBaseUrl, settings.localApiType);
+	if (!base) throw new Error("Local API Base URL is empty.");
 
-// ─── Model list parsing ─────────────────────────────────────────────────────────
-
-export function parseLocalModelList(data: unknown, type: LocalApiType): string[] {
-	if (type === "openai-compatible") {
-		if (!isRecord(data) || !Array.isArray(data.data)) {
-			throw new Error("Invalid OpenAI-compatible response. Expected data[].id.");
-		}
-		const response = data as OpenAIModelsResponse;
-		return response.data
-			?.map(model => model.id)
-			.filter((id): id is string => typeof id === "string" && id.length > 0) ?? [];
+	const assessment = assessLocalBaseUrl(base);
+	if (!assessment.usable) {
+		throw new Error(
+			assessment.reason === "forbidden-scheme"
+				? `Local API Base URL uses an unsupported scheme (${assessment.protocol ?? "unknown"}). Use http:// or https://.`
+				: "Local API Base URL is not a valid http:// or https:// address.",
+		);
 	}
 
-	if (!isRecord(data) || !Array.isArray(data.models)) {
-		throw new Error("Invalid Ollama response. Expected models[].name.");
-	}
-	const response = data as OllamaModelsResponse;
-	return response.models
-		?.map(model => model.name)
-		.filter((name): name is string => typeof name === "string" && name.length > 0) ?? [];
+	return base;
 }
 
 // ─── Fetch available models ─────────────────────────────────────────────────────
 
 export async function fetchLocalModels(settings: PluginSettings): Promise<string[]> {
-	const base = normalizeLocalBaseUrl(settings.localBaseUrl, settings.localApiType);
-	if (!base) throw new Error("Local API Base URL is empty.");
-
+	const base = resolveBaseUrl(settings);
 	const url  = settings.localApiType === "ollama" ? `${base}/api/tags` : `${base}/models`;
 
 	const response = await requestLocal({
@@ -118,7 +99,7 @@ export async function fetchLocalModels(settings: PluginSettings): Promise<string
 		throw new Error("Authentication failed. Check your Local API key and Base URL.");
 	}
 	if (response.status < 200 || response.status >= 300) {
-		throw new Error(`Local API error ${response.status}: ${response.text || "Check that the Base URL and API type are correct."}`);
+		throw localHttpError(response.status, response.text, "Check that the Base URL and API type are correct.");
 	}
 
 	const models = parseLocalModelList(response.json, settings.localApiType);
@@ -142,28 +123,10 @@ async function postLocal(settings: PluginSettings, url: string, body: Record<str
 		throw new Error("Authentication failed. Check your Local API key and Base URL.");
 	}
 	if (response.status < 200 || response.status >= 300) {
-		throw new Error(`Local API error ${response.status}: ${response.text}`);
+		throw localHttpError(response.status, response.text, "The Local API rejected the request.");
 	}
 
 	return response.json;
-}
-
-function extractOpenAIContent(data: unknown): string {
-	if (!isRecord(data) || !Array.isArray(data.choices)) {
-		throw new Error("Invalid OpenAI-compatible response. Expected choices[0].message.content.");
-	}
-	const response = data as OpenAIChatResponse;
-	const content  = response.choices?.[0]?.message?.content;
-	return typeof content === "string" ? content.trim() : "";
-}
-
-function extractOllamaContent(data: unknown): string {
-	if (!isRecord(data) || !isRecord(data.message)) {
-		throw new Error("Invalid Ollama response. Expected message.content.");
-	}
-	const response = data as OllamaChatResponse;
-	const content  = response.message?.content;
-	return typeof content === "string" ? content.trim() : "";
 }
 
 /**
@@ -179,9 +142,7 @@ export async function callLocalApi(
 		throw new Error("No local model selected. Start your local server, refresh models, and select a model.");
 	}
 
-	const base            = normalizeLocalBaseUrl(settings.localBaseUrl, settings.localApiType);
-	if (!base) throw new Error("Local API Base URL is empty.");
-
+	const base            = resolveBaseUrl(settings);
 	const payloadMessages = messages.map(m => ({ role: m.role, content: m.content }));
 
 	if (settings.localApiType === "ollama") {

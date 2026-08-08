@@ -6,3 +6,10 @@ Thumbs.db
 data.json
 .codex/
 .agents/
+
+.testbuild/
+compliance-report.json
+compliance-report.sarif
+sbom.cdx.json
+security-privacy-failure-report.md
+security-privacy-success-report.md

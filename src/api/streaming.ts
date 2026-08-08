@@ -2,6 +2,7 @@ import { requestUrl } from "obsidian";
 
 import { t } from "../i18n";
 import { ModelAccessError } from "../models";
+import { sanitizeErrorDetail } from "../security/redact";
 
 export interface StreamUsage {
 	input:     number;
@@ -58,14 +59,18 @@ function parseUsage(response: Record<string, unknown>): StreamUsage | null {
 
 /** Throws a provider-aware error for a failed Obsidian requestUrl response. */
 export function throwHttpError(response: HttpResponse, modelHint?: string | null): never {
-	let errMsg = `HTTP ${response.status}`;
+	const statusMsg = `HTTP ${response.status}`;
+	let errMsg = statusMsg;
 	let errCode: string | null = null;
 
 	if (isRecord(response.json)) {
 		const error = isRecord(response.json.error) ? response.json.error : null;
-		errMsg = (error ? readString(error, "message") : null)
-			?? readString(response.json, "message")
-			?? errMsg;
+		const raw = (error ? readString(error, "message") : null)
+			?? readString(response.json, "message");
+		// Provider error strings routinely echo the submitted credential back
+		// ("Incorrect API key provided: sk-…"), so they are sanitized before they
+		// can reach a Notice, the console, or an exported conversation.
+		errMsg = sanitizeErrorDetail(raw) || statusMsg;
 		errCode = (error ? readString(error, "code") : null)
 			?? (error ? readString(error, "type") : null);
 	}
@@ -127,11 +132,9 @@ export async function requestCompletion(
 
 	const providerError = isRecord(response.json.error) ? response.json.error : null;
 	if (providerError || response.json.type === "error") {
-		throw new Error(
-			(providerError ? readString(providerError, "message") : null)
-				?? readString(response.json, "message")
-				?? t("err_stream"),
-		);
+		const raw = (providerError ? readString(providerError, "message") : null)
+			?? readString(response.json, "message");
+		throw new Error(sanitizeErrorDetail(raw) || t("err_stream"));
 	}
 
 	const text = extractText(response.json)?.trim() ?? "";

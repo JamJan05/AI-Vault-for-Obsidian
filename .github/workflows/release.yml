@@ -5,20 +5,34 @@ on:
     types:
       - published
 
+# Nothing at workflow level needs write access; the publishing job grants its own.
 permissions:
-  attestations: write
-  contents: write
-  id-token: write
+  contents: read
+
+concurrency:
+  # One publish at a time per tag. Never cancel a release in progress: a
+  # half-uploaded release is worse than a queued one.
+  group: release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      # attestations + id-token: sign the build provenance.
+      # contents: write: push the version commit and upload the release assets.
+      attestations: write
+      contents: write
+      id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.release.tag_name }}
           fetch-depth: 0
+          # Credentials are deliberately kept: this job pushes the version commit
+          # back to main and uploads the release assets.
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Validate tag is semver
@@ -42,9 +56,10 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: "20"
+          node-version: "22"
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
@@ -81,14 +96,46 @@ jobs:
           }
           NODE
 
+      - name: Type check, lint and test
+        # A release must not be built from code that does not pass the same gate
+        # a pull request has to pass.
+        run: |
+          npm run typecheck
+          npm run lint
+          npm test
+
       - name: Build
         run: npm run build
 
-      - name: Attest release assets
-        uses: actions/attest-build-provenance@v2
+      - name: Verify manifest, versions and release artefacts
+        run: node scripts/compliance/verify-release-artifacts.mjs
+
+      - name: Run the security and privacy compliance checks
+        # Fail closed: a release is never published from a tree that fails the
+        # compliance gate.
+        run: npm run compliance
+
+      - name: Upload the compliance report
+        if: ${{ always() && (hashFiles('security-privacy-failure-report.md') != '' || hashFiles('security-privacy-success-report.md') != '') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
+          name: release-compliance-report-${{ github.event.release.tag_name }}
+          path: |
+            security-privacy-failure-report.md
+            security-privacy-success-report.md
+            compliance-report.json
+            sbom.cdx.json
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          # Every file uploaded below must appear here, otherwise a consumer can
+          # verify some published artefacts but not others.
           subject-path: |
             main.js
+            manifest.json
             styles.css
 
       - name: Commit updated version files to main

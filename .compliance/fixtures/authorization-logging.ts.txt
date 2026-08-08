@@ -1,0 +1,10 @@
+// Fixture: source that leaks credentials and note content into the console.
+// The logging-hygiene check must flag every line below.
+// Not compiled: the .txt suffix keeps it out of tsconfig and out of the bundle.
+
+export function badLogging(settings: { apiKey: string }, note: { content: string }): void {
+	console.log("[AI-Vault] using apiKey:", settings.apiKey);
+	console.error("[AI-Vault] Authorization: Bearer " + settings.apiKey);
+	console.warn("[AI-Vault] note content:", note.content);
+	console.log("[AI-Vault] raw response:", response.text);
+}

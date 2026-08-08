@@ -165,6 +165,35 @@ The entire interface is fully localized in **English** and **Polish**. Switch it
 
 ## 🔐 Privacy And Storage
 
+> **Full detail:** [`PRIVACY.md`](PRIVACY.md) documents exactly what is sent, to whom, when, where it is stored and how to delete it. This section is the summary.
+
+### 🌐 Network use
+
+AI-Vault contacts three kinds of endpoint and nothing else:
+
+| Service | Host | Why |
+| --- | --- | --- |
+| OpenAI | `api.openai.com` | Chat completions, the Responses API (GPT-5 with web search), and text embeddings for the RAG index |
+| Anthropic | `api.anthropic.com` | Messages API, including Anthropic's server-side web search |
+| Local API | the Base URL **you** configure | Chat with a model server you run or choose |
+
+Every request is caused by something you did — sending a message, refreshing the model list, or indexing. The plugin has **no backend of its own**, sends **no telemetry, analytics or crash reports**, and has no install, device or vault identifier.
+
+### 🔑 Accounts, API keys and costs
+
+- OpenAI and Anthropic each require **your own account and API key**.
+- Those providers **bill you for usage**, including the embedding requests the RAG index makes. AI-Vault itself is free and never charges anything.
+- A local model server needs no account and costs nothing beyond your own hardware.
+- Web search is billed by the provider that performs it.
+
+### 📚 What RAG sends
+
+With RAG enabled and an OpenAI key configured, the text of **every indexed note** is sent to OpenAI's embeddings endpoint — not only the notes you are asking about. Indexing is on by default and starts when the plugin loads.
+
+To control this: turn off **Auto-index**, use **Ignored RAG paths**, or leave the OpenAI key empty (RAG then falls back to keyword-only search, which runs entirely on your machine).
+
+### 💾 Storage
+
 By default, AI-Vault stores plugin data outside your vault in a local folder next to the vault directory:
 
 ```text
@@ -284,9 +313,25 @@ styles.css
 
 ---
 
+## 🛡️ Security
+
+Found a security problem? **Do not open a public issue.** Report it privately — see [`SECURITY.md`](SECURITY.md) for the process, and for what must never appear in a report (API keys, private note content, unredacted logs).
+
+Release assets carry a signed build provenance attestation and the build is reproducible from source:
+
+```bash
+gh attestation verify main.js -R JamJan05/AI-Vault-for-Obsidian
+```
+
+What the automated security and privacy checks verify — and what they deliberately do not — is documented in [`docs/SECURITY-PRIVACY-CHECKS.md`](docs/SECURITY-PRIVACY-CHECKS.md).
+
+---
+
 ## 🐛 Reporting Issues
 
 Found a bug or have a feature request? Open an issue on [GitHub Issues](https://github.com/JamJan05/AI-Vault-for-Obsidian/issues).
+
+> ⚠️ Never paste an API key, private note content or an unredacted console log into a public issue.
 
 Please include:
 

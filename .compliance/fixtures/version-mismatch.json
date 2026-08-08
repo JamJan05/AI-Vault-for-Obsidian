@@ -1,0 +1,9 @@
+{
+  "description": "manifest / package / lockfile / versions.json that disagree. version-consistency must FAIL on every field.",
+  "manifest": { "id": "ai-vault", "name": "AI-Vault", "version": "1.2.0", "minAppVersion": "1.7.2", "description": "Fixture." },
+  "package": { "name": "ai-vault", "version": "1.1.1" },
+  "lock": { "version": "1.0.9" },
+  "versions": { "1.1.1": "1.7.2" },
+  "tags": ["1.1.1"],
+  "expectedProblems": ["package.json", "package-lock.json", "versions.json", "git tag"]
+}

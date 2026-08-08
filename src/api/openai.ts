@@ -1,16 +1,9 @@
 import { THINKING_MODES, isGPT5, isGPT5Search, mapEffortForGPT5, WEB_SEARCH_CAPABLE } from "../models";
 import { withRetry } from "../utils";
 import { requestCompletion } from "./streaming";
+import { extractOpenAIChatText, extractOpenAIResponsesText } from "./contracts";
 import type { ChatMessage } from "../types";
 import type { StreamResult } from "./streaming";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === "object" && value !== null;
-}
-
-function isUnknownArray(value: unknown): value is unknown[] {
-	return Array.isArray(value);
-}
 
 // ─── Chat Completions ─────────────────────────────────────────────────────────
 
@@ -93,12 +86,7 @@ export async function callOpenAI(
 			"https://api.openai.com/v1/chat/completions",
 			{ "Authorization": `Bearer ${apiKey}` },
 			body,
-			(event) => {
-					if (!isUnknownArray(event.choices)) return null;
-					const first = event.choices[0];
-					if (!isRecord(first) || !isRecord(first.message)) return null;
-					return typeof first.message.content === "string" ? first.message.content : null;
-			},
+			extractOpenAIChatText,
 			onChunk,
 			signal,
 		),
@@ -155,19 +143,7 @@ export async function callOpenAIResponses(
 		"https://api.openai.com/v1/responses",
 		{ "Authorization": `Bearer ${apiKey}` },
 		body,
-		(response) => {
-			if (!isUnknownArray(response.output)) return null;
-			const fragments: string[] = [];
-			for (const item of response.output) {
-				if (!isRecord(item) || !isUnknownArray(item.content)) continue;
-				for (const content of item.content) {
-					if (isRecord(content) && content.type === "output_text" && typeof content.text === "string") {
-						fragments.push(content.text);
-					}
-				}
-			}
-			return fragments.join("") || null;
-		},
+		extractOpenAIResponsesText,
 		onChunk,
 		signal,
 	));

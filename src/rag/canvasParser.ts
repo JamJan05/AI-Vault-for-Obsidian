@@ -36,7 +36,14 @@ interface CanvasData {
 export function parseCanvasToText(raw: string, basename: string): string {
 	let data: CanvasData;
 	try {
-		data = JSON.parse(raw) as CanvasData;
+		const parsed: unknown = JSON.parse(raw);
+		// A .canvas file is attacker-influenced input like any other note. Valid JSON
+		// that is not an object (null, a number, an array) must not reach the field
+		// access below.
+		if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+			return t("canvas_parse_error", basename);
+		}
+		data = parsed;
 	} catch {
 		return t("canvas_parse_error", basename);
 	}

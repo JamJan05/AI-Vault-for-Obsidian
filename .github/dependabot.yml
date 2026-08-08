@@ -1,0 +1,69 @@
+version: 2
+
+# Dependabot keeps the two things that can compromise a release fresh: the npm
+# build toolchain, and the actions that build and publish it.
+#
+# Note: opening pull requests is only half of it. Dependabot *alerts* are a
+# repository setting (Settings → Code security) and are currently disabled for
+# this repository; enable them so a newly published advisory is reported even
+# between scheduled runs.
+
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels:
+      - dependencies
+      - security
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+    groups:
+      # One pull request for the lint toolchain rather than five: these move
+      # together and reviewing them together is what actually happens.
+      lint-toolchain:
+        patterns:
+          - "eslint"
+          - "eslint-*"
+          - "@typescript-eslint/*"
+      types:
+        patterns:
+          - "@types/*"
+    ignore:
+      # esbuild majors change the bytes of main.js and therefore break
+      # byte-for-byte reproducibility against an already published release.
+      # Bumping it is a deliberate, release-time decision — see EXC-2026-001 in
+      # .compliance/ai-vault-policy.json — not an automatic pull request.
+      - dependency-name: esbuild
+        update-types:
+          - version-update:semver-major
+      # The obsidian typings floor is tied to manifest.minAppVersion. Raising it
+      # is a product decision about which Obsidian versions stay supported.
+      - dependency-name: obsidian
+        update-types:
+          - version-update:semver-major
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - security
+      - github-actions
+    commit-message:
+      prefix: "chore(actions)"
+    groups:
+      actions:
+        patterns:
+          - "*"

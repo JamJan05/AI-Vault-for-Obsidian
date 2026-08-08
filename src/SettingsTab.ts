@@ -5,6 +5,9 @@ import { detectProvider } from "./models";
 import { fetchLocalModels, normalizeLocalBaseUrl } from "./api/local";
 import { FILE_API_KEYS } from "./constants";
 import { debounce } from "./utils";
+import { assessLocalBaseUrl } from "./security/urlPolicy";
+import { sanitizeErrorDetail } from "./security/redact";
+import type { BaseUrlAssessment } from "./security/urlPolicy";
 import type { SettingDefinitionGroup, SettingDefinitionItem, SettingDefinitionRender } from "obsidian";
 import type { ExternalStorage } from "./storage/ExternalStorage";
 import type { HistoryManager }  from "./history/HistoryManager";
@@ -57,6 +60,11 @@ export class GPTSettingsTab extends PluginSettingTab {
 	 * setting is saved immediately and the index is swept once the user stops typing.
 	 */
 	private readonly purgeIgnoredRagPaths = debounce(() => this.plugin.rag.applyIgnorePatterns(), 800);
+
+	/** Live banner under the Base URL field; recreated on every render. */
+	private baseUrlWarningEl: HTMLElement | null = null;
+	/** Last verdict a Notice was shown for, so typing does not spam the user. */
+	private lastWarnedBaseUrlVerdict: string | null = null;
 
 	constructor(app: App, private readonly plugin: PluginWithDeps) {
 		super(app, plugin as never);
@@ -506,11 +514,21 @@ export class GPTSettingsTab extends PluginSettingTab {
 						.onChange(async (value: string) => {
 							this.plugin.settings.localBaseUrl = value.trim();
 							await this.plugin.saveSettings();
+							// The Base URL decides where messages, note excerpts and RAG
+							// chunks are sent, so the verdict is recomputed on every edit.
+							this.refreshBaseUrlWarning(true);
 						});
 					txt.inputEl.addClass("gpt-settings-input-full");
 				});
 			},
 		};
+
+		// Persistent verdict banner: plain HTTP to anything that is not a real
+		// loopback address means chat content leaves the machine unencrypted.
+		const baseUrlWarningRow = this.bannerRow("gpt-settings-warning", el => {
+			this.baseUrlWarningEl = el;
+			this.refreshBaseUrlWarning(false);
+		});
 
 		const apiKeyRow: SettingDefinitionRender = {
 			name: t("settings_local_api_key_name"),
@@ -539,7 +557,9 @@ export class GPTSettingsTab extends PluginSettingTab {
 						btn.setButtonText(t("settings_local_refreshing")).setDisabled(true);
 						void this.refreshLocalModelsInSelector()
 							.catch((err: unknown) => {
-								const message = err instanceof Error ? err.message : String(err);
+								// The error can carry a fragment of the endpoint's response,
+								// so it is sanitized before it reaches the console or a Notice.
+								const message = sanitizeErrorDetail(err) || t("settings_local_refresh_generic");
 								console.error("Local API refresh failed:", message);
 								new Notice(t("settings_local_refresh_fail", message), 7000);
 							})
@@ -581,8 +601,64 @@ export class GPTSettingsTab extends PluginSettingTab {
 			type: "group",
 			heading: t("settings_local_title"),
 			visible: () => this.plugin.settings.provider === "local",
-			items: [descRow, typeRow, baseUrlRow, apiKeyRow, refreshRow, modelRow],
+			items: [descRow, typeRow, baseUrlRow, baseUrlWarningRow, apiKeyRow, refreshRow, modelRow],
 		};
+	}
+
+	// ── Base URL verdict ───────────────────────────────────────────────────────
+
+	/** Current verdict for the configured Base URL. */
+	private assessBaseUrl(): BaseUrlAssessment {
+		return assessLocalBaseUrl(normalizeLocalBaseUrl(
+			this.plugin.settings.localBaseUrl ?? "",
+			this.plugin.settings.localApiType,
+		));
+	}
+
+	/**
+	 * Repaints the banner under the Base URL field and, when `notify` is set,
+	 * raises a one-shot Notice as the verdict changes. The Notice is what makes
+	 * the warning visible when the settings tab is not the focused element.
+	 */
+	private refreshBaseUrlWarning(notify: boolean): void {
+		const el = this.baseUrlWarningEl;
+		const assessment = this.assessBaseUrl();
+		const message = this.baseUrlWarningText(assessment);
+
+		if (el) {
+			el.empty();
+			el.toggleClass("gpt-ctx-hidden", message === null);
+			if (message !== null) el.setText(message);
+		}
+
+		if (!notify) {
+			this.lastWarnedBaseUrlVerdict = message === null ? null : assessment.verdict;
+			return;
+		}
+
+		const key = message === null ? null : assessment.verdict;
+		if (key !== this.lastWarnedBaseUrlVerdict) {
+			this.lastWarnedBaseUrlVerdict = key;
+			if (message !== null) new Notice(message, 8000);
+		}
+	}
+
+	/** Warning text for a verdict, or null when nothing needs to be said. */
+	private baseUrlWarningText(assessment: BaseUrlAssessment): string | null {
+		if (assessment.reason === "empty") return null;
+
+		if (!assessment.usable) {
+			return assessment.reason === "forbidden-scheme"
+				? t("settings_local_baseurl_bad_scheme", assessment.protocol ?? "?")
+				: t("settings_local_baseurl_invalid");
+		}
+		if (assessment.verdict === "remote-http") {
+			return t("settings_local_baseurl_remote_http", assessment.hostname ?? "?");
+		}
+		if (assessment.hasEmbeddedCredentials) {
+			return t("settings_local_baseurl_credentials");
+		}
+		return null;
 	}
 
 	private getDefaultLocalBaseUrl(localApiType: LocalApiType): string {

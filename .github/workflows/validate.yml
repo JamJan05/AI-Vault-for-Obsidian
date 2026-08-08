@@ -17,15 +17,25 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: validate-version-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     name: Check version consistency
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0 # need all tags
+          # This job only reads the repository, so the token must not be left
+          # behind in .git/config where a later step could reuse it.
+          persist-credentials: false
 
       - name: Validate manifest version, internal consistency and matching tag
         run: |

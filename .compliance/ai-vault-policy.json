@@ -1,0 +1,252 @@
+{
+  "version": "1.0.0",
+  "description": "Machine-readable security and privacy policy for AI-Vault. The checks in scripts/compliance/ read this file; changing a threshold here changes what blocks a pull request, so every relaxation must be an entry under `exceptions` with an owner, a justification and an expiry.",
+  "network": {
+    "note": "Every host the plugin may contact. Anything reachable from src/ that is not listed here is treated as undisclosed network use (OBS-POL-008) and fails.",
+    "allowedHosts": [
+      {
+        "host": "api.openai.com",
+        "purpose": "OpenAI chat completions, the Responses API and text embeddings for the RAG index.",
+        "triggeredBy": "A chat message sent with the OpenAI provider selected, or RAG indexing while an OpenAI key is configured.",
+        "dataSent": [
+          "chat message",
+          "system prompt",
+          "conversation history",
+          "manually attached note excerpts",
+          "RAG chunks",
+          "project context",
+          "note text submitted for embedding"
+        ],
+        "requiresUserCredential": true
+      },
+      {
+        "host": "api.anthropic.com",
+        "purpose": "Anthropic Messages API, including server-side web search when the user enables it.",
+        "triggeredBy": "A chat message sent with the Anthropic provider selected.",
+        "dataSent": [
+          "chat message",
+          "system prompt",
+          "conversation history",
+          "manually attached note excerpts",
+          "RAG chunks",
+          "project context"
+        ],
+        "requiresUserCredential": true
+      }
+    ],
+    "userConfiguredHost": {
+      "setting": "localBaseUrl",
+      "purpose": "OpenAI-compatible or Ollama server chosen by the user. The plugin ships no default beyond loopback addresses.",
+      "defaults": ["http://localhost:1234/v1", "http://localhost:11434"],
+      "note": "The host is whatever the user types. It is therefore not allowlisted; it is governed by the URL rules below and disclosed in PRIVACY.md."
+    },
+    "forbiddenIndicators": {
+      "note": "Hostnames and SDK identifiers that would indicate telemetry or analytics. Presence in src/ or in the built bundle fails OBS-POL-004.",
+      "hosts": [
+        "sentry.io",
+        "ingest.sentry.io",
+        "posthog.com",
+        "app.posthog.com",
+        "google-analytics.com",
+        "analytics.google.com",
+        "googletagmanager.com",
+        "api.mixpanel.com",
+        "api.amplitude.com",
+        "api.segment.io",
+        "cdn.segment.com",
+        "datadoghq.com",
+        "browser-intake-datadoghq.com",
+        "newrelic.com",
+        "bam.nr-data.net",
+        "bugsnag.com",
+        "rollbar.com",
+        "logrocket.com",
+        "fullstory.com",
+        "hotjar.com",
+        "matomo.cloud",
+        "plausible.io",
+        "umami.is",
+        "statcounter.com"
+      ],
+      "packages": [
+        "@sentry/browser",
+        "@sentry/node",
+        "@sentry/electron",
+        "posthog-js",
+        "posthog-node",
+        "mixpanel-browser",
+        "amplitude-js",
+        "@amplitude/analytics-browser",
+        "@datadog/browser-rum",
+        "@datadog/browser-logs",
+        "analytics-node",
+        "@segment/analytics-next",
+        "newrelic",
+        "@bugsnag/js",
+        "rollbar",
+        "logrocket",
+        "react-ga",
+        "react-ga4"
+      ],
+      "identifierPatterns": [
+        "installId",
+        "installationId",
+        "deviceId",
+        "machineId",
+        "anonymousId",
+        "distinctId",
+        "vaultId",
+        "userId",
+        "telemetry",
+        "analytics",
+        "trackEvent",
+        "sendBeacon"
+      ]
+    }
+  },
+  "urlRules": {
+    "note": "Implemented and unit tested in src/security/urlPolicy.ts. This block is the declarative statement of the same rules so a reviewer can diff intent against code.",
+    "allowedProtocols": ["http:", "https:"],
+    "forbiddenProtocols": ["file:", "javascript:", "data:", "ftp:", "blob:", "ws:", "wss:", "chrome:", "app:"],
+    "plainHttpAllowedWithoutWarningFor": {
+      "exactHostnames": ["localhost"],
+      "ipv4Ranges": ["127.0.0.0/8"],
+      "ipv6Addresses": ["::1", "::ffff:127.0.0.0/8"],
+      "note": "Matching is exact. A hostname that merely contains the substring 'localhost' (localhost.attacker.example, notlocalhost) is remote. 'sub.localhost' is deliberately treated as remote too: RFC 6761 reserves it for loopback but resolution is resolver-dependent, and the safe default for a security control is to warn."
+    },
+    "remotePlainHttp": {
+      "allowed": true,
+      "requiresVisibleWarning": true,
+      "rationale": "Running a model server on another machine on the LAN is a legitimate, deliberate setup, so it is not blocked. It is warned about because chat messages, note excerpts, RAG chunks and the Local API key travel unencrypted."
+    },
+    "embeddedCredentials": {
+      "allowed": true,
+      "requiresVisibleWarning": true,
+      "rationale": "user:password@host in the Base URL leaks the credential into logs, error messages and settings backups."
+    },
+    "mustUseUrlParser": true,
+    "mustHandleIpv6": true
+  },
+  "storage": {
+    "note": "Files the plugin writes outside the Obsidian vault. Disclosed under OBS-POL-009.",
+    "defaultDirectory": "{parent-of-vault}/{vault-name}-gpt-data",
+    "configurableVia": "externalStoragePath",
+    "files": [
+      { "name": "keys.json", "contains": "OpenAI, Anthropic and Local API keys", "restrictedPermissions": true },
+      { "name": "history-index.json", "contains": "conversation metadata" },
+      { "name": "history/session-*.json", "contains": "full conversation messages" },
+      { "name": "projects.json", "contains": "project names, descriptions and custom system prompts" },
+      { "name": "rag-index.json", "contains": "note chunks and their embedding vectors" }
+    ],
+    "containment": {
+      "enforcedBy": "src/security/paths.ts",
+      "rules": [
+        "Every path segment must be a plain relative segment: no '..', no '.', no absolute path, no UNC path, no drive letter, no NUL byte.",
+        "Every resolved path must remain inside the configured base directory after normalization.",
+        "A rejected path refuses the operation. It never silently falls back to the base directory."
+      ]
+    }
+  },
+  "requiredDocuments": [
+    {
+      "path": "README.md",
+      "requiredSections": [
+        { "id": "network-use", "anyOf": ["Network use", "Data sent to model providers", "Privacy And Storage", "Privacy and storage"] },
+        { "id": "external-files", "anyOf": ["outside your vault", "outside the vault", "next to the vault"] },
+        { "id": "api-keys-and-costs", "anyOf": ["API key", "API keys"] }
+      ]
+    },
+    {
+      "path": "PRIVACY.md",
+      "requiredSections": [
+        { "id": "what-is-sent", "anyOf": ["What is sent", "Data sent"] },
+        { "id": "where-it-is-stored", "anyOf": ["Where data is stored", "Storage locations"] },
+        { "id": "no-telemetry", "anyOf": ["No telemetry", "Telemetry"] },
+        { "id": "retention-and-deletion", "anyOf": ["Retention", "How to delete"] },
+        { "id": "third-parties", "anyOf": ["Third parties", "Third-party services", "Model providers"] },
+        { "id": "obsidian-sync", "anyOf": ["Obsidian Sync"] }
+      ]
+    },
+    {
+      "path": "SECURITY.md",
+      "requiredSections": [
+        { "id": "private-reporting", "anyOf": ["Reporting a vulnerability", "Report a vulnerability", "private"] },
+        { "id": "do-not-post-secrets", "anyOf": ["Do not post", "never include", "Do not include"] },
+        { "id": "supported-versions", "anyOf": ["Supported versions", "Supported version"] }
+      ]
+    }
+  ],
+  "vulnerabilityThresholds": {
+    "npmAudit": {
+      "blockingSeverities": ["high", "critical"],
+      "reportOnlySeverities": ["moderate", "low", "info"],
+      "scope": "all",
+      "note": "Scope is 'all' rather than production-only on purpose: this plugin has no runtime npm dependencies, so a production-only audit would always be empty and would prove nothing. Dev-tool findings are still real supply-chain exposure for anyone who builds or releases the plugin."
+    },
+    "dependencyReview": {
+      "failOnSeverity": "high",
+      "denyLicenses": ["AGPL-1.0-only", "AGPL-1.0-or-later", "AGPL-3.0-only", "AGPL-3.0-or-later", "SSPL-1.0", "BUSL-1.1", "Commons-Clause"]
+    },
+    "secretScan": {
+      "blocking": true,
+      "note": "Any credential-shaped string outside the declared fixture allowlist blocks the run."
+    }
+  },
+  "licensePolicy": {
+    "projectLicense": "MIT",
+    "allowedDependencyLicenses": [
+      "MIT", "ISC", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0", "0BSD", "CC0-1.0", "Unlicense",
+      "BlueOak-1.0.0", "Python-2.0", "CC-BY-4.0", "MIT-0", "WTFPL", "MPL-2.0"
+    ],
+    "deniedDependencyLicenses": [
+      "AGPL-1.0-only", "AGPL-1.0-or-later", "AGPL-3.0-only", "AGPL-3.0-or-later", "SSPL-1.0", "BUSL-1.1", "Commons-Clause", "UNLICENSED"
+    ],
+    "reviewRequiredLicenses": ["GPL-2.0-only", "GPL-2.0-or-later", "GPL-3.0-only", "GPL-3.0-or-later", "LGPL-2.1-or-later", "LGPL-3.0-or-later"],
+    "note": "Only devDependencies exist today and none of them is bundled into main.js, but a copyleft build tool still creates obligations worth knowing about."
+  },
+  "supplyChain": {
+    "allowedRegistries": ["https://registry.npmjs.org/"],
+    "forbidDependencySpecifiers": ["git+", "git://", "github:", "http://", "https://", "file:", "link:", "portal:"],
+    "installScripts": {
+      "policy": "inventory",
+      "note": "Packages with install/preinstall/postinstall scripts are inventoried and reported. CI installs with --ignore-scripts where a build does not need them; esbuild's postinstall is required for its native binary and is the one accepted exception.",
+      "accepted": ["esbuild"]
+    },
+    "lockfile": {
+      "required": true,
+      "mustPinIntegrity": true,
+      "mustMatchPackageJson": true
+    }
+  },
+  "bundlePolicy": {
+    "allowedExternalHostsInBundle": ["api.openai.com", "api.anthropic.com"],
+    "forbiddenInBundle": ["eval(", "new Function(", "child_process", "process.env.npm_config", "require('http')"],
+    "note": "The release bundle is minified, which is expected and is not obfuscation. Anything in the bundle that has no counterpart in src/ is a finding."
+  },
+  "exceptions": [
+    {
+      "id": "EXC-2026-001",
+      "appliesTo": "npmAudit",
+      "target": "esbuild <= 0.24.2 (GHSA-67mh-4wv8-2f99)",
+      "severity": "moderate",
+      "decision": "accepted",
+      "owner": "JamJan05",
+      "justification": "The advisory affects esbuild's development HTTP server (`esbuild serve`), which lets any website send requests to it and read the response. This repository never starts that server: `npm run dev` uses esbuild's watch context and `npm run build` performs a one-shot rebuild, neither of which opens a port. esbuild is a build-time devDependency and is not bundled into main.js. Upgrading to 0.28.x is a bundler major bump that changes the bytes of main.js, which would break byte-for-byte reproducibility against the already published 1.1.1 artifact, so it is scheduled as a deliberate release-time change rather than a drive-by fix.",
+      "reviewedOn": "2026-08-08",
+      "expiresOn": "2026-11-08",
+      "onExpiry": "The exception stops applying and the finding is reported at its natural severity. Moderate is below the blocking threshold, so this does not block a release either way; the expiry exists to force a re-decision."
+    },
+    {
+      "id": "EXC-2026-002",
+      "appliesTo": "secretScan",
+      "target": "tests/security/redact.test.ts, .compliance/fixtures/**",
+      "severity": "informational",
+      "decision": "accepted",
+      "owner": "JamJan05",
+      "justification": "The redaction tests and the compliance fixtures must contain credential-shaped strings in order to prove that redaction works. Every such literal is synthetic and contains the marker 'EXAMPLENOTAREALKEY' or 'NOTAREALSECRET'. The secret scanner requires that marker; any credential-shaped string in these paths without it still fails.",
+      "reviewedOn": "2026-08-08",
+      "expiresOn": "2027-08-08",
+      "onExpiry": "Re-confirm that the fixtures still contain no real credential."
+    }
+  ]
+}
