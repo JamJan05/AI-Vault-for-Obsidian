@@ -263,6 +263,7 @@ jobs:
           set -euo pipefail
 
           failed=0
+          failed_jobs=""
           {
             echo "## Publication gate"
             echo ""
@@ -282,9 +283,17 @@ jobs:
                   blocks="no (not applicable to this event)"
                 else
                   failed=1
+                  failed_jobs="${failed_jobs}${failed_jobs:+, }${name} (skipped)"
                 fi
                 ;;
-              *) failed=1 ;;
+              *)
+                failed=1
+                # Naming the job here is the whole point: the gate itself never
+                # knows *why* a job failed, so it must at least say which one to
+                # open. Pointing at the compliance report would send the reader
+                # to the wrong place whenever compliance is not the failing job.
+                failed_jobs="${failed_jobs}${failed_jobs:+, }${name} (${result})"
+                ;;
             esac
             printf '| %s | %s | %s |\n' "$name" "$result" "$blocks" >> "$GITHUB_STEP_SUMMARY"
           }
@@ -301,8 +310,16 @@ jobs:
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           if [ "$failed" -ne 0 ]; then
-            echo "**Decision: NO-GO — do not publish.**" >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::Publication gate failed. See the compliance report artifact for the per-check detail."
+            {
+              echo "**Decision: NO-GO — do not publish.**"
+              echo ""
+              echo "Blocking job(s): **${failed_jobs}**."
+              echo ""
+              echo "Open that job's log for the cause. The compliance report artifact explains the"
+              echo "*Security and privacy compliance* job only — it says nothing about a build,"
+              echo "CodeQL or dependency-review failure."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Publication gate failed. Blocking job(s): ${failed_jobs}. Open that job's log for the cause."
             exit 1
           fi
 
