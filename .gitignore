@@ -17,3 +17,8 @@ Thumbs.db
 /sbom.cdx.json
 /security-privacy-failure-report.md
 /security-privacy-success-report.md
+
+# Local archive of compliance reports pulled down from a CI run. Deliberately not
+# tracked: the workflow keeps those artefacts for 7 days on purpose, and a report
+# committed here would go stale against the code it describes.
+/Git-privacy-security/
