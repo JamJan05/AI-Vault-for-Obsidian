@@ -363,7 +363,10 @@ Obsidian 1.13 also added `settings?: unknown` to `Plugin`, which collided with t
 - Class and view-type names still carry the pre-rename `GPT`/`gpt-` prefix (`GPTPlugin`, `GPTChatView`,
   `gpt-chat-view`, `.gpt-*`, `<vault>-gpt-data`). The view types and folder name **must not** change
   (they are persisted state), but the internal class names could be aligned with the product name.
-- `RELEASE_NOTES_1.0.7.md` sits in the repo root while `CHANGELOG.md` already covers 1.0.7.
+- ~~`RELEASE_NOTES_1.0.7.md` sits in the repo root while `CHANGELOG.md` already covers 1.0.7.~~
+  Resolved: deleted. Every claim it made survives elsewhere — the highlights in the `CHANGELOG.md`
+  1.0.7 entry, the `requestUrl()`/no-streaming constraint in `ARCHITECTURE.md` §3, and the
+  cancellation semantics in `ARCHITECTURE.md` §"Cancellation". The file remains in git history.
 - `CHANGELOG.md` stops at 1.0.7 although two further versions have shipped — there is no entry for
   **1.0.8** or **1.0.9**, both of which are tagged and released. It also jumps 1.0.2 → 1.0.7 while
   `versions.json` lists 1.0.4, 1.0.5 and 1.0.6, and tags exist for 1.0.3 as well.

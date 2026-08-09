@@ -7,9 +7,13 @@ instructions live in the [root README](../README.md).
 | --- | --- |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | What the plugin is and the constraints that shape it, build pipeline and CI, repository layout, the five-layer model and dependency graph, module-by-module reference, key data flows (send message, index build, settings/keys), persistence model and migrations, cross-cutting concerns, extension points |
 | [`CODE-ANALYSIS.md`](CODE-ANALYSIS.md) | Metrics, verified strengths, 20 findings with `file:line` evidence and fix directions, dead-code inventory, test-coverage gaps, prioritized backlog |
+| [`SECURITY-PRIVACY-CHECKS.md`](SECURITY-PRIVACY-CHECKS.md) | What the compliance sweep runs, how each check is decided, and how to reproduce a run locally |
 
-Both documents describe version **1.0.9** on branch `main` (commit `064aa87`). When they drift from the code, the code is
-right — re-verify a claim before acting on it.
+Per-version release history lives in [`CHANGELOG.md`](../CHANGELOG.md).
+
+`ARCHITECTURE.md` and `CODE-ANALYSIS.md` describe version **1.0.9** on branch `main` (commit `064aa87`) and have not been
+re-verified against the current version. When they drift from the code, the code is right — re-verify a claim before
+acting on it.
 
 ## Quick orientation for a new contributor
 

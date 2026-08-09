@@ -449,12 +449,11 @@ export class ExternalStorage {
 					}
 				}
 
-				// Try to remove the now-empty history/ folder from the vault
-				try {
-					await this.plugin.app.vault.adapter.rmdir(srcDir, false);
-				} catch {
-					// Harmless if the folder is not empty or the operation is unsupported
-				}
+				// Try to remove the now-empty history/ folder from the vault.
+				// Goes through PluginStorage so the path is containment-checked like
+				// every other vault write; a non-empty or unsupported folder is
+				// harmless and only logged.
+				await vault.removeDir(srcDir, false);
 			}
 		} catch (e) {
 			result.errors.push(`history dir: ${errorMessage(e)}`);

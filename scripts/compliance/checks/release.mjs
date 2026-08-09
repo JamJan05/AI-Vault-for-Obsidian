@@ -124,7 +124,10 @@ export async function run(ctx) {
 
 	// ── main.js not committed ───────────────────────────────────────────────
 	{
-		const ignored = /^main\.js$/m.test(ctx.docs.gitignore);
+		// A leading slash anchors the rule to the repository root, which is where the
+		// bundle is built. That is the more precise spelling of the same rule, so both
+		// forms count as ignored.
+		const ignored = /^\/?main\.js$/m.test(ctx.docs.gitignore);
 		const tracked = (ctx.trackedFiles ?? []).includes("main.js");
 		const problems = [];
 		if (tracked) problems.push("main.js is tracked by git");
