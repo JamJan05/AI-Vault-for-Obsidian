@@ -119,8 +119,9 @@ manifest.json ──────▶  manifest.json
 ├── eslint.config.mjs
 ├── tsconfig.json
 ├── manifest.json / versions.json / package.json
-├── README.md / CHANGELOG.md / RELEASE_NOTES_1.0.7.md
-└── .github/workflows/{validate,release}.yml
+├── README.md / CHANGELOG.md / PRIVACY.md / SECURITY.md / LICENSE
+├── docs/                            developer documentation
+└── .github/workflows/{validate,release,security-privacy}.yml
 ```
 
 Total: **6 677 lines** of TypeScript across 29 files (6 of which are unused barrels).

@@ -1,15 +1,24 @@
 node_modules/
-main.js
 *.js.map
 .DS_Store
 Thumbs.db
-data.json
 .codex/
 .agents/
-
 .testbuild/
-compliance-report.json
-compliance-report.sarif
-sbom.cdx.json
-security-privacy-failure-report.md
-security-privacy-success-report.md
+
+# Build and tooling output. Anchored with a leading slash: these are produced at
+# the repository root, and an unanchored pattern also hides a file of the same
+# name anywhere else in the tree — an archived copy under docs/ would silently
+# never be committed.
+/main.js
+/data.json
+/compliance-report.json
+/compliance-report.sarif
+/sbom.cdx.json
+/security-privacy-failure-report.md
+/security-privacy-success-report.md
+
+# Local archive of compliance reports pulled down from a CI run. Deliberately not
+# tracked: the workflow keeps those artefacts for 7 days on purpose, and a report
+# committed here would go stale against the code it describes.
+/Git-privacy-security/
