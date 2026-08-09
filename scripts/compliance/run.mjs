@@ -118,11 +118,37 @@ async function runSbom(ctx, outDir) {
 }
 
 async function appendStepSummary(text) {
-	const path = process.env.GITHUB_STEP_SUMMARY;
+	await appendIfSet("GITHUB_STEP_SUMMARY", `${text}\n`);
+}
+
+async function appendIfSet(envVar, text) {
+	const path = process.env[envVar];
 	if (!path) return;
-	await appendFile(path, `${text}\n`).catch(error => {
-		console.error("Could not write to GITHUB_STEP_SUMMARY:", error?.message ?? error);
+	await appendFile(path, text).catch(error => {
+		console.error(`Could not write to ${envVar}:`, error?.message ?? error);
 	});
+}
+
+/**
+ * Exposes the per-status counts as job outputs so the publication gate can show
+ * the score next to its verdict.
+ *
+ * The gate stays binary — these numbers describe *how* things stand, they never
+ * decide whether the run blocks.
+ */
+async function publishJobOutputs(summary) {
+	await appendIfSet("GITHUB_OUTPUT", [
+		`checks_total=${summary.total}`,
+		`checks_pass=${summary.counts.PASS}`,
+		`checks_fail=${summary.counts.FAIL}`,
+		`checks_warning=${summary.counts.WARNING}`,
+		`checks_blocked=${summary.counts.BLOCKED}`,
+		`checks_manual=${summary.counts.MANUAL_REVIEW}`,
+		`checks_not_applicable=${summary.counts.NOT_APPLICABLE}`,
+		`highest_severity=${summary.highestSeverity}`,
+		`decision=${summary.isGo ? "GO" : "NO-GO"}`,
+		"",
+	].join("\n"));
 }
 
 async function main() {
@@ -140,6 +166,10 @@ async function main() {
 	results.push(await runSbom(ctx, outDir));
 
 	const summary = summarize(results);
+
+	// Published before the report is rendered: if the renderer throws, the gate
+	// should still be able to show what the checks found.
+	await publishJobOutputs(summary);
 
 	// ── Reports ─────────────────────────────────────────────────────────────
 	let reportWritten = true;

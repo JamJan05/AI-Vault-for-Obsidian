@@ -30,7 +30,9 @@ permissions:
 
 concurrency:
   group: security-privacy-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Superseding a pull-request run is fine — a newer commit replaces it. A push to
+  # main is not: cancelling one leaves that commit with no completed verification.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   NODE_VERSION: "22"
@@ -42,6 +44,10 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+    outputs:
+      tests_total: ${{ steps.tests.outputs.tests_total }}
+      tests_passed: ${{ steps.tests.outputs.tests_passed }}
+      tests_failed: ${{ steps.tests.outputs.tests_failed }}
 
     steps:
       - name: Check out the repository
@@ -69,6 +75,9 @@ jobs:
         run: npm run lint
 
       - name: Unit tests
+        id: tests
+        # The runner writes the pass/total counts to $GITHUB_OUTPUT so the gate can
+        # show the score. A failing suite still fails this step.
         run: npm test
 
       - name: Production build
@@ -106,6 +115,15 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    outputs:
+      checks_total: ${{ steps.compliance.outputs.checks_total }}
+      checks_pass: ${{ steps.compliance.outputs.checks_pass }}
+      checks_fail: ${{ steps.compliance.outputs.checks_fail }}
+      checks_warning: ${{ steps.compliance.outputs.checks_warning }}
+      checks_blocked: ${{ steps.compliance.outputs.checks_blocked }}
+      checks_manual: ${{ steps.compliance.outputs.checks_manual }}
+      highest_severity: ${{ steps.compliance.outputs.highest_severity }}
+      decision: ${{ steps.compliance.outputs.decision }}
 
     steps:
       - name: Check out the repository
@@ -133,9 +151,11 @@ jobs:
         id: compliance
         run: npm run compliance
 
-      - name: Publish the report to the job summary
-        # `always()` so the report survives a failing check. This step only
-        # uploads; it cannot change the outcome of the step above.
+      - name: Verify a report was produced
+        # The runner itself writes the report and appends it to the job summary.
+        # This step only confirms the file exists — a missing report is its own
+        # publication blocker. `always()` so it still runs after a failing check;
+        # it can never turn that failure into a success.
         if: ${{ always() }}
         run: |
           set -euo pipefail
@@ -181,12 +201,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
       - name: Initialize CodeQL
         uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
         with:
@@ -200,11 +214,9 @@ jobs:
               - node_modules
               - main.js
 
-      - name: Install and build
-        run: |
-          npm ci
-          npm run build
-
+      # No install or build step: the CodeQL extractor for javascript-typescript
+      # reads the sources directly. Building first only cost time — measured at
+      # 9 s per run — and produced nothing the analysis used.
       - name: Analyze
         uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
         with:
@@ -259,6 +271,16 @@ jobs:
           CODE_SCANNING: ${{ needs.code-scanning.result }}
           DEPENDENCY_REVIEW: ${{ needs.dependency-review.result }}
           EVENT_NAME: ${{ github.event_name }}
+          # Scoreboard inputs. Empty when the producing job did not get that far.
+          TESTS_TOTAL: ${{ needs.build-test.outputs.tests_total }}
+          TESTS_PASSED: ${{ needs.build-test.outputs.tests_passed }}
+          CHECKS_TOTAL: ${{ needs.compliance.outputs.checks_total }}
+          CHECKS_PASS: ${{ needs.compliance.outputs.checks_pass }}
+          CHECKS_FAIL: ${{ needs.compliance.outputs.checks_fail }}
+          CHECKS_WARNING: ${{ needs.compliance.outputs.checks_warning }}
+          CHECKS_BLOCKED: ${{ needs.compliance.outputs.checks_blocked }}
+          CHECKS_MANUAL: ${{ needs.compliance.outputs.checks_manual }}
+          HIGHEST_SEVERITY: ${{ needs.compliance.outputs.highest_severity }}
         run: |
           set -euo pipefail
 
@@ -267,7 +289,7 @@ jobs:
           {
             echo "## Publication gate"
             echo ""
-            echo "| Job | Result | Blocks publication |"
+            echo "| Job | Result | Required |"
             echo "|---|---|---|"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -307,6 +329,30 @@ jobs:
           else
             check "Dependency review" "$DEPENDENCY_REVIEW" "yes"
           fi
+
+          # The scoreboard describes how things stand. It is NOT a pass mark:
+          # the gate above already decided, and it decided on blocking statuses,
+          # not on a ratio. "57/65" never means "close enough to merge".
+          {
+            echo ""
+            echo "### Scoreboard"
+            echo ""
+            if [ -n "${TESTS_TOTAL}" ]; then
+              printf -- '- Unit tests: **%s/%s** passed\n' "${TESTS_PASSED}" "${TESTS_TOTAL}"
+            else
+              echo "- Unit tests: not reported — the job did not reach the test step"
+            fi
+            if [ -n "${CHECKS_TOTAL}" ]; then
+              printf -- '- Compliance checks: **%s/%s** passed (%s FAIL, %s WARNING, %s BLOCKED, %s manual review)\n' \
+                "${CHECKS_PASS}" "${CHECKS_TOTAL}" "${CHECKS_FAIL}" "${CHECKS_WARNING}" "${CHECKS_BLOCKED}" "${CHECKS_MANUAL}"
+              printf -- '- Highest detected risk level: **%s**\n' "${HIGHEST_SEVERITY}"
+            else
+              echo "- Compliance checks: not reported — the job did not complete"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Same numbers in the log, so they are visible without opening Summary.
+          echo "Scoreboard: tests ${TESTS_PASSED:-?}/${TESTS_TOTAL:-?}, checks ${CHECKS_PASS:-?}/${CHECKS_TOTAL:-?} (FAIL ${CHECKS_FAIL:-?}, WARNING ${CHECKS_WARNING:-?}, BLOCKED ${CHECKS_BLOCKED:-?}, MANUAL ${CHECKS_MANUAL:-?})"
 
           echo "" >> "$GITHUB_STEP_SUMMARY"
           if [ "$failed" -ne 0 ]; then
