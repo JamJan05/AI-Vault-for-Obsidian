@@ -281,6 +281,11 @@
   color: var(--gpt-color-openai); padding: 1px 7px; border-radius: 10px;
   font-size: 10px; font-weight: 500;
   border: 1px solid color-mix(in srgb, var(--gpt-color-openai) 25%, transparent);
+  height: auto; line-height: 1.5; box-shadow: none; cursor: pointer;
+  transition: background .15s;
+}
+.gpt-rag-src-chip:hover {
+  background: color-mix(in srgb, var(--gpt-color-openai) 24%, var(--background-secondary));
 }
 
 /* ─── Input area ─────────────────────────────────────────────────────────────── */

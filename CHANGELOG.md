@@ -6,6 +6,9 @@
 - **New models.** OpenAI: GPT-6 Sol (new default), GPT-6 Astra, GPT-6 Luna and GPT-5.6 Terra.
   Anthropic: Claude Sonnet 5.5 (new default) and Claude Opus 5.5. GPT-4o, GPT-4o Mini and
   Claude Haiku 4.5 remain available.
+- **Sources open the passage that was used.** Clicking a source under an answer opens the note; for
+  a note found by RAG it goes to the fragment the model was given and selects it. The lookup runs on
+  your device.
 - Web sources cited by an OpenAI answer are listed under the message as links.
 - A clear message when a Claude model declines a request, instead of "empty response".
 

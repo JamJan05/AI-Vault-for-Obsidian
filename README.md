@@ -153,6 +153,7 @@ Inside the AI-Vault chat view you can:
 - 🔁 regenerate the last response,
 - ⏹️ stop generation,
 - 📋 copy messages and code blocks,
+- 🔎 click a source under an answer to open the note at the fragment that was used,
 - 📤 export a conversation to a note and 🔄 re-index the vault from the "more" menu.
 
 ---

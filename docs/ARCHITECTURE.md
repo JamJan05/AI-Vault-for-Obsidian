@@ -491,6 +491,10 @@ Notable mechanics:
   the view is closed. Loopback addresses and HTTPS never ask.
 - **Code blocks** — after `MarkdownRenderer.render` resolves, `addCodeCopyButtons` adds a copy button
   to every `pre > code` that Obsidian has not already given one.
+- **Sources** — each chip under an answer is a button. `openSource()` opens the note and, for a
+  search result, uses `locateChunk()` (`src/rag/locate.ts`, pure and unit tested) to find the
+  fragment in the note's current text, then scrolls to it and selects it. If the note changed too
+  much to find the fragment, the note is opened and a notice says so.
 - **Regenerate** lives in the footer of the last message only (hidden elsewhere by CSS).
 - **Pickers** are appended to `doc.body` (not the panel) to escape Obsidian's CSS transforms, then
   positioned from `getBoundingClientRect()` via `setCssStyles`. A document-level `mousedown` handler

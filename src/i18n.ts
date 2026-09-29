@@ -266,6 +266,10 @@ const en: TranslationDict = {
 	rag_project_ctx_header:  (n: string) => `CONTEXT FROM PROJECT "${n}" (other chats in this project — you know their content):`,
 	rag_ctx_truncated:       "[…context truncated due to limit]",
 	rag_sources_label:       "Sources:",
+	rag_source_open_at:      "Open the note at the fragment that was used",
+	rag_source_open:         "Open the note",
+	rag_source_missing:      (n: string) => `The note "${n}" no longer exists.`,
+	rag_source_moved:        "The note has changed since it was indexed, so the fragment could not be found.",
 	rag_indexed:             "✅ ready",
 	rag_not_indexed:         "⏳ not indexed",
 	rag_status:              (indexed: string, files: number, chunks: number, embs: number) =>
@@ -634,6 +638,10 @@ const pl: TranslationDict = {
 	rag_project_ctx_header:  (n: string) => `KONTEKST Z PROJEKTU "${n}" (inne rozmowy w tym projekcie — znasz ich treść):`,
 	rag_ctx_truncated:       "[…kontekst obcięty ze względu na limit]",
 	rag_sources_label:       "Źródła:",
+	rag_source_open_at:      "Otwórz notatkę na fragmencie, który został użyty",
+	rag_source_open:         "Otwórz notatkę",
+	rag_source_missing:      (n: string) => `Notatka „${n}" już nie istnieje.`,
+	rag_source_moved:        "Notatka zmieniła się od czasu indeksowania, więc nie udało się znaleźć fragmentu.",
 	rag_indexed:             "✅ gotowy",
 	rag_not_indexed:         "⏳ nieindeksowany",
 	rag_status:              (indexed: string, files: number, chunks: number, embs: number) =>
