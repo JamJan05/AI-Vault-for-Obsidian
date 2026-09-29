@@ -33,10 +33,11 @@ numbers refer to that version. This table is the current state.
 | F-17 unused code | Fixed — barrels, helpers, types and unused translation keys removed |
 | F-18 no tests | Fixed — `npm test`, pure modules covered |
 | F-19 settings search | Fixed in 1.1.x |
-| F-20 lint warnings | Partly — `prefer-create-el` warnings remain in older view code |
+| F-20 lint warnings | Fixed except for false positives — 11 warnings remain, all `sentence-case` on the brand name and key placeholders, plus two `createElement` calls in `ProjectsView` |
 
-Still open from the backlog: splitting `ChatView` into smaller units. API keys are stored in
-Obsidian's `SecretStorage` where it exists (1.11.4+).
+`ChatView` has been split: prompt assembly, quiz parsing, the model list and export are tested
+modules in `src/chat/`, and the popup, quiz, rendering and sources are separate view modules.
+API keys are stored in Obsidian's `SecretStorage` where it exists (1.11.4+).
 
 ---
 

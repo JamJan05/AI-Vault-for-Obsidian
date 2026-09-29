@@ -113,8 +113,18 @@ manifest.json ──────▶  manifest.json
 │   │   ├── HistoryManager.ts  154  session index + lazy per-session message files
 │   │   ├── retention.ts        38  which conversations are kept when history is full
 │   │   └── ProjectManager.ts  153  projects CRUD + cross-chat project context
+│   ├── chat/                       chat logic without Obsidian imports (except the collector)
+│   │   ├── systemPrompt.ts     76  assembles the system prompt, holds its limits
+│   │   ├── contextCollector.ts 73  gathers attached and retrieved note text, applies ignored paths
+│   │   ├── quiz.ts            181  parses and normalizes model-written quizzes
+│   │   ├── modelOptions.ts     99  what the model picker lists
+│   │   └── exportNote.ts       58  conversation → Markdown note, safe file names
 │   └── views/
-│       ├── ChatView.ts       1392  the chat panel — largest module by far
+│       ├── ChatView.ts        996  the chat panel: layout, controls, send flow, sessions
+│       ├── ModelPicker.ts      90  the model list popup
+│       ├── QuizRenderer.ts    122  draws a quiz and grades answers
+│       ├── messageRenderer.ts  84  Markdown rendering, copy buttons
+│       ├── sourceLinks.ts      64  source buttons, opening a note at a fragment
 │       ├── sendSummary.ts      71  what the next message sends, and to whom
 │       ├── NotePickerModal.ts  98  note attachment dialog
 │       ├── EmbeddingsConsentModal.ts 64  consent dialog for semantic search
@@ -133,7 +143,7 @@ manifest.json ──────▶  manifest.json
 └── .github/workflows/{validate,release,security-privacy}.yml
 ```
 
-Total: **8 699 lines** of TypeScript across 35 files in `src/`.
+Total: **9 642 lines** of TypeScript across 47 files in `src/`.
 
 ---
 
@@ -464,15 +474,30 @@ and `stop_reason: "pause_turn"` is resumed up to three times. The extractor conc
 
 ### 5.6 View layer
 
-**`ChatView` (`gpt-chat-view`)** owns the entire chat experience. Its UI is assembled in
+**`ChatView` (`gpt-chat-view`)** owns the chat panel: layout, controls, the send flow and sessions.
+Everything that can be decided without the DOM lives in `src/chat/` and is unit tested; the popup,
+the quiz, Markdown rendering and the source buttons are separate modules in `src/views/`.
+
+| Concern | Module | Tested |
+| --- | --- | --- |
+| System prompt text and its limits | `chat/systemPrompt.ts` | yes |
+| Which note text goes into the prompt | `chat/contextCollector.ts` | by hand (uses the vault) |
+| Quiz parsing and normalization | `chat/quiz.ts` | yes |
+| Model list for the picker | `chat/modelOptions.ts` | yes |
+| Export to Markdown, file names | `chat/exportNote.ts` | yes |
+| Model popup | `views/ModelPicker.ts` | by hand |
+| Quiz drawing and grading | `views/QuizRenderer.ts` | by hand |
+| Markdown, copy buttons | `views/messageRenderer.ts` | by hand |
+| Source buttons | `views/sourceLinks.ts` | by hand (`rag/locate.ts` is tested) |
+
+Its UI is assembled in
 `buildUI()` from six regions: header (model picker covering every provider, history/projects buttons,
 a "more" menu with export and re-index, new chat), project bar, RAG status line, manual-context bar,
 message list, and the input area — tool row (RAG, notes, web search, conversation mode), the send
 summary, the textarea, and a row with the thinking-mode menu, token counter and Send.
 
 State it holds: `messages`, `webSearchActive`, `chatMode` (`chat` / `learn` / `code`, one at a time),
-`manualNotes`, `currentMode`, `abortController`, `lastUsage`, `lastRagSources`, plus picker
-bookkeeping (`currentPicker`, `pickerCloseHandler`).
+`manualNotes`, `currentMode`, `abortController`, `lastUsage`, and a `ModelPicker`.
 
 Notable mechanics:
 
@@ -510,9 +535,9 @@ Notable mechanics:
 - **Markdown rendering** — `renderContent` uses `MarkdownRenderer.render` with a `renderMarkdown`
   fallback for older Obsidian versions, and degrades to `renderPlainTextContent` (text nodes + `<br>`)
   if rendering throws.
-- **Learn mode / quizzes** — `tryRenderQuiz` attempts three JSON extraction strategies (fenced
+- **Learn mode / quizzes** — `parseQuiz` attempts three JSON extraction strategies (fenced
   ```json block, a `{…"questions"…}` substring, whole-content parse). `normalizeQuestion` then
-  reconciles the many shapes models actually emit: type aliases (`multiple_choice`, `tf`,
+  returns a fixed, fully typed shape and reconciles the many shapes models actually emit: type aliases (`multiple_choice`, `tf`,
   `short_answer`, `fill_blank`, …), `answers`/`choices` as option arrays, and
   `correct_answer`/`correctAnswer` given as an index, a boolean, an exact string, a case-insensitive
   string or a letter `A`–`D`. Open answers are graded by a second model call with a strict JSON
@@ -750,9 +775,8 @@ explicitly and the choice of location is the user's.
 
 **Where the architecture is under strain**
 
-- `ChatView` is the largest module and mixes six responsibilities (layout, pickers, request orchestration,
-  system-prompt assembly, markdown rendering, quiz engine). It is the natural first split: a
-  `ChatController`, a `SystemPromptBuilder` and a `QuizRenderer` would each be independently testable.
+- `ChatView` is still the largest module. What remains in it is layout, controls and the send
+  flow; the send flow (`sendMessage`) is the next candidate for extraction.
 - Responses are not streamed: `requestUrl` returns one complete response, so the answer appears
   at once and Stop abandons the wait rather than the generation.
 - A feature flag exists in the settings type without UI (`ragSearchMode`), so the configuration

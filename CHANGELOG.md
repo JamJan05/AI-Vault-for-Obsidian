@@ -73,6 +73,14 @@
   conversation. The question is now returned to the input.
 - Retrying on a fallback model showed the question twice.
 
+### Internal
+- The chat view was split into smaller modules. Prompt assembly, quiz parsing, the model list and
+  export are now separate, unit-tested modules. No behaviour change is intended.
+- Quizzes written by a model are normalized to a fixed shape before they are drawn, with limits on
+  the number of questions and options.
+- Exported notes get file names that cannot contain path separators or link syntax.
+- Unit tests grew from 185 to 413.
+
 ### Removed
 - Unused code: barrel files, HTML and base64 helpers, leftover streaming code and 33 unused
   translation keys.

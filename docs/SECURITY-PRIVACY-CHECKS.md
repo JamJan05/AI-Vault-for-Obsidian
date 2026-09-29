@@ -63,10 +63,11 @@ supply chain.
 | `tests/security/urlPolicy.test.ts` | Loopback detection, forbidden schemes, remote plaintext HTTP, IPv6, host-confusion look-alikes, embedded credentials |
 | `tests/security/redact.test.ts` | Bearer/`x-api-key` redaction, OpenAI and Anthropic key shapes, plugin key fields, URL credentials, control-character stripping, length capping |
 | `tests/security/paths.test.ts` | Path traversal, absolute paths, drive letters, NUL bytes, prefix-collision containment, safe joining |
+| `tests/chat/*.test.ts` | System prompt limits, quiz parsing of untrusted model output, export file names, the model list |
 | `tests/api/contracts.test.ts` | `normalizeLocalBaseUrl`, `parseLocalModelList`, and the OpenAI / Responses / Anthropic / Ollama response validators |
 | `tests/rag/ignorePaths.test.ts` | Ignored RAG path semantics: anchoring, globs, case-insensitivity, invalid patterns |
 | `tests/rag/canvasParser.test.ts` | Canvas parsing of malformed JSON, non-object JSON, cycles, dangling edges, isolated nodes |
-| `tests/rag/ranking.test.ts` | Tokenizer, BM25, cosine similarity, chunking, content hashing, URL sanitizing |
+| `tests/rag/ranking.test.ts` | Tokenizer, BM25, cosine similarity, chunking, content hashing |
 
 Every credential-shaped literal in the tests contains the marker
 `EXAMPLENOTAREALKEY`. The secret scanner requires that marker inside `tests/` and

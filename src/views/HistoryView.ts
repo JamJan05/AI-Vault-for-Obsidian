@@ -52,8 +52,8 @@ export class GPTHistoryView extends ItemView {
 	// ── Sekcje ─────────────────────────────────────────────────────────────────
 
 	private buildHeader(root: HTMLElement): void {
-		const header = root.createEl("div", { cls: "gpt-history-header" });
-		header.createEl("span", { cls: "gpt-header-title", text: t("history_title") });
+		const header = root.createDiv({ cls: "gpt-history-header" });
+		header.createSpan({ cls: "gpt-header-title", text: t("history_title") });
 
 		const newBtn = header.createEl("button", { cls: "gpt-pill-btn", text: t("history_btn_new") });
 		newBtn.onclick = () => this.plugin.newChat();
@@ -71,38 +71,38 @@ export class GPTHistoryView extends ItemView {
 
 	private buildProjectsShortcut(root: HTMLElement): void {
 		const projCount = this.plugin.projects.projects.length;
-		const btn = root.createEl("div", { cls: "gpt-projects-shortcut" });
+		const btn = root.createDiv({ cls: "gpt-projects-shortcut" });
 		setIcon(btn, "folder");
-		btn.createEl("span", { cls: "gpt-projects-shortcut-label", text: t("chat_projects") });
+		btn.createSpan({ cls: "gpt-projects-shortcut-label", text: t("chat_projects") });
 		if (projCount) {
-			btn.createEl("span", {
+			btn.createSpan({
 				cls:  "gpt-projects-shortcut-badge",
 				text: String(projCount),
 			});
 		}
-		btn.createEl("span", { cls: "gpt-projects-shortcut-arrow", text: "›" });
+		btn.createSpan({ cls: "gpt-projects-shortcut-arrow", text: "›" });
 		btn.onclick = () => void this.plugin.activateProjectsView();
 	}
 
 	private buildSessionList(root: HTMLElement): void {
-		const list     = root.createEl("div", { cls: "gpt-history-list" });
+		const list     = root.createDiv({ cls: "gpt-history-list" });
 		const sessions = this.plugin.history.sessions.filter(s => !s.projectId);
 
 		if (!sessions.length) {
-			list.createEl("div", { cls: "gpt-history-empty",      text: t("history_empty") });
-			list.createEl("div", { cls: "gpt-history-empty-hint", text: t("history_chats_in_projects") });
+			list.createDiv({ cls: "gpt-history-empty",      text: t("history_empty") });
+			list.createDiv({ cls: "gpt-history-empty-hint", text: t("history_chats_in_projects") });
 			return;
 		}
 
 		for (const session of sessions) {
-			const item = list.createEl("div", { cls: "gpt-history-item" });
+			const item = list.createDiv({ cls: "gpt-history-item" });
 			if (this.plugin.currentSessionId === session.id) {
 				item.addClass("gpt-history-item--active");
 			}
 
 			// Row header: title + delete button
-			const top = item.createEl("div", { cls: "gpt-history-item-top" });
-			top.createEl("span", { cls: "gpt-history-item-title", text: session.title });
+			const top = item.createDiv({ cls: "gpt-history-item-top" });
+			top.createSpan({ cls: "gpt-history-item-title", text: session.title });
 
 			const delBtn = top.createEl("button", {
 				cls:  "gpt-history-item-del",
@@ -124,8 +124,8 @@ export class GPTHistoryView extends ItemView {
 				).open();
 			};
 
-			item.createEl("div", { cls: "gpt-history-item-date",    text: formatDate(session.updatedAt) });
-			item.createEl("div", { cls: "gpt-history-item-preview", text: session.preview ?? "…" });
+			item.createDiv({ cls: "gpt-history-item-date",    text: formatDate(session.updatedAt) });
+			item.createDiv({ cls: "gpt-history-item-preview", text: session.preview ?? "…" });
 			item.onclick = () => void this.plugin.loadSession(session.id);
 		}
 	}
