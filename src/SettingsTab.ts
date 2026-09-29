@@ -1,7 +1,7 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import { t, setLanguage } from "./i18n";
 import { DEFAULT_SYSTEM_PROMPTS, DEFAULT_LOCAL_OPENAI_URL, DEFAULT_LOCAL_OLLAMA_URL } from "./settings";
-import { detectProvider } from "./models";
+import { DEFAULT_CLAUDE_MODEL, DEFAULT_OPENAI_MODEL, detectProvider, getCatalogModels } from "./models";
 import { fetchLocalModels, normalizeLocalBaseUrl } from "./api/local";
 import { FILE_API_KEYS } from "./constants";
 import { debounce } from "./utils";
@@ -339,18 +339,14 @@ export class GPTSettingsTab extends PluginSettingTab {
 					};
 
 					d.addOption("__openai_header__", "--- OpenAI ---");
-					addModel("gpt-5",            "GPT-5 (reasoning, best)");
-					addModel("gpt-5-mini",       "GPT-5 Mini (reasoning, faster)");
-					addModel("gpt-5-nano",       "GPT-5 Nano (fast / affordable)");
-					addModel("gpt-5-search-api", "GPT-5 Search (web search)");
-					addModel("gpt-4o",           "GPT-4o (web search)");
-					addModel("gpt-4o-mini",      "GPT-4o Mini (web search)");
-					addModel("gpt-4-turbo",      "GPT-4 Turbo");
+					for (const entry of getCatalogModels("openai")) {
+						addModel(entry.id, `${entry.label} (${t(entry.descKey)})`);
+					}
 
 					d.addOption("__claude_header__", "--- Anthropic ---");
-					addModel("claude-opus-4-5",   "Claude Opus 4.5 (best)");
-					addModel("claude-sonnet-4-5", "Claude Sonnet 4.5 (recommended)");
-					addModel("claude-haiku-4-5",  "Claude Haiku 4.5 (fast / affordable)");
+					for (const entry of getCatalogModels("anthropic")) {
+						addModel(entry.id, `${entry.label} (${t(entry.descKey)})`);
+					}
 
 					d.addOption("__local_header__", "--- Local API ---");
 					for (const model of localModels) addModel(model, model);
@@ -386,25 +382,10 @@ export class GPTSettingsTab extends PluginSettingTab {
 			},
 		};
 
-		const autoDetectRow: SettingDefinitionRender = {
-			name: t("settings_autodetect_name"),
-			desc: t("settings_autodetect_desc"),
-			render: (setting: Setting) => {
-				setting.addToggle(toggle => toggle
-					.setValue(this.plugin.settings.autoDetectProvider)
-					.onChange(async (value: boolean) => {
-						this.plugin.settings.autoDetectProvider = value;
-						await this.plugin.saveSettings();
-						this.rerender();
-					}),
-				);
-			},
-		};
-
 		return {
 			type: "group",
 			heading: t("settings_model_heading"),
-			items: [providerRow, activeModelRow, autoDetectRow, ...this.activeApiKeyRows()],
+			items: [providerRow, activeModelRow, ...this.activeApiKeyRows()],
 		};
 	}
 
@@ -417,9 +398,9 @@ export class GPTSettingsTab extends PluginSettingTab {
 
 	private getCurrentActiveModel(): string {
 		const provider = this.plugin.settings.provider;
-		if (provider === "anthropic") return this.plugin.settings.claudeModel ?? "claude-sonnet-4-5";
+		if (provider === "anthropic") return this.plugin.settings.claudeModel ?? DEFAULT_CLAUDE_MODEL;
 		if (provider === "local") return this.plugin.settings.localModel?.trim() ?? "";
-		return this.plugin.settings.model ?? "gpt-4o";
+		return this.plugin.settings.model ?? DEFAULT_OPENAI_MODEL;
 	}
 
 	private activeApiKeyRows(): SettingDefinitionRender[] {

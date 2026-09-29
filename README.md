@@ -38,19 +38,19 @@ AI-Vault turns your Obsidian workspace into an AI assistant that can use your no
 
 ### OpenAI
 
-- GPT-5
-- GPT-5 Mini
-- GPT-5 Nano
-- GPT-5 Search
-- GPT-4o
-- GPT-4o Mini
-- GPT-4 Turbo
+- GPT-6 Sol (default)
+- GPT-6 Astra
+- GPT-6 Luna
+- GPT-5.6 Terra
+- GPT-4o and GPT-4o Mini (older models)
 
 ### Anthropic
 
-- Claude Opus 4.5
-- Claude Sonnet 4.5
+- Claude Sonnet 5.5 (default)
+- Claude Opus 5.5
 - Claude Haiku 4.5
+
+Models offered by earlier versions (GPT-5, GPT-5 Mini, GPT-5 Nano, GPT-5 Search, GPT-4 Turbo, Claude Opus 4.5, Claude Sonnet 4.5) are replaced in your settings with their closest current equivalent the first time the plugin loads, and a notice tells you which model was chosen. Any other model id can still be typed in by hand.
 
 ### Local API
 
@@ -173,8 +173,8 @@ AI-Vault contacts three kinds of endpoint and nothing else:
 
 | Service | Host | Why |
 | --- | --- | --- |
-| OpenAI | `api.openai.com` | Chat completions, the Responses API (GPT-5 with web search), and text embeddings for the RAG index |
-| Anthropic | `api.anthropic.com` | Messages API, including Anthropic's server-side web search |
+| OpenAI | `api.openai.com` | The Responses API (sent with `store: false`, so OpenAI does not keep the response), chat completions for older models, and text embeddings for the RAG index |
+| Anthropic | `api.anthropic.com` | Messages API, including Anthropic's server-side web search and refusal fallback (a declined request may be answered by another Claude model) |
 | Local API | the Base URL **you** configure | Chat with a model server you run or choose |
 
 Every request is caused by something you did — sending a message, refreshing the model list, or indexing. The plugin has **no backend of its own**, sends **no telemetry, analytics or crash reports**, and has no install, device or vault identifier.

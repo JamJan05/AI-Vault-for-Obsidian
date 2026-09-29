@@ -1,6 +1,6 @@
 import { App, Modal } from "obsidian";
 import { t } from "../i18n";
-import { isGPT5 } from "../models";
+import { isOpenAIReasoningModel } from "../models";
 
 interface FallbackModalOptions {
 	failedModel:   string;
@@ -11,7 +11,7 @@ interface FallbackModalOptions {
 
 /**
  * Modal shown when the selected model is unavailable for the user's account (403/404).
- * Suggests switching to a fallback model (usually gpt-4o) and retrying the message.
+ * Suggests switching to a fallback model from the catalogue and retrying the message.
  * Optionally saves the fallback as the default model in settings.
  */
 export class FallbackModal extends Modal {
@@ -39,8 +39,8 @@ export class FallbackModal extends Modal {
 		const desc = contentEl.createEl("div", { cls: "gpt-fallback-desc" });
 		desc.createEl("p", { text: t("fallback_unavailable", this.failedModel) });
 
-		// Hint for GPT-5 — most common cause: no Tier 1 access
-		if (isGPT5(this.failedModel)) {
+		// Hint for reasoning models — most common cause: the account tier has no access yet
+		if (isOpenAIReasoningModel(this.failedModel)) {
 			const parts = t("fallback_tier1").split(": ");
 			const hint  = desc.createEl("div", { cls: "gpt-fallback-hint" });
 			hint.createEl("strong", { text: parts[0] + ": " });
@@ -70,7 +70,7 @@ export class FallbackModal extends Modal {
 			this.saveAsDefault = checkbox.checked;
 		});
 
-		// Przyciski
+		// Buttons
 		const btnRow = contentEl.createEl("div", { cls: "gpt-fallback-buttons" });
 
 		const cancelBtn = btnRow.createEl("button", { text: t("chat_notes_cancel") });

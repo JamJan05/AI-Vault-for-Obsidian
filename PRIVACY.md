@@ -1,6 +1,6 @@
 # Privacy policy — AI-Vault for Obsidian
 
-**Version 1.1.1 · last reviewed 2026-08-08**
+**Version 1.1.2 · last reviewed 2026-09-29**
 
 AI-Vault is a local Obsidian plugin. It has no backend of its own, no account, and
 no analytics. Everything it sends leaves your machine only because you asked it to
@@ -32,8 +32,8 @@ The plugin can contact exactly three kinds of endpoint. Nothing else.
 
 | Service | Host | When it is contacted | Why |
 |---|---|---|---|
-| OpenAI | `api.openai.com` | You send a message with the OpenAI provider selected, or the RAG index is built while an OpenAI API key is configured | Chat completions (`/v1/chat/completions`), the Responses API (`/v1/responses`, used for GPT-5 with web search), and text embeddings (`/v1/embeddings`) |
-| Anthropic | `api.anthropic.com` | You send a message with the Anthropic provider selected | Messages API (`/v1/messages`), including Anthropic's server-side web search when you enable it |
+| OpenAI | `api.openai.com` | You send a message with the OpenAI provider selected, or the RAG index is built while an OpenAI API key is configured | The Responses API (`/v1/responses`, used for GPT-6 and GPT-5.6 models and for any OpenAI model with web search), chat completions (`/v1/chat/completions`, used for older models such as GPT-4o), and text embeddings (`/v1/embeddings`) |
+| Anthropic | `api.anthropic.com` | You send a message with the Anthropic provider selected | Messages API (`/v1/messages`), including Anthropic's server-side web search when you enable it and Anthropic's server-side refusal fallback |
 | Local API | **whatever Base URL you configure** | You send a message with the Local API provider selected, or you press "Refresh models" | Chat with a model server you run or choose — LM Studio, Ollama, LocalAI, llama.cpp, vLLM, or an OpenAI-compatible gateway |
 
 Your data is processed by those providers under **their** privacy policies and
@@ -104,13 +104,32 @@ Ways to control this:
 
 Web search runs **on the provider's side**, not in Obsidian:
 
-- OpenAI: `tools: [{ type: "web_search" }]`, `web_search_options` for
-  `gpt-5-search-api`, or the Responses API for GPT-5 with search.
-- Anthropic: the `web_search_20260209` server tool.
+- OpenAI: the `web_search` tool of the Responses API. Pages the answer cites are
+  listed under it as ordinary links; the plugin does not open them.
+- Anthropic: the `web_search_20260209` server tool, or `web_search_20250305` for
+  Claude Haiku 4.5.
 
 Your message and its context reach the provider, which then performs the searches.
 The plugin does not open connections to search engines itself. Web search is not
 available for the Local API.
+
+### What the provider keeps, and which model answers
+
+- **OpenAI Responses API.** By default OpenAI stores every Responses API result
+  for 30 days. The plugin sends `store: false` with every such request, so that
+  storage is declined. This does not change OpenAI's own abuse-monitoring
+  retention, which is governed by their policy and your account settings.
+- **Anthropic refusal fallback.** For Claude Sonnet 5.5 and Claude Opus 5.5 the
+  plugin sends `fallbacks: "default"`. If the selected model declines a request,
+  Anthropic re-runs the same request on another Claude model that Anthropic
+  chooses. Your data does not reach any additional company or host — it stays
+  with Anthropic — but the answer can come from a different Claude model than
+  the one you picked. When that happens the message is labelled with the model
+  that answered. This uses an Anthropic beta feature
+  (`server-side-fallback-2026-07-01`).
+- **No automatic retries of rejected requests.** A request the provider rejects
+  as invalid or unauthorized is not sent again. Only timeouts, rate limits and
+  server errors are retried, up to three times.
 
 ### What is never sent
 

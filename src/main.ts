@@ -13,6 +13,7 @@ import { GPTHistoryView }          from "./views/HistoryView";
 import { GPTProjectsView }         from "./views/ProjectsView";
 import { GPTSettingsTab }          from "./SettingsTab";
 import { debounce }                from "./utils";
+import { DEFAULT_CLAUDE_MODEL, getReplacementModel } from "./models";
 import type { PluginSettings }     from "./settings";
 import type { ChatMessage }        from "./types";
 
@@ -32,6 +33,9 @@ export default class GPTPlugin extends Plugin {
 
 	private debouncedUpdateFile!: ReturnType<typeof debounce<[TFile]>>;
 
+	/** Saved models replaced by loadSettings(), reported once the language is known. */
+	private migratedModels: Array<{ from: string; to: string }> = [];
+
 	// ── Lifecycle ──────────────────────────────────────────────────────────────
 
 	async onload(): Promise<void> {
@@ -39,6 +43,10 @@ export default class GPTPlugin extends Plugin {
 		this.storage = new PluginStorage(this);
 		await this.loadSettings();
 		setLanguage(this.settings.language ?? "en", this);
+		for (const { from, to } of this.migratedModels) {
+			new Notice(t("notice_model_migrated", from, to), 8000);
+		}
+		this.migratedModels = [];
 
 		// External storage — outside the vault (desktop only, bypasses Obsidian Sync)
 		this.externalStorage = new ExternalStorage(this, this.storage);
@@ -210,7 +218,7 @@ export default class GPTPlugin extends Plugin {
 		session.messages  = messages;
 		session.updatedAt = Date.now();
 		session.model     =
-			this.settings.provider === "anthropic" ? (this.settings.claudeModel ?? "claude-sonnet-4-5") :
+			this.settings.provider === "anthropic" ? (this.settings.claudeModel ?? DEFAULT_CLAUDE_MODEL) :
 			this.settings.provider === "local"     ? (this.settings.localModel || "") :
 			this.settings.model;
 
@@ -297,6 +305,38 @@ export default class GPTPlugin extends Plugin {
 
 		// Migrate the legacy standalone "ollama" provider → unified Local API
 		if (d) this._migrateLegacyOllamaSettings(d);
+
+		if (d) await this._migrateStoredSettings(d);
+	}
+
+	/**
+	 * Replaces models that are no longer offered and drops settings that no longer
+	 * exist. Only the affected fields are written back, straight to data.json:
+	 * saveSettings() would also rewrite keys.json, and the API keys have not been
+	 * loaded yet at this point.
+	 */
+	private async _migrateStoredSettings(raw: Record<string, unknown>): Promise<void> {
+		let changed = false;
+
+		for (const field of ["model", "claudeModel"] as const) {
+			const current     = this.settings[field];
+			const replacement = typeof current === "string" ? getReplacementModel(current) : null;
+			if (!replacement) continue;
+
+			this.migratedModels.push({ from: current, to: replacement });
+			this.settings[field] = replacement;
+			raw[field] = replacement;
+			changed = true;
+		}
+
+		// Removed in 1.2.0 — the toggle never changed which provider was used.
+		if ("autoDetectProvider" in raw) {
+			delete raw.autoDetectProvider;
+			delete (this.settings as unknown as Record<string, unknown>).autoDetectProvider;
+			changed = true;
+		}
+
+		if (changed) await this.saveData(raw);
 	}
 
 	/** Maps old ollama provider/fields onto the new Local API settings (one-time, non-destructive). */

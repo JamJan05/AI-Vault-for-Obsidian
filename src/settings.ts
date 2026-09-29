@@ -1,3 +1,5 @@
+import { DEFAULT_CLAUDE_MODEL, DEFAULT_OPENAI_MODEL } from "./models";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ThinkingMode = "fast" | "normal" | "think";
@@ -26,7 +28,6 @@ export interface PluginSettings {
 	localBaseUrl:           string;
 	localModel:             string;
 	localModelsCache:       string[];
-	autoDetectProvider:     boolean;
 	thinkingMode:           ThinkingMode;
 
 	// Max tokens per thinking mode
@@ -72,13 +73,12 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	claudeApiKey:            "",
 	localApiKey:             "",
 	provider:                "openai",
-	model:                   "gpt-4o",
-	claudeModel:             "claude-sonnet-4-5",
+	model:                   DEFAULT_OPENAI_MODEL,
+	claudeModel:             DEFAULT_CLAUDE_MODEL,
 	localApiType:            "openai-compatible",
 	localBaseUrl:            DEFAULT_LOCAL_OPENAI_URL,
 	localModel:              "",
 	localModelsCache:        [],
-	autoDetectProvider:      true,
 	thinkingMode:            "normal",
 	maxTokensFast:           4096,
 	maxTokensNormal:         8192,

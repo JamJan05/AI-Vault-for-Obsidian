@@ -2,7 +2,35 @@
 
 ## [Unreleased]
 
+### Added
+- **New models.** OpenAI: GPT-6 Sol (new default), GPT-6 Astra, GPT-6 Luna and GPT-5.6 Terra.
+  Anthropic: Claude Sonnet 5.5 (new default) and Claude Opus 5.5. GPT-4o, GPT-4o Mini and
+  Claude Haiku 4.5 remain available.
+- Web sources cited by an OpenAI answer are listed under the message as links.
+- A clear message when a Claude model declines a request, instead of "empty response".
+
 ### Changed
+- **One model picker.** The chat header has a single picker that lists the models of every provider;
+  choosing a model also selects its provider. The separate provider button is gone.
+- **Saved models are migrated.** GPT-4 Turbo, GPT-5, GPT-5 Mini, GPT-5 Nano, GPT-5 Search,
+  Claude Opus 4.5 and Claude Sonnet 4.5 are replaced with their closest current model on first load,
+  with a notice. OpenAI shuts down GPT-4 Turbo on 2026-10-23.
+- Thinking modes now map to each model's own reasoning effort. Claude models use adaptive thinking;
+  the fixed thinking budget is only sent to Claude Haiku 4.5.
+- Requests the provider rejects (HTTP 4xx other than 408 and 429) are no longer retried.
+
+### Privacy
+- OpenAI reasoning models are called through the Responses API (`/v1/responses`). Every such request
+  is sent with `store: false`, which declines OpenAI's default 30-day storage of the response.
+- Claude Sonnet 5.5 and Claude Opus 5.5 are sent with Anthropic's server-side refusal fallback: a
+  declined request may be answered by another Claude model, and the message then names that model.
+  No new host or company receives data.
+- No new network hosts. See `PRIVACY.md`.
+
+### Removed
+- The "Auto-detect provider" setting, which never changed which provider was used.
+- The `gpt-5-search-api` model; web search is now a toggle on every listed cloud model.
+
 - Settings are now declared through `getSettingDefinitions()`, so every setting is discoverable in
   Obsidian's settings search on 1.13.0 and later. The imperative `display()` remains as the rendering
   path for Obsidian versions older than 1.13, driven by the same definitions.

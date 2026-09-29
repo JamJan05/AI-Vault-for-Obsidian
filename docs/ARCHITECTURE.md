@@ -94,6 +94,7 @@ manifest.json ──────▶  manifest.json
 │   │   └── index.ts             3  barrel (unused)
 │   ├── api/
 │   │   ├── streaming.ts       142  shared requestUrl transport, error mapping, usage parsing
+│   │   ├── requests.ts             pure request-body builders for OpenAI and Anthropic
 │   │   ├── openai.ts          174  Chat Completions + Responses API
 │   │   ├── anthropic.ts        79  Messages API, extended thinking, server-side web search
 │   │   ├── local.ts           211  OpenAI-compatible + Ollama, model discovery
@@ -247,9 +248,13 @@ tuning (`RAG_TOP_K = 5`, `RAG_CHUNK_SIZE = 1200`, `RAG_CHUNK_OVERLAP = 150`).
 `_tf` / `_embNorm` fields on `RAGEntry`: underscore-prefixed cache fields deliberately stripped before
 serialization and rebuilt on load.
 
-**`models.ts`** — capability sets (`WEB_SEARCH_CAPABLE`, `GPT5_MODELS`), `isGPT5` / `isGPT5Search`,
+**`models.ts`** — `MODEL_CATALOG`, the single source of truth for the models offered (id, label,
+provider, reasoning effort per thinking mode, web search support, Claude thinking style),
+`RETIRED_MODELS` with the replacement for every model earlier versions offered,
+`resolveOpenAIProfile` / `resolveAnthropicProfile` (catalogue entry, or a conservative guess for a
+hand-typed id), `getFallbackModel`, `supportsWebSearch`,
 `detectProvider(model)` (prefix rules: `claude*` → anthropic, `gpt-`/`o1`/`o3`/`o4`/`chatgpt-`/
-`text-davinci` → openai, everything else → local), `mapEffortForGPT5`, the `THINKING_MODES` table
+`text-davinci` → openai, everything else → local), the `THINKING_MODES` table
 (lazy `label`/`desc` getters so switching language needs no rebuild), and the `ModelAccessError` class
 carrying `model` / `status` / `code`.
 
@@ -384,8 +389,13 @@ top-to-bottom, appends orphan nodes, then emits a `# Canvas: <name>` document wi
 
 ### 5.5 API layer
 
-**`streaming.ts` is the single network chokepoint.** `requestCompletion(url, headers, body,
-extractText, onChunk, signal)`:
+**`requests.ts` builds every cloud request body.** `buildOpenAIRequest` and `buildAnthropicRequest`
+are pure functions with no Obsidian imports and no credentials, so the exact payload that leaves the
+device is covered by `tests/api/requests.test.ts`. They read the model catalogue in `models.ts`.
+
+**`streaming.ts` is the single network chokepoint.** `requestJson(url, headers, body, signal)` sends
+one request and returns the validated JSON; `requestCompletion(url, headers, body, extractText,
+onChunk, signal)` wraps it and extracts the text:
 
 1. Fast-fails if the signal is already aborted.
 2. Forces `stream: false` into the body and strips `stream_options`.
@@ -393,6 +403,7 @@ extractText, onChunk, signal)`:
    abort listener in `finally`.
 4. Maps non-2xx responses through `throwHttpError`, which digs `error.message` / `message` out of the
    JSON body and raises `ModelAccessError` for 403 / 404 / `model_not_found`, plain `Error` otherwise.
+   Client errors other than 408 and 429 carry `noRetry`, so a rejected request is never re-sent.
 5. Catches provider-level errors that arrive with a 2xx status (`json.error`, `json.type === "error"`).
 6. Delegates text extraction to the caller-supplied `extractText` — the per-provider response shape is
    the *only* thing that differs between providers.
@@ -404,24 +415,29 @@ extractText, onChunk, signal)`:
 Every extractor validates the payload with local type guards rather than casting — there is no `any`
 in this layer.
 
-**`openai.ts`** picks one of four request shapes:
+**`openai.ts`** sends one of two request shapes, chosen by `buildOpenAIRequest`:
 
 | Condition | Endpoint | Distinguishing params |
 | --- | --- | --- |
-| GPT-5 family **and** web search | `/v1/responses` | `input[]`, `instructions`, `max_output_tokens`, `reasoning.effort`, `tools:[web_search]` |
-| `gpt-5-search-api` | `/v1/chat/completions` | `max_tokens`, `web_search_options: {}` |
-| GPT-5 family, no web search | `/v1/chat/completions` | `max_completion_tokens`, `reasoning_effort` |
-| everything else | `/v1/chat/completions` | `max_tokens`, optional `tools:[web_search]` |
+| reasoning model (GPT-6, GPT-5.x, o-series) | `/v1/responses` | `input[]`, `instructions`, `max_output_tokens`, `reasoning.effort`, `store: false`, optional `tools:[web_search]` |
+| classic model **and** web search | `/v1/responses` | as above, without `reasoning` |
+| classic model, no web search | `/v1/chat/completions` | `max_tokens` |
 
-Reasoning models get a padded token budget (`+12000` for high effort, `+4000` for medium) so the
-reasoning tokens do not eat the visible answer.
+Every Responses API request carries `store: false`. The thinking mode is translated to a reasoning
+effort per model (`effortByMode` in the catalogue); effort `none` is raised to `low` when web search
+is on. Reasoning models get a padded token budget (`+12000` for high effort, `+4000` for medium,
+`+2000` for low) so the reasoning tokens do not eat the visible answer. `url_citation` annotations
+are appended to the answer as a Markdown source list, restricted to `http(s)` links.
 
 **`anthropic.ts`** — `/v1/messages` with `anthropic-version: 2023-06-01`. The system message is lifted
-out of `messages` into the top-level `system` field. In `think` mode it sends
-`thinking: { type: "enabled", budget_tokens: tokens }` and raises `max_tokens` to `tokens + 8000`.
-Web search is the server-side tool `web_search_20260209`, so Anthropic performs the searches inside the
-same request. The extractor concatenates all `content[].type === "text"` blocks, which naturally skips
-thinking and tool-use blocks.
+out of `messages` into the top-level `system` field. Models from the 4.6 generation on get
+`thinking: { type: "adaptive" }` plus `output_config.effort`; older models (Claude Haiku 4.5) get
+`thinking: { type: "enabled", budget_tokens }` in `think` mode only. Web search is a server-side tool
+whose version comes from the catalogue, so Anthropic performs the searches inside the same request.
+Claude Sonnet 5.5 and Claude Opus 5.5 are sent with `fallbacks: "default"` and the
+`server-side-fallback-2026-07-01` beta header; `stop_reason: "refusal"` becomes a non-retryable error
+and `stop_reason: "pause_turn"` is resumed up to three times. The extractor concatenates all
+`content[].type === "text"` blocks, which naturally skips thinking, tool-use and fallback blocks.
 
 **`local.ts`** — self-contained, does not use `requestCompletion`:
 
@@ -436,7 +452,7 @@ thinking and tool-use blocks.
 ### 5.6 View layer
 
 **`ChatView` (`gpt-chat-view`, 1 524 lines)** owns the entire chat experience. Its UI is assembled in
-`buildUI()` from seven regions: header (provider picker, model picker, RAG badge, history/projects
+`buildUI()` from seven regions: header (model picker covering every provider, RAG badge, history/projects
 buttons, new chat), thinking-mode bar, project bar, RAG status line, manual-context bar, message list,
 input area with the tool row.
 
@@ -475,9 +491,10 @@ custom-prompt tag, up to 5 recent chats with per-chat delete — plus an active-
 create/edit dialog. Project color is passed to CSS as the custom property `--gpt-project-color` via
 `setCssProps`, so theming stays in `styles.css`.
 
-**`FallbackModal`** appears when OpenAI returns 403/404: it explains the failure, adds a Tier-1 hint
-for GPT-5 models, shows the raw API message, and offers to retry on a fallback model
-(`gpt-4o` for GPT-5 failures, otherwise `gpt-4o-mini`) with an optional "save as default" checkbox.
+**`FallbackModal`** appears when OpenAI returns 403/404: it explains the failure, adds an account-tier
+hint for reasoning models, shows the sanitized API message, and offers to retry on the model returned
+by `getFallbackModel` (`gpt-6-luna`, or `gpt-4o-mini` when that is the one that failed) with an
+optional "save as default" checkbox.
 
 **`ConfirmModal`** is the mobile-safe replacement for `window.confirm()`; it disables the confirm
 button while the async handler runs and always closes in `finally`.
@@ -669,8 +686,8 @@ explicitly and the choice of location is the user's.
 
 | Goal | Touch points |
 | --- | --- |
-| Add an OpenAI/Anthropic model | `ALL_MODELS` in `ChatView.ts`, the dropdown in `SettingsTab.renderModelSelector`, `WEB_SEARCH_CAPABLE`/`GPT5_MODELS` in `models.ts` if it changes capabilities, `model_desc_*` i18n keys |
-| Add a provider | new `src/api/<provider>.ts` with an `extractText` for `requestCompletion`; extend `Provider` in `settings.ts`, `detectProvider`, `PROVIDER_OPTIONS`, the credential checks and dispatch in `ChatView.sendMessage`, and `SettingsTab` |
+| Add an OpenAI/Anthropic model | one entry in `MODEL_CATALOG` in `models.ts` and its `model_desc_*` i18n key in both languages; add the model it replaces to `RETIRED_MODELS` |
+| Add a provider | new `src/api/<provider>.ts` with an `extractText` for `requestCompletion`; extend `Provider` in `settings.ts`, `detectProvider`, the picker groups in `ChatView.getModelPickerGroups`, the credential checks and dispatch in `ChatView.sendMessage`, and `SettingsTab` |
 | Add a UI language | append a dictionary in `i18n.ts`, extend the `Language` union and `DEFAULT_SYSTEM_PROMPTS`, add the dropdown option |
 | Add a RAG search mode | extend `RAGSearchMode`, handle it in `RAGEngine.search`, expose a control in `SettingsTab` (none exists today) |
 | Change chunking or ranking | `chunkText` / `bm25Score` / `cosineSim` in `utils.ts`, `RAG_CHUNK_*` in `constants.ts`; bump `_version` in `RAGEngine` so old indexes are rebuilt |
@@ -700,8 +717,8 @@ explicitly and the choice of location is the user's.
   `ChatController`, a `SystemPromptBuilder` and a `QuizRenderer` would each be independently testable.
 - The `stream: false` reality has left dead scaffolding behind — the streaming render throttle, the
   partial-abort branch and the code-block copy pipeline are all unreachable. See `CODE-ANALYSIS.md`.
-- Feature flags exist in the settings type without UI (`ragSearchMode`) or without effect
-  (`autoDetectProvider`), so the configuration surface promises more than the code delivers.
+- A feature flag exists in the settings type without UI (`ragSearchMode`), so the configuration
+  surface promises more than the code delivers.
 - No test suite at all. The pure functions in `utils.ts`, `canvasParser`, `normalizeLocalBaseUrl`,
   `parseLocalModelList` and `normalizeQuestion` are trivially unit-testable and are exactly the code
   paths where silent regressions would hurt most.
