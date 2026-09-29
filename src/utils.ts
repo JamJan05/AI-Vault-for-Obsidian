@@ -115,26 +115,7 @@ export async function withRetry<T>(
 	throw lastError;
 }
 
-// ─── String / HTML helpers ────────────────────────────────────────────────────
-
-/** Escape HTML before composing markup strings. */
-export function escapeHtml(s: string): string {
-	return s
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&#039;");
-}
-
-/** Sanitizes a URL — allows only http(s) and mailto, blocks javascript:/data: */
-export function sanitizeUrl(url: string): string {
-	if (typeof url !== "string") return "#";
-	const trimmed = url.trim();
-	if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
-	if (/^[/.#]/.test(trimmed)) return trimmed;
-	return "#";
-}
+// ─── Formatting ───────────────────────────────────────────────────────────────
 
 /** Formats a timestamp as a locale date and time */
 export function formatDate(ts: number): string {

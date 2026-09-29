@@ -31,10 +31,6 @@ export interface SessionMeta {
 	model?:    string;
 }
 
-export interface HistoryIndex {
-	sessions: SessionMeta[];
-}
-
 // ─── Projects ─────────────────────────────────────────────────────────────────
 
 export interface Project {
@@ -44,10 +40,6 @@ export interface Project {
 	systemPrompt: string;
 	createdAt:    number;
 	updatedAt:    number;
-}
-
-export interface ProjectsFile {
-	projects: Project[];
 }
 
 // ─── RAG ──────────────────────────────────────────────────────────────────────
@@ -78,22 +70,4 @@ export interface RAGSearchResult {
 	basename: string;
 	chunk:    string;
 	score:    number;
-}
-
-// ─── API ──────────────────────────────────────────────────────────────────────
-
-export interface UsageStats {
-	inputTokens?:     number;
-	outputTokens?:    number;
-	reasoningTokens?: number;
-}
-
-export interface APICallOptions {
-	apiKey:     string;
-	model:      string;
-	messages:   ChatMessage[];
-	mode:       string;
-	webSearch?: boolean;
-	onChunk?:   ((delta: string) => void) | null;
-	signal?:    AbortSignal | null;
 }

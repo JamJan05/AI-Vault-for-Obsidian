@@ -152,7 +152,7 @@ Inside the AI-Vault chat view you can:
 - 🌐 toggle web search,
 - 🔁 regenerate the last response,
 - ⏹️ stop generation,
-- 📋 copy messages,
+- 📋 copy messages and code blocks,
 - 📤 export a conversation to a note and 🔄 re-index the vault from the "more" menu.
 
 ---

@@ -81,41 +81,48 @@ manifest.json ──────▶  manifest.json
 .
 ├── src/
 │   ├── main.ts               431  plugin entry — lifecycle, commands, views, sessions, settings I/O
-│   ├── SettingsTab.ts         739  settings UI (9 sections)
-│   ├── i18n.ts                722  EN + PL dictionaries (296 keys each) + t() runtime
-│   ├── settings.ts             93  PluginSettings shape, defaults, provider/mode unions
-│   ├── types.ts                99  domain types: messages, sessions, projects, RAG, usage
-│   ├── models.ts              120  model catalogues, provider detection, thinking modes, ModelAccessError
-│   ├── constants.ts            23  view types, file names, RAG tuning constants
-│   ├── utils.ts               236  debounce, retry, hashing, tokenizer, BM25, cosine, chunking
+│   ├── SettingsTab.ts        1102  settings UI, built from setting definitions
+│   ├── i18n.ts                788  EN + PL dictionaries (321 keys each) + t() runtime
+│   ├── settings.ts            104  PluginSettings shape, defaults, provider/mode unions
+│   ├── types.ts                73  domain types: messages, sessions, projects, RAG
+│   ├── models.ts              307  model catalogue, retired models, provider detection, thinking modes
+│   ├── constants.ts            20  view types, file names, RAG tuning constants
+│   ├── utils.ts               255  debounce, ids, retry, hashing, tokenizer, BM25, cosine, chunking
+│   ├── security/
+│   │   ├── paths.ts           112  path containment for storage
+│   │   ├── redact.ts          113  secret redaction for errors and logs
+│   │   └── urlPolicy.ts       175  Local API Base URL policy
 │   ├── storage/
-│   │   ├── PluginStorage.ts    93  vault-adapter storage (always available)
-│   │   ├── ExternalStorage.ts 393  Node fs storage outside the vault + migration
-│   │   └── index.ts             3  barrel (unused)
+│   │   ├── PluginStorage.ts   151  vault-adapter storage (always available)
+│   │   └── ExternalStorage.ts 464  Node fs storage outside the vault + migration
 │   ├── api/
-│   │   ├── streaming.ts       142  shared requestUrl transport, error mapping, usage parsing
-│   │   ├── requests.ts             pure request-body builders for OpenAI and Anthropic
-│   │   ├── openai.ts          174  Chat Completions + Responses API
-│   │   ├── anthropic.ts        79  Messages API, extended thinking, server-side web search
-│   │   ├── local.ts           211  OpenAI-compatible + Ollama, model discovery
-│   │   └── index.ts             5  barrel (unused)
+│   │   ├── streaming.ts       176  shared requestUrl transport, error mapping, usage parsing
+│   │   ├── requests.ts        190  pure request-body builders for OpenAI and Anthropic
+│   │   ├── contracts.ts       208  response validators, citations, Base URL shaping
+│   │   ├── openai.ts           55  Responses API + Chat Completions
+│   │   ├── anthropic.ts        81  Messages API: thinking, web search, refusal fallback
+│   │   └── local.ts           202  OpenAI-compatible + Ollama, model discovery
 │   ├── rag/
-│   │   ├── RAGEngine.ts       480  index build/load/save, incremental updates, hybrid search
-│   │   ├── canvasParser.ts    158  .canvas JSON → readable text via graph traversal
-│   │   ├── linkResolver.ts     47  recursive [[wikilink]] expansion via MetadataCache
-│   │   └── index.ts             4  barrel (unused)
+│   │   ├── RAGEngine.ts       608  index build/load/save, incremental updates, hybrid search
+│   │   ├── embeddings.ts       77  opt-in gate and wire format for embeddings
+│   │   ├── ignorePaths.ts     138  ignored RAG paths
+│   │   ├── canvasParser.ts    165  .canvas JSON → readable text via graph traversal
+│   │   └── linkResolver.ts     51  recursive [[wikilink]] expansion via MetadataCache
 │   ├── history/
-│   │   ├── HistoryManager.ts  151  session index + lazy per-session message files
-│   │   ├── ProjectManager.ts  152  projects CRUD + cross-chat project context
-│   │   └── index.ts             2  barrel (unused)
+│   │   ├── HistoryManager.ts  154  session index + lazy per-session message files
+│   │   ├── retention.ts        38  which conversations are kept when history is full
+│   │   └── ProjectManager.ts  153  projects CRUD + cross-chat project context
 │   └── views/
-│       ├── ChatView.ts       1524  the chat panel — largest module by far
+│       ├── ChatView.ts       1392  the chat panel — largest module by far
+│       ├── sendSummary.ts      71  what the next message sends, and to whom
+│       ├── NotePickerModal.ts  98  note attachment dialog
+│       ├── EmbeddingsConsentModal.ts 64  consent dialog for semantic search
 │       ├── ProjectsView.ts    321  projects sidebar + create/edit dialog
 │       ├── HistoryView.ts     132  history sidebar
 │       ├── FallbackModal.ts   100  "model unavailable → switch to fallback" dialog
-│       ├── ConfirmModal.ts     40  generic confirm dialog (replaces native confirm())
-│       └── index.ts             3  barrel (unused)
-├── styles.css                 652  228 top-level .gpt-* class selectors
+│       └── ConfirmModal.ts     40  generic confirm dialog (replaces native confirm())
+├── styles.css                 618  theme-variable based styles, .gpt-* classes
+├── tests/                          unit tests (node:test), mirrors src/
 ├── esbuild.config.mjs
 ├── eslint.config.mjs
 ├── tsconfig.json
@@ -125,7 +132,7 @@ manifest.json ──────▶  manifest.json
 └── .github/workflows/{validate,release,security-privacy}.yml
 ```
 
-Total: **6 677 lines** of TypeScript across 29 files (6 of which are unused barrels).
+Total: **8 699 lines** of TypeScript across 35 files in `src/`.
 
 ---
 
@@ -243,8 +250,8 @@ re-renders both sidebars.
 `history-index.json`, `projects.json`, `keys.json`, `history/`), legacy `data.json` keys, and RAG
 tuning (`RAG_TOP_K = 5`, `RAG_CHUNK_SIZE = 1200`, `RAG_CHUNK_OVERLAP = 150`).
 
-**`types.ts`** — `ChatMessage`, `ChatSession` / `SessionMeta` / `HistoryIndex`, `Project` /
-`ProjectsFile`, `RAGEntry` / `RAGIndex` / `RAGSearchResult`, `UsageStats`, `APICallOptions`. Note the
+**`types.ts`** — `ChatMessage`, `ChatSession` / `SessionMeta`, `Project`,
+`RAGEntry` / `RAGIndex` / `RAGSearchResult`. Note the
 `_tf` / `_embNorm` fields on `RAGEntry`: underscore-prefixed cache fields deliberately stripped before
 serialization and rebuilt on load.
 
@@ -269,10 +276,11 @@ carrying `model` / `status` / `code`.
 - `buildTermFreq`, `bm25Score` (k1 = 1.5, b = 0.75), `dotProduct`, `vectorNorm`, `cosineSim` with
   optional precomputed norms.
 - `chunkText` — splits on H1/H2 boundaries first, then by paragraph with a character overlap tail.
-- `formatDate`, plus `escapeHtml` / `sanitizeUrl` / `utf8ToBase64` / `base64ToUtf8` (see
-  `CODE-ANALYSIS.md` — most of these are now unreachable).
+- `createKeyedDebounce` — one timer per key, so an update for one note never cancels another's.
+- `newId` — collision-free, file-name-safe ids for sessions and projects.
+- `formatDate`.
 
-**`i18n.ts`** — two flat dictionaries (`en`, `pl`) of 296 keys each. Values are either strings or
+**`i18n.ts`** — two flat dictionaries (`en`, `pl`) of 321 keys each. Values are either strings or
 arrow functions for parameterized messages. `t(key, ...args)` falls back `pl → en → key`, so a missing
 Polish key degrades to English rather than throwing. `setLanguage()` also swaps the default system
 prompt when the user has not customized it.
@@ -455,7 +463,7 @@ and `stop_reason: "pause_turn"` is resumed up to three times. The extractor conc
 
 ### 5.6 View layer
 
-**`ChatView` (`gpt-chat-view`, 1 524 lines)** owns the entire chat experience. Its UI is assembled in
+**`ChatView` (`gpt-chat-view`)** owns the entire chat experience. Its UI is assembled in
 `buildUI()` from six regions: header (model picker covering every provider, history/projects buttons,
 a "more" menu with export and re-index, new chat), project bar, RAG status line, manual-context bar,
 message list, and the input area — tool row (RAG, notes, web search, conversation mode), the send
@@ -734,13 +742,12 @@ explicitly and the choice of location is the user's.
 
 **Where the architecture is under strain**
 
-- `ChatView` is 1 524 lines and mixes six responsibilities (layout, pickers, request orchestration,
+- `ChatView` is the largest module and mixes six responsibilities (layout, pickers, request orchestration,
   system-prompt assembly, markdown rendering, quiz engine). It is the natural first split: a
   `ChatController`, a `SystemPromptBuilder` and a `QuizRenderer` would each be independently testable.
-- The `stream: false` reality has left dead scaffolding behind — the streaming render throttle, the
-  partial-abort branch and the code-block copy pipeline are all unreachable. See `CODE-ANALYSIS.md`.
+- Responses are not streamed: `requestUrl` returns one complete response, so the answer appears
+  at once and Stop abandons the wait rather than the generation.
 - A feature flag exists in the settings type without UI (`ragSearchMode`), so the configuration
   surface promises more than the code delivers.
-- No test suite at all. The pure functions in `utils.ts`, `canvasParser`, `normalizeLocalBaseUrl`,
-  `parseLocalModelList` and `normalizeQuestion` are trivially unit-testable and are exactly the code
-  paths where silent regressions would hurt most.
+- Tests cover the pure modules only. Anything that imports `obsidian` — the views, `RAGEngine`,
+  the storage classes' Obsidian side — is verified by hand in the app.

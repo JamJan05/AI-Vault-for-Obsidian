@@ -386,7 +386,7 @@ export class ExternalStorage {
 		const result: MigrateResult = { moved: 0, skipped: 0, errors: [] };
 
 		if (!this.isEnabled) {
-			result.errors.push("External storage nieaktywny");
+			result.errors.push(t("storage_inactive_error"));
 			return result;
 		}
 

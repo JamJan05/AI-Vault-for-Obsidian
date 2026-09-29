@@ -84,7 +84,7 @@ export class GPTProjectsView extends ItemView {
 
 		const closeBtn = header.createEl("button", {
 			cls:  "gpt-icon-btn",
-			attr: { "aria-label": "Zamknij" },
+			attr: { "aria-label": t("common_close") },
 		});
 		this.setIconOnly(closeBtn, "x");
 		closeBtn.onclick = () => {
@@ -159,7 +159,7 @@ export class GPTProjectsView extends ItemView {
 		// Edit button
 		const editBtn = top.createEl("button", {
 			cls:  "gpt-projects-icon-btn",
-			attr: { "aria-label": "Edytuj" },
+			attr: { "aria-label": t("common_edit") },
 		});
 		this.setIconOnly(editBtn, "pencil");
 		editBtn.onclick   = (e: MouseEvent) => { e.stopPropagation(); this.showCreateDialog(proj); };
@@ -282,7 +282,7 @@ export class GPTProjectsView extends ItemView {
 
 		const ok = btns.createEl("button", {
 			cls:  "gpt-modal-ok",
-			text: isEdit ? "Zapisz" : t("projects_create_btn"),
+			text: isEdit ? t("common_save") : t("projects_create_btn"),
 		});
 		ok.onclick = async () => {
 			const name = nameInput.value.trim();

@@ -70,7 +70,6 @@ interface QuizQuestion {
 	[key: string]: unknown;
 }
 
-const RENDER_INTERVAL_MS = 80;
 const MAX_SYSTEM_CHARS   = 120_000;
 
 interface ModelOption {
@@ -774,20 +773,9 @@ export class GPTChatView extends ItemView {
 			this.abortController = new AbortController();
 			this.showStopBtn(true);
 
-			// Throttled streaming — fast parser during the stream, native renderer at the end
-			let streamStarted    = false;
-			let lastRenderTime   = 0;
-
-			const onChunk = (partial: string): void => {
-				if (!streamStarted) { this.setLoading(bubble, false); streamStarted = true; }
-				const now = Date.now();
-				if (now - lastRenderTime < RENDER_INTERVAL_MS) return;
-				lastRenderTime = now;
-				if (contentEl) {
-					this.renderPlainTextContent(contentEl, partial, true);
-				}
-				this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
-			};
+			// Providers answer with one complete response (requestUrl cannot stream),
+			// so this runs once, when the answer has arrived.
+			const onChunk = (): void => { this.setLoading(bubble, false); };
 
 			const activeMode = this.currentMode ?? this.settings.thinkingMode;
 			let result: StreamResult;
@@ -805,7 +793,7 @@ export class GPTChatView extends ItemView {
 					maxTokens: this.getMaxTokensForMode(activeMode),
 					signal:    this.abortController.signal,
 				});
-				onChunk(text);
+				onChunk();
 				result = { text, usage: null };
 			} else {
 				result = await callOpenAI(
@@ -858,17 +846,8 @@ export class GPTChatView extends ItemView {
 			const error     = err as Error & { name?: string };
 			const isAbort   = error.name === "AbortError";
 			const contentEl = bubble.querySelector<HTMLElement>(".gpt-msg-content");
-			const partial   = contentEl?.innerText?.trim() ?? "";
 
-			if (isAbort && partial) {
-				if (contentEl) {
-					this.renderContent(contentEl, partial);
-					contentEl.createEl("div", { cls: "gpt-msg-interrupted", text: t("chat_interrupted") });
-				}
-				bubble.dataset.raw = partial;
-				this.messages.push({ role: "assistant", content: partial });
-				await this.plugin.autoSaveSession(this.messages);
-			} else if (isAbort) {
+			if (isAbort) {
 				// Nothing was answered: take the question back out of the transcript
 				// and hand it back to the user instead of losing it.
 				this.messages.pop();
@@ -905,7 +884,7 @@ export class GPTChatView extends ItemView {
 				if (contentEl) {
 					contentEl.empty();
 					contentEl.createEl("div", { cls: "gpt-msg-error-line", text: `❌ ${t("err_stream")}: ${error.message}` });
-					contentEl.createEl("div", { cls: "gpt-msg-error-detail", text: `Model: ${activeModel} · Mode: ${this.currentMode}` });
+					contentEl.createEl("div", { cls: "gpt-msg-error-detail", text: t("err_detail", activeModel, this.currentMode ?? "") });
 					contentEl.addClass("gpt-error");
 				}
 				console.error("[AI-Vault] sendMessage error:", error.message, err);
@@ -961,12 +940,12 @@ export class GPTChatView extends ItemView {
 		// Code mode
 		if (this.codeMode) {
 			sys = t("code_system_prompt_intro") +
-				"RULES:\n" +
-				"- Write clean, efficient, well-commented code\n" +
+				t("code_rules_header") +
+				t("code_rule_clean") +
 				t("code_rule_1") + t("code_rule_2") + t("code_rule_3") +
 				t("code_rule_4") +
-				"- Format code in blocks ```language\n...```\n" +
-				"- Flag potential issues, edge cases and optimizations\n" +
+				t("code_rule_format") +
+				t("code_rule_flag") +
 				t("code_rule_5") + t("code_system_prompt_closing");
 		}
 
@@ -1168,12 +1147,12 @@ export class GPTChatView extends ItemView {
 	async exportToNote(): Promise<void> {
 		if (!this.messages.length) { new Notice(t("export_no_messages")); return; }
 		const provName  = this.getProviderLabel(this.getEffectiveProvider());
-		const title     = this.plugin.currentSession?.title ?? "Conversation";
+		const title     = this.plugin.currentSession?.title ?? t("projects_chat_fallback");
 		const date      = formatDate(Date.now());
-		let md          = `# ${title}\n\n> Export from ${provName} · ${date}\n\n---\n\n`;
+		let md          = t("export_header", title, this.getCurrentActiveModel() || provName, date);
 		for (const msg of this.messages) {
-			const label = msg.role === "user" ? "**You**" : `**${provName}**`;
-			md += `${label}:\n\n${msg.content}\n\n---\n\n`;
+			const label = msg.role === "user" ? t("export_user") : `**${provName}:**`;
+			md += `${label}\n\n${msg.content}\n\n---\n\n`;
 		}
 		const safeName = title.replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
 		const base     = `AI-Vault/${safeName} ${new Date().toISOString().slice(0, 10)}`;
@@ -1212,14 +1191,13 @@ export class GPTChatView extends ItemView {
 		this.addCodeCopyButtons(el);
 	}
 
-	private renderPlainTextContent(el: HTMLElement, text: string, withCursor = false): void {
+	private renderPlainTextContent(el: HTMLElement, text: string): void {
 		el.empty();
 		const lines = text.split("\n");
 		lines.forEach((line, idx) => {
 			if (idx > 0) el.createEl("br");
 			if (line) el.appendChild(el.ownerDocument.createTextNode(line));
 		});
-		if (withCursor) el.createEl("span", { cls: "gpt-cursor", text: "▋" });
 	}
 
 	/** Adds a copy button to each code block that Obsidian has not given one already. */
@@ -1280,7 +1258,7 @@ export class GPTChatView extends ItemView {
 		quiz.questions.forEach((q, qi) => {
 			this.normalizeQuestion(q);
 			const card = container.createEl("div", { cls: "gpt-quiz-card" });
-			card.createEl("div", { cls: "gpt-quiz-qnum",  text: `Question ${qi + 1} of ${questionCount}` });
+			card.createEl("div", { cls: "gpt-quiz-qnum",  text: t("quiz_progress", qi + 1, questionCount) });
 			card.createEl("div", { cls: "gpt-quiz-qtext", text: q.question || t("quiz_no_question") });
 
 			let answered = false;
@@ -1304,7 +1282,7 @@ export class GPTChatView extends ItemView {
 							cls: correct ? "gpt-quiz-fb gpt-quiz-fb--ok" : "gpt-quiz-fb gpt-quiz-fb--err",
 						});
 						if (correct) {
-							fb.textContent = "✅ Correct! ";
+							fb.textContent = t("quiz_correct") + " ";
 							if (q.explanation) fb.appendChild(doc.createTextNode(q.explanation));
 						} else {
 							const corrPrefix = q.type === "truefalse" ? "" : String.fromCharCode(65 + (q.correct ?? 0)) + ". ";
@@ -1325,12 +1303,12 @@ export class GPTChatView extends ItemView {
 					const ans = inp.value.trim();
 					if (!ans) return;
 					answered = true; inp.disabled = true; checkBtn.disabled = true;
-					checkBtn.textContent = "Checking…";
+					checkBtn.textContent = t("quiz_checking");
 
 					if (q.type === "fill") {
 						const ok = ans.toLowerCase() === String(q.answer ?? "").toLowerCase().trim();
 						const fb = card.createEl("div", { cls: ok ? "gpt-quiz-fb gpt-quiz-fb--ok" : "gpt-quiz-fb gpt-quiz-fb--err" });
-						if (ok) { fb.textContent = "✅ Correct!"; }
+						if (ok) { fb.textContent = t("quiz_correct"); }
 						else { fb.appendChild(doc.createTextNode(t("quiz_correct_prefix"))); fb.createEl("strong", { text: String(q.answer ?? "") }); }
 					} else {
 						try {

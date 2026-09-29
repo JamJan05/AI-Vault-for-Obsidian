@@ -7,6 +7,39 @@
 
 ---
 
+## 0. Status as of the 1.2.0 development branch
+
+Everything below section 1 is the original review of **1.0.9** and is kept for the record; line
+numbers refer to that version. This table is the current state.
+
+| Finding | Status |
+| --- | --- |
+| F-1 streaming scaffolding | Fixed — removed; the non-streaming design is documented in `ARCHITECTURE.md` |
+| F-2 code-block copy buttons | Fixed — added after the renderer resolves, for every `pre > code` |
+| F-3 API keys blanked after migration | Fixed in 1.1.x |
+| F-4 global file-modify debounce | Fixed — `createKeyedDebounce`, one timer per path |
+| F-5 `autoDetectProvider` had no effect | Fixed — setting removed; the model picker selects the provider |
+| F-6 `recent` mode on a fresh index | Fixed — entries are built in one place. `ragSearchMode` still has no UI |
+| F-7 settings saved on every keystroke | Fixed — text fields are written once typing pauses |
+| F-8 session cap by insertion order | Fixed — `history/retention.ts` evicts by last use |
+| F-9 chat state and DOM diverge on failure | Fixed — failed exchanges are marked and never counted |
+| F-10 empty sessions leave message files | Open, deliberately — deleting on "empty" could delete a conversation whose messages merely failed to load |
+| F-11 `Date.now()` ids | Fixed — `newId()` |
+| F-12 untranslated strings | Fixed. Canvas section labels are fixed English, so the index does not change with the language |
+| F-13 duplicated constants | Fixed — `FILE_RAG_INDEX` imported, effort mapping lives in the model catalogue, `LEGACY_DIR_NAME` removed |
+| F-14 duplicated model catalogue | Fixed — `MODEL_CATALOG` in `models.ts` |
+| F-15 provider API details | Fixed — web search tool per model, embedding responses validated |
+| F-16 performance of a large index | Open |
+| F-17 unused code | Fixed — barrels, helpers, types and unused translation keys removed |
+| F-18 no tests | Fixed — `npm test`, pure modules covered |
+| F-19 settings search | Fixed in 1.1.x |
+| F-20 lint warnings | Partly — `prefer-create-el` warnings remain in older view code |
+
+Still open from the backlog: splitting `ChatView` into smaller units, and storing API keys in
+Obsidian's `SecretStorage`.
+
+---
+
 ## 1. Metrics
 
 | Metric | Value |

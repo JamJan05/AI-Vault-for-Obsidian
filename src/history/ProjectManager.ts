@@ -129,7 +129,7 @@ export class ProjectManager {
 
 		if (!messages.length) return "";
 
-		const title  = session.title || "Rozmowa";
+		const title  = session.title || t("projects_chat_fallback");
 		const recent = messages.slice(-6);
 
 		const lines = recent.map(m => {

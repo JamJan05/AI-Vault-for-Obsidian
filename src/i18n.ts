@@ -17,9 +17,7 @@ const en: TranslationDict = {
 	settings_keys_mobile_note:   "ℹ️ Toggle unavailable on mobile — keys always stored in data.json.",
 	settings_key_local:          "🔒 Stored locally outside vault — Obsidian Sync does not synchronize it.",
 	settings_key_sync:           "☁️ Stored in data.json — synced via Obsidian Sync.",
-	settings_openai_title:       "🤖 OpenAI",
 	settings_openai_key_name:    "OpenAI API Key",
-	settings_openai_model_name:  "OpenAI Model",
 	settings_thinking_name:      "Default thinking mode",
 	settings_max_tokens_fast_name:   "⚡ Fast — max tokens",
 	settings_max_tokens_fast_desc:   "Maximum output tokens for Fast mode (default: 4096)",
@@ -31,9 +29,7 @@ const en: TranslationDict = {
 	settings_system_prompt_desc: "Global prompt. Projects with their own prompt override this one.",
 	settings_system_prompt_reset:     "Reset to default",
 	settings_system_prompt_reset_tip: "Restore the default system prompt for the current language",
-	settings_claude_title:       "🟣 Claude (Anthropic)",
 	settings_claude_key_name:    "Claude API Key",
-	settings_claude_model_name:  "Claude Model",
 	settings_context_name:       "Max messages in context",
 	settings_context_desc:       "Number of previous messages sent to the model. 0 = unlimited (current default).",
 	settings_rag_title:          "🗃️ RAG — Vault Search",
@@ -76,22 +72,14 @@ const en: TranslationDict = {
 	settings_storage_migrate_desc: "Manually move existing history from the plugin folder in the vault to the external folder. Safe — files are moved, not copied.",
 	settings_storage_migrate_btn:  "Migrate now",
 	settings_storage_migrating:    "Migrating…",
-	settings_storage_open_name:  "Open folder in explorer",
-	settings_storage_open_btn:   "Open folder",
-	settings_storage_open_desc:  "Shows the history folder in the system file manager.",
 	settings_storage_no_sync:    "Obsidian Sync does not sync this data.",
 	settings_storage_location:   "Location:",
 	settings_storage_path_placeholder: "/path/to/folder (empty = auto)",
 	settings_storage_active:     "✅ Active — history saved OUTSIDE vault",
-	settings_storage_inactive:   "⚠️ Disabled — history saved inside vault",
 	settings_storage_inactive_html: "⚠️ <strong>Disabled — history saved inside vault</strong><br>Obsidian Sync may synchronize chat history (uses up your GB limit).",
-	settings_storage_mobile:     "📱 Mobile device detected",
-	settings_storage_mobile_desc:"External storage outside vault works on desktop only. On mobile, data is saved in the plugin folder inside the vault.",
 	settings_storage_mobile_full:(configDir: string) => `📱 <strong>Mobile device detected</strong><br>External storage outside vault works on desktop only. On mobile, data is saved in the plugin folder inside the vault.<br><br>💡 <em>Tip:</em> To limit Obsidian Sync, disable configuration file sync (<code>${configDir}</code>) or add the plugin folder to exclusions.`,
 	settings_storage_mobile_na:  "(unavailable on mobile)",
 	settings_keys_local_warning_html: "🔒 <strong>API keys are stored locally</strong> in the plugin folder inside your vault (plain text). If you sync your vault — keys are synced too.",
-	settings_lang_name:          "Language",
-	settings_lang_desc:          "Interface language for the plugin.",
 
 	// Model selector
 	settings_model_heading:      "Model",
@@ -132,7 +120,6 @@ const en: TranslationDict = {
 
 	// Chat view
 	chat_new:                    "New",
-	chat_history:                "History",
 	chat_projects:               "Projects",
 	chat_welcome_rag:            "RAG active — I'll automatically find matching notes.",
 	chat_welcome_hint:           "Use 📎 Notes to manually select context.",
@@ -150,11 +137,9 @@ const en: TranslationDict = {
 	chat_send:                   "Send",
 	chat_stop:                   "Stop",
 	chat_copy:                   "Copy",
-	chat_copied:                 "Copied!",
 	chat_copy_code:              "Copy code",
 	confirm_plain_http:          (host: string) => `Your message, note excerpts and Local API key will be sent to ${host} without encryption (plain HTTP). Anyone on the network path can read them. Send anyway?`,
 	confirm_plain_http_accept:   "Send without encryption",
-	chat_interrupted:            "⏹ Interrupted by user",
 	chat_generation_stopped:     "⏹ Generation stopped",
 	chat_role_you:               "You",
 	chat_default_title:          "New conversation",
@@ -169,7 +154,6 @@ const en: TranslationDict = {
 	chat_title_internet:         "Web search",
 	chat_title_learn:            "Learn — explanations and interactive quizzes",
 	chat_title_code:             "Code — answers as an expert programmer",
-	chat_section_rag:            "🗄️ RAG (vault context)",
 	chat_model_tooltip:          (m: string) => `Current model: ${m}\nClick to change`,
 	chat_model_session_tooltip:  (title: string, model: string) => `${title}\nModel: ${model}\nClick to change`,
 	chat_mode_fast:              "⚡ Fast",
@@ -244,8 +228,6 @@ const en: TranslationDict = {
 	history_title:               "Chat History",
 	history_btn_new:             "+ New",
 	history_empty:               "No standalone chats yet",
-	history_empty_hint:          "Start a new chat in the chat panel.",
-	history_delete_confirm:      (t: string) => `Delete chat "${t}"?`,
 	history_chats_in_projects:   "Chats assigned to projects\ncan be found in the Projects tab",
 	history_delete_chat_confirm: (t: string) => `Delete chat "${t}"?`,
 	history_delete_btn:          "Delete",
@@ -256,17 +238,13 @@ const en: TranslationDict = {
 	projects_btn_new:            "+ New",
 	projects_chat_count:         (n: number) => `${n} chat${n === 1 ? "" : "s"}`,
 	projects_bar_label:          (name: string, n: number) => `📁 ${name} — ${n} chat${n === 1 ? "" : "s"} with shared context`,
-	projects_new:                "New project",
 	projects_empty:              "No projects yet",
-	projects_empty_hint:         "Create your first project to organize chats by topic.",
 	projects_empty_hint_long:    "Create a project to group related chats with shared context.",
-	projects_delete_confirm:     (n: string) => `Delete project "${n}" and all its chats?`,
 	projects_delete_with_count:  (n: string, c: number) => `Delete project "${n}"${c ? ` and unlink ${c} chats` : ""}?`,
 	projects_created:            (n: string) => `📁 Project "${n}" created`,
 	projects_updated:            (n: string) => `📁 Project "${n}" updated`,
 	projects_chat_delete_confirm:(t: string) => `Delete chat "${t}"?`,
 	projects_active:             "Active project:",
-	projects_no_chats:           "No chats yet",
 	projects_leave_btn:          "Leave",
 	projects_own_prompt_btn:     "Custom prompt",
 	projects_more_chats:         (n: number) => `…and ${n} more`,
@@ -295,8 +273,6 @@ const en: TranslationDict = {
 	rag_done:                (n: number) => `✅ RAG: ${n} notes`,
 
 	// Tokens / cost
-	tokens_label:            (n: number) => `~${n} tokens`,
-	tokens_session_cost:     (v: string) => `\nSession total: ${v}`,
 
 	// Notices
 	notice_model_changed:        (m: string) => `✓ Model: ${m}`,
@@ -309,7 +285,6 @@ const en: TranslationDict = {
 	notice_storage_disabled:      "✅ Storage outside vault disabled.",
 	notice_setting_change_failed: (e: string) => `❌ Could not change setting: ${e}`,
 	notice_fallback_switched:    (m: string) => `✅ Switched to ${m}. Retrying message…`,
-	notice_fallback_return:      (m: string) => `↩ Returned to ${m}`,
 	notice_migration_done:       (n: number, p: string) => `✅ AI-Vault: Chat history moved outside vault (${n} files).\nLocation: ${p}`,
 	notice_migration_partial:    (n: number) => `⚠️ AI-Vault: Migration partially failed — ${n} errors. Check console.`,
 	notice_migration_partial_short: (m: number, e: number) => `⚠️ Moved ${m}, errors: ${e}. Console: F12.`,
@@ -317,9 +292,6 @@ const en: TranslationDict = {
 	notice_migration_failed:     (e: string) => `❌ Migration failed: ${e}`,
 	notice_export_done:          (f: string) => `📝 Exported to: ${f}`,
 	notice_export_fail:          (e: string) => `❌ Export error: ${e}`,
-	notice_manual_notes:         (n: number) => `📎 Added ${n} note(s) to context`,
-	notice_restart_required:     "⏳ Change requires plugin restart (disable/enable in Community Plugins).",
-	notice_storage_open_fail:    (e: string) => `Could not open: ${e}`,
 
 	// Fallback modal
 	fallback_title:          "⚠️ Model unavailable",
@@ -328,7 +300,6 @@ const en: TranslationDict = {
 	fallback_api_error:      "API error: ",
 	fallback_suggest:        (m: string) => `I can switch the conversation to ${m} and retry the message.`,
 	fallback_save_default:   (m: string) => ` Set ${m} as default model (you can change this in settings)`,
-	fallback_cancel:         "Cancel",
 	fallback_accept:         (m: string) => `Switch to ${m} and retry`,
 
 	// Errors
@@ -337,7 +308,6 @@ const en: TranslationDict = {
 	err_no_ollama_url:       "⚠️ Set your Local API Base URL in settings.",
 	err_empty_response:      "Model returned an empty response. Please try again.",
 	err_stream:              "Streaming error",
-	err_stream_responses:    "Responses API streaming error",
 
 	// Canvas
 	canvas_parse_error:      (b: string) => `[Canvas: ${b} — JSON parse error]`,
@@ -351,7 +321,6 @@ const en: TranslationDict = {
 	export_no_messages:      "No messages to export.",
 	export_header:           (title: string, model: string, date: string) => `# ${title}\n\n> Model: ${model} | Date: ${date}\n\n---\n\n`,
 	export_user:             "**You:**",
-	export_assistant:        "**Assistant:**",
 
 	// Provider
 
@@ -368,8 +337,20 @@ const en: TranslationDict = {
 	cmd_indexing:            "⏳ Indexing…",
 
 	// Quiz
-	quiz_error:              "Error!",
 	quiz_no_question:        "(no question text)",
+	quiz_progress:           (n: number, total: number) => `Question ${n} of ${total}`,
+	quiz_correct:            "✅ Correct!",
+	quiz_checking:           "Checking…",
+	err_detail:              (model: string, mode: string) => `Model: ${model} · Mode: ${mode}`,
+	common_close:            "Close",
+	common_edit:             "Edit",
+	common_save:             "Save",
+	projects_chat_fallback:  "Conversation",
+	storage_inactive_error:  "External storage is not active",
+	code_rules_header:       "RULES:\n",
+	code_rule_clean:         "- Write clean, efficient, well-commented code\n",
+	code_rule_format:        "- Format code in blocks ```language\n...```\n",
+	code_rule_flag:          "- Flag potential issues, edge cases and optimizations\n",
 	quiz_wrong_prefix:       "❌ Wrong. Correct answer: ",
 	quiz_correct_prefix:     "❌ Correct answer: ",
 	quiz_check_btn:          "Check",
@@ -387,7 +368,6 @@ const en: TranslationDict = {
 	code_rule_2:                "- Use best practices and design patterns\n",
 	code_rule_3:                "- Explain architectural decisions briefly and concisely\n",
 	code_rule_4:                "- If the user did not specify a language, ask or choose the best one\n",
-	code_rule_4_lang:           "language\n...",
 	code_rule_5:                "- Reply in the user's language (code comments in English)\n\n",
 	code_system_prompt_closing: "Do not answer questions unrelated to programming — politely redirect to the topic of coding.",
 
@@ -405,9 +385,7 @@ const pl: TranslationDict = {
 	settings_keys_mobile_note:   "ℹ️ Przełącznik niedostępny na mobile — klucze zawsze w data.json.",
 	settings_key_local:          "🔒 Przechowywany lokalnie poza vaultem — Obsidian Sync go nie synchronizuje.",
 	settings_key_sync:           "☁️ Przechowywany w data.json — synchronizowany przez Obsidian Sync.",
-	settings_openai_title:       "🤖 OpenAI",
 	settings_openai_key_name:    "Klucz API OpenAI",
-	settings_openai_model_name:  "Model OpenAI",
 	settings_thinking_name:      "Domyślny tryb myślenia",
 	settings_max_tokens_fast_name:   "⚡ Szybki — maks. tokeny",
 	settings_max_tokens_fast_desc:   "Maksymalna liczba tokenów wyjściowych dla trybu Szybki (domyślnie: 4096)",
@@ -419,9 +397,7 @@ const pl: TranslationDict = {
 	settings_system_prompt_desc: "Globalny prompt. Projekty z własnym promptem nadpisują ten.",
 	settings_system_prompt_reset:     "Resetuj do domyślnego",
 	settings_system_prompt_reset_tip: "Przywróć domyślny prompt systemowy dla bieżącego języka",
-	settings_claude_title:       "🟣 Claude (Anthropic)",
 	settings_claude_key_name:    "Klucz API Claude",
-	settings_claude_model_name:  "Model Claude",
 	settings_context_name:       "Maks. wiadomości w kontekście",
 	settings_context_desc:       "Liczba poprzednich wiadomości wysyłanych do modelu. 0 = bez limitu (obecny domyślny).",
 	settings_rag_title:          "🗃️ RAG — Przeszukiwanie notatek",
@@ -464,22 +440,14 @@ const pl: TranslationDict = {
 	settings_storage_migrate_desc: "Ręcznie przenieś istniejącą historię z folderu pluginu w vaulcie do folderu zewnętrznego. Bezpieczne — pliki są przenoszone, nie kopiowane.",
 	settings_storage_migrate_btn:  "Migruj teraz",
 	settings_storage_migrating:    "Migrowanie…",
-	settings_storage_open_name:  "Otwórz folder w eksploratorze",
-	settings_storage_open_btn:   "Otwórz folder",
-	settings_storage_open_desc:  "Pokazuje folder z historią w systemowym menedżerze plików.",
 	settings_storage_no_sync:    "Obsidian Sync nie synchronizuje tych danych.",
 	settings_storage_location:   "Lokalizacja:",
 	settings_storage_path_placeholder: "/ścieżka/do/folderu (puste = auto)",
 	settings_storage_active:     "✅ Aktywny — historia zapisywana POZA vaultem",
-	settings_storage_inactive:   "⚠️ Wyłączony — historia zapisywana w vaulcie",
 	settings_storage_inactive_html: "⚠️ <strong>Wyłączony — historia zapisywana w vaulcie</strong><br>Obsidian Sync może synchronizować historię rozmów (zjada limit GB).",
-	settings_storage_mobile:     "📱 Wykryto urządzenie mobilne",
-	settings_storage_mobile_desc:"Zewnętrzny zapis poza vaultem działa tylko na desktopie. Na mobile dane są zapisywane w folderze pluginu w vaulcie.",
 	settings_storage_mobile_full:(configDir: string) => `📱 <strong>Wykryto urządzenie mobilne</strong><br>Zewnętrzny zapis poza vaultem działa tylko na desktopie. Na mobile dane są zapisywane w folderze pluginu w vaulcie.<br><br>💡 <em>Tip:</em> Aby ograniczyć Obsidian Sync, w ustawieniach Sync wyłącz synchronizację plików konfiguracyjnych (<code>${configDir}</code>) lub dodaj folder pluginu do wyjątków.`,
 	settings_storage_mobile_na:  "(niedostępne na mobile)",
 	settings_keys_local_warning_html: "🔒 <strong>Klucze API są zapisywane lokalnie</strong> w folderze pluginu wewnątrz Twojego vaulta (plain text). Jeśli synchronizujesz vault — klucze też się synchronizują.",
-	settings_lang_name:          "Język / Language",
-	settings_lang_desc:          "Język interfejsu wtyczki.",
 
 	// Model selector
 	settings_model_heading:      "Model",
@@ -520,7 +488,6 @@ const pl: TranslationDict = {
 
 	// Chat view
 	chat_new:                    "Nowa",
-	chat_history:                "Historia",
 	chat_projects:               "Projekty",
 	chat_welcome_rag:            "RAG aktywny — automatycznie znajdę pasujące notatki.",
 	chat_welcome_hint:           "Użyj 📎 Notatki, aby ręcznie wybrać kontekst.",
@@ -538,11 +505,9 @@ const pl: TranslationDict = {
 	chat_send:                   "Wyślij",
 	chat_stop:                   "Stop",
 	chat_copy:                   "Kopiuj",
-	chat_copied:                 "Skopiowano!",
 	chat_copy_code:              "Kopiuj kod",
 	confirm_plain_http:          (host: string) => `Twoja wiadomość, fragmenty notatek i klucz lokalnego API zostaną wysłane do ${host} bez szyfrowania (zwykłe HTTP). Każdy na trasie sieciowej może je odczytać. Wysłać mimo to?`,
 	confirm_plain_http_accept:   "Wyślij bez szyfrowania",
-	chat_interrupted:            "⏹ Przerwane przez użytkownika",
 	chat_generation_stopped:     "⏹ Przerwano generowanie",
 	chat_role_you:               "Ty",
 	chat_default_title:          "Nowa rozmowa",
@@ -557,7 +522,6 @@ const pl: TranslationDict = {
 	chat_title_internet:         "Wyszukiwanie internetu",
 	chat_title_learn:            "Nauka — wyjaśnienia i interaktywne quizy",
 	chat_title_code:             "Kod — odpowiedzi jak od doświadczonego programisty",
-	chat_section_rag:            "🗄️ RAG (kontekst z vault)",
 	chat_model_tooltip:          (m: string) => `Aktualny model: ${m}\nKliknij aby zmienić`,
 	chat_model_session_tooltip:  (title: string, model: string) => `${title}\nModel: ${model}\nKliknij aby zmienić`,
 	chat_mode_fast:              "⚡ Szybki",
@@ -632,8 +596,6 @@ const pl: TranslationDict = {
 	history_title:               "Historia rozmów",
 	history_btn_new:             "+ Nowa",
 	history_empty:               "Brak luźnych rozmów",
-	history_empty_hint:          "Zacznij nową rozmowę w panelu czatu.",
-	history_delete_confirm:      (t: string) => `Usunąć czat "${t}"?`,
 	history_chats_in_projects:   "Chaty przypisane do projektów\nznajdziesz w zakładce Projekty",
 	history_delete_chat_confirm: (t: string) => `Usunąć rozmowę "${t}"?`,
 	history_delete_btn:          "Usuń",
@@ -644,17 +606,13 @@ const pl: TranslationDict = {
 	projects_btn_new:            "+ Nowy",
 	projects_chat_count:         (n: number) => `${n} chat${n === 1 ? "" : "ów"}`,
 	projects_bar_label:          (name: string, n: number) => `📁 ${name} — ${n} chat${n === 1 ? "" : "ów"} ze wspólnym kontekstem`,
-	projects_new:                "Nowy projekt",
 	projects_empty:              "Brak projektów",
-	projects_empty_hint:         "Utwórz pierwszy projekt aby organizować rozmowy tematycznie.",
 	projects_empty_hint_long:    "Utwórz projekt, aby grupować powiązane chaty ze wspólnym kontekstem.",
-	projects_delete_confirm:     (n: string) => `Usunąć projekt "${n}" i wszystkie jego rozmowy?`,
 	projects_delete_with_count:  (n: string, c: number) => `Usunąć projekt "${n}"${c ? ` i odłączyć ${c} rozmów` : ""}?`,
 	projects_created:            (n: string) => `📁 Projekt "${n}" utworzony`,
 	projects_updated:            (n: string) => `📁 Projekt "${n}" zaktualizowany`,
 	projects_chat_delete_confirm:(t: string) => `Usunąć czat "${t}"?`,
 	projects_active:             "Aktywny projekt:",
-	projects_no_chats:           "Brak rozmów",
 	projects_leave_btn:          "Opuść",
 	projects_own_prompt_btn:     "Własny prompt",
 	projects_more_chats:         (n: number) => `…i ${n} więcej`,
@@ -683,8 +641,6 @@ const pl: TranslationDict = {
 	rag_done:                (n: number) => `✅ RAG: ${n} notatek`,
 
 	// Tokens / cost
-	tokens_label:            (n: number) => `~${n} tokenów`,
-	tokens_session_cost:     (v: string) => `\nSesja łącznie: ${v}`,
 
 	// Notices
 	notice_model_changed:        (m: string) => `✓ Model: ${m}`,
@@ -697,7 +653,6 @@ const pl: TranslationDict = {
 	notice_storage_disabled:      "✅ Wyłączono zapis poza vaultem.",
 	notice_setting_change_failed: (e: string) => `❌ Nie udało się zmienić ustawienia: ${e}`,
 	notice_fallback_switched:    (m: string) => `✅ Przełączono na ${m}. Ponawiam wiadomość…`,
-	notice_fallback_return:      (m: string) => `↩ Powrót do ${m}`,
 	notice_migration_done:       (n: number, p: string) => `✅ AI-Vault: Historia rozmów przeniesiona poza vault (${n} plików).\nLokalizacja: ${p}`,
 	notice_migration_partial:    (n: number) => `⚠️ AI-Vault: Migracja częściowo nieudana — ${n} błędów. Sprawdź konsolę.`,
 	notice_migration_partial_short: (m: number, e: number) => `⚠️ Przeniesiono ${m}, błędów: ${e}. Konsola: F12.`,
@@ -705,9 +660,6 @@ const pl: TranslationDict = {
 	notice_migration_failed:     (e: string) => `❌ Migracja nieudana: ${e}`,
 	notice_export_done:          (f: string) => `📝 Wyeksportowano do: ${f}`,
 	notice_export_fail:          (e: string) => `❌ Błąd eksportu: ${e}`,
-	notice_manual_notes:         (n: number) => `📎 Dodano ${n} notatek do kontekstu`,
-	notice_restart_required:     "⏳ Zmiana wymaga restartu pluginu (wyłącz/włącz w Community Plugins).",
-	notice_storage_open_fail:    (e: string) => `Nie udało się otworzyć: ${e}`,
 
 	// Fallback modal
 	fallback_title:          "⚠️ Model niedostępny",
@@ -716,7 +668,6 @@ const pl: TranslationDict = {
 	fallback_api_error:      "Błąd API: ",
 	fallback_suggest:        (m: string) => `Mogę przełączyć rozmowę na ${m} i ponowić wiadomość.`,
 	fallback_save_default:   (m: string) => ` Ustaw ${m} jako domyślny model (możesz zmienić w ustawieniach)`,
-	fallback_cancel:         "Anuluj",
 	fallback_accept:         (m: string) => `Przełącz na ${m} i ponów`,
 
 	// Errors
@@ -725,7 +676,6 @@ const pl: TranslationDict = {
 	err_no_ollama_url:       "⚠️ Ustaw Base URL lokalnego API w ustawieniach.",
 	err_empty_response:      "Model zwrócił pustą odpowiedź. Spróbuj ponownie.",
 	err_stream:              "Błąd streamingu",
-	err_stream_responses:    "Błąd streamingu Responses API",
 
 	// Canvas
 	canvas_parse_error:      (b: string) => `[Canvas: ${b} — błąd parsowania JSON]`,
@@ -739,7 +689,6 @@ const pl: TranslationDict = {
 	export_no_messages:      "Brak wiadomości do eksportu.",
 	export_header:           (title: string, model: string, date: string) => `# ${title}\n\n> Model: ${model} | Data: ${date}\n\n---\n\n`,
 	export_user:             "**Ty:**",
-	export_assistant:        "**Asystent:**",
 
 	// Provider
 
@@ -756,8 +705,20 @@ const pl: TranslationDict = {
 	cmd_indexing:            "⏳ Indeksowanie…",
 
 	// Quiz
-	quiz_error:              "Błąd!",
 	quiz_no_question:        "(brak treści pytania)",
+	quiz_progress:           (n: number, total: number) => `Pytanie ${n} z ${total}`,
+	quiz_correct:            "✅ Dobrze!",
+	quiz_checking:           "Sprawdzam…",
+	err_detail:              (model: string, mode: string) => `Model: ${model} · Tryb: ${mode}`,
+	common_close:            "Zamknij",
+	common_edit:             "Edytuj",
+	common_save:             "Zapisz",
+	projects_chat_fallback:  "Rozmowa",
+	storage_inactive_error:  "Zewnętrzny magazyn nie jest aktywny",
+	code_rules_header:       "ZASADY:\n",
+	code_rule_clean:         "- Pisz czysty, wydajny i dobrze skomentowany kod\n",
+	code_rule_format:        "- Formatuj kod w blokach ```język\n...```\n",
+	code_rule_flag:          "- Wskazuj potencjalne problemy, przypadki brzegowe i optymalizacje\n",
 	quiz_wrong_prefix:       "❌ Źle. Poprawna odpowiedź: ",
 	quiz_correct_prefix:     "❌ Poprawna odpowiedź: ",
 	quiz_check_btn:          "Sprawdź",
@@ -775,7 +736,6 @@ const pl: TranslationDict = {
 	code_rule_2:                "- Używaj najlepszych praktyk i wzorców projektowych\n",
 	code_rule_3:                "- Wyjaśniaj decyzje architektoniczne krótko i konkretnie\n",
 	code_rule_4:                "- Jeśli użytkownik nie podał języka, zapytaj lub dobierz najlepszy\n",
-	code_rule_4_lang:           "język\n...",
 	code_rule_5:                "- Odpowiadaj w języku polskim (komentarze w kodzie po angielsku)\n\n",
 	code_system_prompt_closing: "Nie odpowiadaj na pytania niezwiązane z programowaniem — grzecznie przekieruj na temat kodowania.",
 

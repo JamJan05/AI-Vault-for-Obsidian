@@ -1,5 +1,5 @@
 import { requestUrl, TFile } from "obsidian";
-import { RAG_TOP_K } from "../constants";
+import { FILE_RAG_INDEX, RAG_TOP_K } from "../constants";
 import {
 	tokenize, buildTermFreq, chunkText,
 	bm25Score, cosineSim, vectorNorm,
@@ -22,7 +22,6 @@ import type { RAGEntry, RAGIndex, RAGSearchResult } from "../types";
 
 const BATCH_SIZE    = 20;
 const SAVE_DELAY_MS = 5000;
-const FILE_RAG_INDEX = "rag-index.json";
 const LOG_PREFIX     = "[AI-Vault] RAG:";
 
 interface PluginWithDeps {

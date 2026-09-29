@@ -216,7 +216,6 @@
 .gpt-msg:last-child .gpt-regen-btn:hover { opacity: 1; }
 .gpt-msg-failed { opacity: .75; }
 .gpt-msg-content   { user-select: text; -webkit-user-select: text; cursor: text; }
-.gpt-msg-interrupted { font-size: 10px; color: var(--text-faint); margin-top: 6px; font-style: italic; }
 .gpt-msg-error-line  { color: var(--gpt-color-error); font-weight: 600; }
 .gpt-msg-error-detail { font-size: 10px; color: var(--text-faint); margin-top: 6px; }
 .gpt-bubble .gpt-error { color: var(--gpt-color-error); }
@@ -373,12 +372,6 @@
 @keyframes gpt-pulse-stop { 0%, 100% { opacity: .85; } 50% { opacity: 1; } }
 .gpt-link { color: var(--interactive-accent); text-decoration: underline; text-underline-offset: 2px; }
 .gpt-link:hover { opacity: .8; }
-.gpt-cursor {
-  display: inline-block; width: 2px; height: 14px;
-  background: var(--text-normal); margin-left: 1px;
-  vertical-align: middle; animation: gpt-blink .7s step-end infinite;
-}
-@keyframes gpt-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
 /* ─── Modal overlay ──────────────────────────────────────────────────────────── */
 .gpt-modal-overlay {

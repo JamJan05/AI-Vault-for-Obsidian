@@ -60,7 +60,7 @@ export class GPTHistoryView extends ItemView {
 
 		const closeBtn = header.createEl("button", {
 			cls:  "gpt-icon-btn",
-			attr: { "aria-label": "Zamknij" },
+			attr: { "aria-label": t("common_close") },
 		});
 		this.setIconOnly(closeBtn, "x");
 		closeBtn.onclick = () => {

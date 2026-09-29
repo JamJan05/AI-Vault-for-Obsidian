@@ -63,6 +63,9 @@
 - Retrying on a fallback model showed the question twice.
 
 ### Removed
+- Unused code: barrel files, HTML and base64 helpers, leftover streaming code and 33 unused
+  translation keys.
+- The last interface strings that bypassed translation.
 - The "Auto-detect provider" setting, which never changed which provider was used.
 - The `gpt-5-search-api` model; web search is now a toggle on every listed cloud model.
 
