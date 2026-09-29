@@ -1,6 +1,6 @@
 # Privacy policy — AI-Vault for Obsidian
 
-**Version 1.1.2 · last reviewed 2026-09-29**
+**Version 1.5.0 · last reviewed 2026-09-29**
 
 AI-Vault is a local Obsidian plugin. It has no backend of its own, no account, and
 no analytics. Everything it sends leaves your machine only because you asked it to
@@ -115,7 +115,7 @@ created earlier stay in `rag-index.json` on your machine, unused, until you
 delete them or turn semantic search back on.
 
 **Upgrading from 1.1.x or earlier.** Those versions created embeddings whenever
-an OpenAI key was configured. From 1.2.0 the setting starts off for everyone,
+an OpenAI key was configured. From 1.5.0 the setting starts off for everyone,
 including existing installs, and a notice says so once.
 
 `.md` and `.canvas` files are indexed. Canvas files are converted to readable text

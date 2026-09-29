@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.5.0] - 2026-09-29
 
 ### Added
 - **New models.** OpenAI: GPT-6 Sol (new default), GPT-6 Astra, GPT-6 Luna and GPT-5.6 Terra.

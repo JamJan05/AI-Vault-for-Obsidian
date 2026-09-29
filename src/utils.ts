@@ -74,9 +74,11 @@ export function createKeyedDebounce<T>(
  */
 export function newId(): string {
 	const cryptoApi = window.crypto;
-	if (typeof cryptoApi?.randomUUID === "function") return cryptoApi.randomUUID();
+	if (typeof cryptoApi.randomUUID === "function") return cryptoApi.randomUUID();
 
-	const random = Math.random().toString(36).slice(2, 10).padEnd(8, "0");
+	// Older runtimes: the same random source, spelled out as eight base-36 characters.
+	const bytes  = cryptoApi.getRandomValues(new Uint8Array(8));
+	const random = Array.from(bytes, byte => (byte % 36).toString(36)).join("");
 	return `${Date.now().toString(36)}-${random}`;
 }
 

@@ -74,7 +74,7 @@ export default class GPTPlugin extends Plugin {
 		// Prefer Obsidian's SecretStorage for the keys where it exists (1.11.4+)
 		if (await this.useSecretStorage()) new Notice(t("notice_keys_moved_secret"), 8000);
 
-		// Semantic search became opt-in in 1.2.0 — tell people who were using it
+		// Semantic search became opt-in in 1.5.0 — tell people who were using it
 		this._announceEmbeddingsOptIn();
 
 		// Auto-migrate history when external storage has just been enabled
@@ -351,14 +351,14 @@ export default class GPTPlugin extends Plugin {
 			changed = true;
 		}
 
-		// Removed in 1.2.0 — the toggle never changed which provider was used.
+		// Removed in 1.5.0 — the toggle never changed which provider was used.
 		if ("autoDetectProvider" in raw) {
 			delete raw.autoDetectProvider;
 			delete (this.settings as unknown as Record<string, unknown>).autoDetectProvider;
 			changed = true;
 		}
 
-		// Settings saved before 1.2.0 have no opt-in field. Embeddings used to be
+		// Settings saved before 1.5.0 have no opt-in field. Embeddings used to be
 		// created whenever an OpenAI key was present; now they need explicit consent.
 		if (!("ragEmbeddingsEnabled" in raw) && !raw._embeddingsNoticeShown) {
 			this.embeddingsBecameOptIn = true;

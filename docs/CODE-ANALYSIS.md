@@ -7,7 +7,7 @@
 
 ---
 
-## 0. Status as of the 1.2.0 development branch
+## 0. Status as of version 1.5.0
 
 Everything below section 1 is the original review of **1.0.9** and is kept for the record; line
 numbers refer to that version. This table is the current state.
