@@ -285,6 +285,7 @@ const en: TranslationDict = {
 
 	// Notices
 	notice_model_changed:        (m: string) => `✓ Model: ${m}`,
+	notice_autosave_failed:      "The answer is shown, but the conversation could not be saved to the history.",
 	notice_keys_moved_local:     "🔒 API keys moved outside vault.",
 	notice_keys_moved_sync:      "☁️ API keys will be synced via Obsidian Sync.",
 	notice_keys_migrated:        "🔑 API keys moved outside vault.",
@@ -662,6 +663,7 @@ const pl: TranslationDict = {
 
 	// Notices
 	notice_model_changed:        (m: string) => `✓ Model: ${m}`,
+	notice_autosave_failed:      "Odpowiedź jest widoczna, ale rozmowy nie udało się zapisać w historii.",
 	notice_keys_moved_local:     "🔒 Klucze API przeniesione poza vault.",
 	notice_keys_moved_sync:      "☁️ Klucze API będą synchronizowane przez Obsidian Sync.",
 	notice_keys_migrated:        "🔑 Klucze API przeniesione poza vault.",

@@ -377,7 +377,18 @@ export class GPTSettingsTab extends PluginSettingTab {
 			return;
 		}
 
-		// No SecretStorage: keys go to keys.json, then leave data.json.
+		// SecretStorage is missing or refused the keys, so they need the key file
+		// outside the vault. Without it the keys must stay in data.json: removing
+		// them from there would leave no copy at all.
+		if (!plugin.externalStorage.isEnabled
+			&& !(plugin.settings.externalStorageEnabled && await plugin.externalStorage.init())) {
+			plugin.settings.apiKeysInSync = true;
+			await plugin.saveSettings();
+			new Notice(t("notice_keys_need_external"), 6000);
+			return;
+		}
+
+		// Keys go to keys.json, then leave data.json.
 		await plugin.saveSettings();
 		const d = await plugin.loadData();
 		if (d) {

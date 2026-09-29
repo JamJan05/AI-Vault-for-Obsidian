@@ -73,6 +73,16 @@
   conversation. The question is now returned to the input.
 - Retrying on a fallback model showed the question twice.
 
+### Review fixes
+- Turning key sync off could leave the API keys in no file at all when SecretStorage refused them
+  and the folder outside the vault was not active. The keys now stay in `data.json` in that case.
+- A failed save of the history no longer turns a finished answer into an error.
+- A second message can no longer start while the first is still collecting context.
+- Claude Haiku 4.5 in Thinking mode failed when the token limit was set below 1024.
+- Re-indexing with semantic search on no longer scans the whole index once per note.
+- Quiz answers given as true/false are matched to the option text, whatever the order.
+- Sources list only the attached notes that were actually read.
+
 ### Internal
 - The chat view was split into smaller modules. Prompt assembly, quiz parsing, the model list and
   export are now separate, unit-tested modules. No behaviour change is intended.

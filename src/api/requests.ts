@@ -46,6 +46,8 @@ export interface AnthropicRequest {
 
 /** Extra thinking budget for Claude models that still take `budget_tokens`. */
 const BUDGET_THINKING_HEADROOM = 8000;
+/** Anthropic rejects a thinking budget below this. */
+const MIN_THINKING_BUDGET = 1024;
 
 /**
  * Reasoning tokens are billed against the output limit, so the limit is padded to
@@ -152,8 +154,10 @@ export function buildAnthropicRequest(options: RequestOptions): AnthropicRequest
 		body.output_config = { effort };
 		body.max_tokens    = padTokensForEffort(tokens, effort);
 	} else if (mode === "think") {
-		body.thinking   = { type: "enabled", budget_tokens: tokens };
-		body.max_tokens = tokens + BUDGET_THINKING_HEADROOM;
+		// The token limit is a user setting and may be lower than the API accepts.
+		const budget    = Math.max(MIN_THINKING_BUDGET, tokens);
+		body.thinking   = { type: "enabled", budget_tokens: budget };
+		body.max_tokens = budget + BUDGET_THINKING_HEADROOM;
 	} else {
 		body.max_tokens = tokens;
 	}

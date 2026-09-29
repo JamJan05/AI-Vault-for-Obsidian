@@ -21,8 +21,10 @@ export async function openSource(app: App, source: MessageSource): Promise<void>
 		try {
 			const content = await app.vault.cachedRead(file);
 			range = locateChunk(content, source.anchor ?? "");
-			// The anchor is only the beginning — extend to the whole fragment.
-			if (range && source.length) {
+			// The anchor is only the beginning — extend to the whole fragment, but only
+			// when the match is that beginning and not a later line that survived an edit.
+			const head = (source.anchor ?? "").trim().slice(0, 20);
+			if (range && source.length && content.slice(range.start).startsWith(head)) {
 				range.end = Math.min(content.length, Math.max(range.end, range.start + source.length));
 			}
 		} catch (e) {

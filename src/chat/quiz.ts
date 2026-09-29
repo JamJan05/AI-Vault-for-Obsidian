@@ -85,7 +85,15 @@ function resolveCorrect(raw: Record<string, unknown>, options: string[]): number
 			if (candidate >= 0 && candidate < options.length) return candidate;
 			continue;
 		}
-		if (typeof candidate === "boolean") return candidate ? 0 : 1;
+		if (typeof candidate === "boolean") {
+			// Match the option text: models also write ["False", "True"] or ["No", "Yes"].
+			const wanted = candidate ? /^(true|yes)$/i : /^(false|no)$/i;
+			const byText = options.findIndex(o => wanted.test(o.trim()));
+			if (byText >= 0) return byText;
+			const byOrder = candidate ? 0 : 1;
+			if (byOrder < options.length) return byOrder;
+			continue;
+		}
 		if (typeof candidate !== "string" || !candidate) continue;
 
 		let index = options.findIndex(o => o === candidate);

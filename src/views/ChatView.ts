@@ -94,6 +94,8 @@ export class GPTChatView extends ItemView {
 	manualNotes:     TFile[] = [];
 	currentMode:     string | null = null;
 	abortController: AbortController | null = null;
+	/** True from the moment a message is accepted until its exchange has ended. */
+	private sending = false;
 
 	private readonly modelPicker = new ModelPicker();
 
@@ -598,9 +600,25 @@ export class GPTChatView extends ItemView {
 		if (activeProvider === "openai" && !this.settings.apiKey) { new Notice(t("err_no_openai_key")); return; }
 		if (activeProvider === "anthropic" && !this.settings.claudeApiKey) { new Notice(t("err_no_claude_key")); return; }
 		if (activeProvider === "local" && !this.settings.localBaseUrl.trim()) { new Notice(t("err_no_ollama_url")); return; }
-		if (activeProvider === "local" && !(await this.confirmPlainHttpEndpoint())) return;
+		if (this.sending) return;
+		this.sending = true;
+		try {
+			if (activeProvider === "local" && !(await this.confirmPlainHttpEndpoint())) return;
+			await this.runExchange(userText, override === undefined, activeModel, activeProvider, webSearchEnabled);
+		} finally {
+			this.sending = false;
+		}
+	}
 
-		if (!override) this.inputEl.value = "";
+	private async runExchange(
+		userText:         string,
+		clearInput:       boolean,
+		activeModel:      string,
+		activeProvider:   Provider,
+		webSearchEnabled: boolean,
+	): Promise<void> {
+
+		if (clearInput) this.inputEl.value = "";
 		this.sendBtn.disabled = true;
 		// A failed exchange left on screen is superseded by this message.
 		this.chatContainer.querySelectorAll(".gpt-msg-failed").forEach(el => el.remove());
@@ -682,7 +700,13 @@ export class GPTChatView extends ItemView {
 				this.updateTokenCounter(Math.round(totalChars / 4), null);
 			}
 
-			await this.plugin.autoSaveSession(this.messages);
+			// A failed save is not a failed answer: keep the exchange and say so.
+			try {
+				await this.plugin.autoSaveSession(this.messages);
+			} catch (e) {
+				console.error("[AI-Vault] autosave failed:", (e as Error)?.message);
+				new Notice(t("notice_autosave_failed"), 7000);
+			}
 
 		} catch (err: unknown) {
 			this.setLoading(bubble, false);
@@ -899,7 +923,7 @@ export class GPTChatView extends ItemView {
 	}
 
 	async regenerateLastMessage(): Promise<void> {
-		if (this.abortController) return;
+		if (this.sending) return;
 
 		// A failed exchange is not in this.messages — retry it from what is on screen.
 		const failed = Array.from(this.chatContainer.querySelectorAll<HTMLElement>(".gpt-msg-failed"));

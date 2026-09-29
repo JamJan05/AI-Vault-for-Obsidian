@@ -53,7 +53,11 @@ export async function collectContext(input: CollectInput): Promise<CollectedCont
 
 		if (notes.length) {
 			context.attached = notes.map(n => ({ title: n.file.basename, text: n.content }));
-			context.sources.push(...manualNotes.map(f => toMessageSource(f.basename, f.path)));
+			// Only what was actually read: the sources must match the prompt.
+			const loaded = new Set(notes.map(n => n.file.path));
+			context.sources.push(...manualNotes
+				.filter(f => loaded.has(f.path))
+				.map(f => toMessageSource(f.basename, f.path)));
 			const linked = notes.filter(n => !manualNotes.some(f => f.path === n.file.path));
 			context.sources.push(...linked.map(n => toMessageSource(`↳ ${n.file.basename}`, n.file.path)));
 		}

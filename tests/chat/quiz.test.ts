@@ -132,6 +132,22 @@ describe("normalizeQuestion", () => {
 		assert.equal(normalizeQuestion({ type: "truefalse", correct_answer: false })?.correct, 1);
 	});
 
+	it("resolves a boolean against the option text, whatever the order", () => {
+		assert.equal(normalizeQuestion({ options: ["False", "True"], correct_answer: true })?.correct, 1);
+		assert.equal(normalizeQuestion({ options: ["False", "True"], correct_answer: false })?.correct, 0);
+		assert.equal(normalizeQuestion({ options: ["No", "Yes"], correct: true })?.correct, 1);
+		assert.equal(normalizeQuestion({ options: [" yes ", "no"], correct: false })?.correct, 1);
+	});
+
+	it("falls back to the usual order when the options are not true and false", () => {
+		assert.equal(normalizeQuestion({ options: ["Prawda", "Fałsz"], correct_answer: true })?.correct, 0);
+		assert.equal(normalizeQuestion({ options: ["Prawda", "Fałsz"], correct_answer: false })?.correct, 1);
+	});
+
+	it("keeps a boolean inside a single-option question", () => {
+		assert.equal(normalizeQuestion({ type: "choice", options: ["only"], correct: false })?.correct, 0);
+	});
+
 	it("never returns an index outside the options", () => {
 		const options = ["a", "b"];
 		for (const correct of [5, -1, 1.5, NaN, "Z", "not an option", null, {}]) {

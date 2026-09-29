@@ -255,6 +255,18 @@ export class RAGEngine {
 
 			const embed = this.embeddingsAllowed;
 
+			// Chunks that still need a vector, by note — built once, so unchanged
+			// files do not each scan the whole index.
+			const missingByPath = new Map<string, RAGEntry[]>();
+			if (embed) {
+				for (const entry of this.index) {
+					if (entry.embedding) continue;
+					const list = missingByPath.get(entry.path);
+					if (list) list.push(entry);
+					else missingByPath.set(entry.path, [entry]);
+				}
+			}
+
 			const flushEmbeddings = async (): Promise<void> => {
 				if (!pendingChunks.length || !embed) { pendingChunks = []; return; }
 				try {
@@ -290,8 +302,7 @@ export class RAGEngine {
 						// Semantic search may have been switched on after this file was
 						// indexed — give its chunks the embeddings they are missing.
 						if (embed) {
-							for (const entry of this.index) {
-								if (entry.path !== file.path || entry.embedding) continue;
+							for (const entry of missingByPath.get(file.path) ?? []) {
 								pendingChunks.push({ entry, text: entry.chunk });
 								if (pendingChunks.length >= BATCH_SIZE) await flushEmbeddings();
 							}

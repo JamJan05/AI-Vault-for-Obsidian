@@ -220,6 +220,20 @@ describe("buildAnthropicRequest — token budget models", () => {
 		assert.ok(budget < (body.max_tokens as number));
 	});
 
+	it("never sends a budget below the minimum the API accepts", () => {
+		for (const maxTokens of [256, 512, 1023]) {
+			const { body } = buildAnthropicRequest({ model: "claude-haiku-4-5", messages: MESSAGES, mode: "think", maxTokens });
+			const budget = (body.thinking as { budget_tokens: number }).budget_tokens;
+			assert.equal(budget, 1024, String(maxTokens));
+			assert.ok(budget < (body.max_tokens as number));
+		}
+	});
+
+	it("leaves the limit alone outside think mode", () => {
+		const { body } = buildAnthropicRequest({ model: "claude-haiku-4-5", messages: MESSAGES, mode: "fast", maxTokens: 256 });
+		assert.equal(body.max_tokens, 256);
+	});
+
 	it("sends neither an effort nor the fallback parameter", () => {
 		const request = buildAnthropicRequest({ model: "claude-haiku-4-5", messages: MESSAGES, mode: "think" });
 		assert.equal("output_config" in request.body, false);
