@@ -151,7 +151,7 @@ export class GPTChatView extends ItemView {
 	private async maybeAutoIndex(): Promise<void> {
 		if (!this.settings.ragEnabled || !this.settings.ragAutoIndex) return;
 		const loaded = await this.rag.loadIndex();
-		if (!loaded) {
+		if (!loaded || this.rag.outdated) {
 			await this.startIndexing();
 		} else {
 			const s = this.rag.stats;
@@ -832,6 +832,7 @@ export class GPTChatView extends ItemView {
 			chatMode:   this.chatMode,
 			attached:   context.attached,
 			retrieved:  context.retrieved,
+			searchedWithoutMatch: context.searchedWithoutMatch,
 			project:    projectContext ? { name: project?.name ?? "Project", context: projectContext } : null,
 		});
 

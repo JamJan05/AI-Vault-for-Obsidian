@@ -96,7 +96,8 @@ export default class GPTPlugin extends Plugin {
 		if (this.settings.ragEnabled && this.settings.ragAutoIndex) {
 			void (async () => {
 				const loaded = await this.rag.loadIndex();
-				if (!loaded && !this.rag.indexing) await this.rag.buildIndex();
+				const stale  = !loaded || this.rag.outdated;
+				if (stale && !this.rag.indexing) await this.rag.buildIndex();
 			})();
 		}
 

@@ -7,7 +7,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-	bm25Score,
 	buildTermFreq,
 	chunkText,
 	contentHash,
@@ -49,19 +48,6 @@ describe("buildTermFreq", () => {
 	});
 });
 
-describe("bm25Score", () => {
-	it("scores a document containing the query terms above one that does not", () => {
-		const withTerm = bm25Score(["vault"], { vault: 3 }, 10, 10);
-		const without = bm25Score(["vault"], { other: 3 }, 10, 10);
-		assert.ok(withTerm > without);
-		assert.equal(without, 0);
-	});
-
-	it("is finite for a zero-length document and a zero average", () => {
-		assert.ok(Number.isFinite(bm25Score(["x"], {}, 0, 0)));
-	});
-});
-
 describe("vector maths", () => {
 	it("computes the dot product and norm", () => {
 		assert.equal(dotProduct([1, 2, 3], [4, 5, 6]), 32);
@@ -90,10 +76,53 @@ describe("chunkText", () => {
 	});
 
 	it("splits on H1/H2 headings", () => {
-		const chunks = chunkText("# One\nalpha\n\n## Two\nbeta");
+		const alpha = "alpha ".repeat(60);
+		const beta  = "beta ".repeat(60);
+		const chunks = chunkText(`# One\n${alpha}\n\n## Two\n${beta}`);
+		assert.equal(chunks.length, 2);
+		assert.ok(chunks[0].startsWith("# One") && chunks[0].includes("alpha"));
+		assert.ok(chunks[1].startsWith("## Two") && chunks[1].includes("beta"));
+	});
+
+	it("never leaves a heading on its own", () => {
+		const body = "This section has enough text to stand on its own as a fragment. ".repeat(5);
+		const note = `# Kosmos\n\n## Atmosfera\n${body}\n\n## Planety\n${body}`;
+		const chunks = chunkText(note);
+
 		assert.ok(chunks.length >= 2);
-		assert.ok(chunks.some(c => c.includes("alpha")));
-		assert.ok(chunks.some(c => c.includes("beta")));
+		for (const chunk of chunks) {
+			assert.ok(chunk.includes("\n"), `heading-only fragment: ${chunk.slice(0, 40)}`);
+			assert.ok(chunk.length >= 200, `fragment of ${chunk.length} chars`);
+		}
+		assert.ok(chunks[0].startsWith("# Kosmos"));
+		assert.ok(chunks[0].includes("## Atmosfera"));
+	});
+
+	it("joins short sections instead of making tiny fragments", () => {
+		const note = Array.from({ length: 12 }, (_v, i) => `## Point ${i}\nA short line about point ${i}.`).join("\n\n");
+		for (const chunk of chunkText(note)) {
+			assert.ok(chunk.length >= 200 || chunk === chunkText(note).at(-1), `fragment of ${chunk.length} chars`);
+		}
+	});
+
+	it("keeps a short note as one fragment", () => {
+		assert.deepEqual(chunkText("# Title\n\nOne line."), ["# Title\n\nOne line."]);
+	});
+
+	it("loses no text", () => {
+		const body = "Sentence number one is here. ".repeat(20);
+		const note = `# A\n\n## B\n${body}\n\n## C\nshort\n\n## D\n${body}\n\n## E\nend`;
+		const joined = chunkText(note).join("\n");
+		for (const marker of ["# A", "## B", "## C", "short", "## D", "## E", "end"]) {
+			assert.ok(joined.includes(marker), marker);
+		}
+	});
+
+	it("splits one huge paragraph that has no blank lines", () => {
+		const wall = "word ".repeat(4000);
+		const chunks = chunkText(wall, 1200, 150);
+		assert.ok(chunks.length > 10);
+		for (const chunk of chunks) assert.ok(chunk.length <= 1200 * 1.5, `fragment of ${chunk.length} chars`);
 	});
 
 	it("splits an oversized section into multiple chunks", () => {

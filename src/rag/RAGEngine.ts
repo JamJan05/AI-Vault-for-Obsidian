@@ -2,9 +2,10 @@ import { requestUrl, TFile } from "obsidian";
 import { FILE_RAG_INDEX, RAG_TOP_K } from "../constants";
 import {
 	tokenize, buildTermFreq, chunkText,
-	bm25Score, cosineSim, vectorNorm,
-	contentHash, withRetry,
+	vectorNorm, contentHash, withRetry,
 } from "../utils";
+import { buildCorpusStats, queryTerms, rankEntries } from "./search";
+import type { CorpusStats } from "./search";
 import { parseCanvasToText } from "./canvasParser";
 import {
 	EMBEDDINGS_URL,
@@ -23,6 +24,10 @@ import type { RAGEntry, RAGIndex, RAGSearchResult } from "../types";
 const BATCH_SIZE    = 20;
 const SAVE_DELAY_MS = 5000;
 const LOG_PREFIX     = "[AI-Vault] RAG:";
+/** Bumped when notes are split into fragments differently, so old indexes are rebuilt. */
+const INDEX_VERSION  = 3;
+/** Most fragments taken from one note for a single question. */
+const MAX_FRAGMENTS_PER_NOTE = 2;
 
 interface PluginWithDeps {
 	app:             import("obsidian").App;
@@ -65,11 +70,21 @@ interface PendingChunk {
 export class RAGEngine {
 	private index:       RAGEntry[] = [];
 	private fileHashes:  Record<string, string> = {};
-	private cachedAvgLen = 0;
+	/** Word statistics of the searchable notes; rebuilt after the index or the ignore list changes. */
+	private corpusStats: CorpusStats | null = null;
+	/** The ignore list the statistics were built for. */
+	private corpusStatsFor: string | null = null;
+	/** A load in progress, shared by everyone who asks while it runs. */
+	private loading: Promise<boolean> | null = null;
 	private saveTimer:   number | null = null;
 
 	indexed  = false;
 	indexing = false;
+	/**
+	 * True when the stored index was made by an older version that split notes
+	 * differently. It still works, and the next indexing run rebuilds it.
+	 */
+	outdated = false;
 
 	private readonly storage: ExternalStorage;
 
@@ -108,23 +123,35 @@ export class RAGEngine {
 
 	// ── Index — load / save ────────────────────────────────────────────────────
 
+	/**
+	 * Loads the index from disk once. The index in memory is the current one, so a
+	 * second call — the chat view opening while startup indexing is still running —
+	 * returns at once instead of replacing it with the older copy on disk.
+	 */
 	async loadIndex(): Promise<boolean> {
+		if (this.indexed || this.indexing) return true;
+		this.loading ??= this.readIndex().finally(() => { this.loading = null; });
+		return this.loading;
+	}
+
+	private async readIndex(): Promise<boolean> {
 		const data = await this.storage.readJson<RAGIndex | RAGEntry[] | null>(
 			this.indexPath,
 			null,
 		);
 
-		// v2 format
+		// Current format, or an earlier one with the same layout
 		if (
 			data &&
 			!Array.isArray(data) &&
-			data._version === 2 &&
+			(data._version === INDEX_VERSION || data._version === 2) &&
 			Array.isArray(data.entries)
 		) {
 			const idx = data;
 			this.index       = idx.entries;
 			this.fileHashes  = idx.hashes ?? {};
 			this.indexed     = true;
+			this.outdated    = data._version !== INDEX_VERSION;
 			// A stored index may predate the current ignore list — drop excluded
 			// chunks before anything can read or send them.
 			if (this.purgeIgnoredEntries()) this.scheduleSave();
@@ -138,6 +165,7 @@ export class RAGEngine {
 			this.index       = data;
 			this.fileHashes  = {};
 			this.indexed     = true;
+			this.outdated    = true;
 			if (this.purgeIgnoredEntries()) this.scheduleSave();
 			this.recalcAvgLen();
 			for (const e of this.index) this.ensureEntryCache(e);
@@ -174,7 +202,9 @@ export class RAGEngine {
 		}));
 
 		await this.storage.writeJson(this.indexPath, {
-			_version: 2,
+			// An index that still holds old fragments keeps its old version, so it
+			// is rebuilt the next time indexing runs.
+			_version: this.outdated ? 2 : INDEX_VERSION,
 			entries:  cleanEntries,
 			hashes:   this.fileHashes,
 		} satisfies RAGIndex);
@@ -230,11 +260,27 @@ export class RAGEngine {
 			// and remove index entries for deleted notes. File contents are read incrementally.
 			// Ignored paths are dropped up front, so their contents are never read.
 			const ignored = this.ignored;
+
+			// Fragments are cut differently than when this index was made: forget the
+			// hashes so every note is split again, and keep the vectors of fragments
+			// whose text comes out the same, so nothing is sent for embedding twice.
+			const oldVectors = new Map<string, number[]>();
+			if (this.outdated) {
+				for (const entry of this.index) {
+					if (entry.embedding) oldVectors.set(`${entry.path}\u0000${entry.chunk}`, entry.embedding);
+				}
+				this.fileHashes = {};
+			}
+
 			const files = this.plugin.app.vault.getFiles()
 				.filter((file: TFile) =>
 					(file.extension === "md" || file.extension === "canvas") &&
 					!ignored.matches(file.path));
 			const currentPaths = new Set(files.map((f: TFile) => f.path));
+
+			// Drop fragments of notes that are gone or are now ignored. This does not
+			// rely on the hashes, which an outdated or legacy index does not have.
+			this.index = this.index.filter(e => currentPaths.has(e.path));
 
 			// Remove entries for files that no longer exist — and, because the list above
 			// is already filtered, for files that are now ignored.
@@ -323,12 +369,20 @@ export class RAGEngine {
 						const entry = this.createEntry(file, chunk);
 						this.index.push(entry);
 
-						if (embed) {
+						const known = oldVectors.get(`${file.path}\u0000${chunk}`);
+						if (known) {
+							entry.embedding = known;
+							entry._embNorm  = vectorNorm(known);
+						} else if (embed) {
 							pendingChunks.push({ entry, text: chunk });
 							if (pendingChunks.length >= BATCH_SIZE) await flushEmbeddings();
 						}
 					}
 				} catch (e) {
+					// No fragments and no hash: nothing stale is left to be found, and
+					// the note is read again the next time indexing runs.
+					this.index = this.index.filter(entry => entry.path !== file.path);
+					delete newHashes[file.path];
 					console.warn(LOG_PREFIX, "file failed:", file.path, (e as Error)?.message);
 				}
 
@@ -339,6 +393,7 @@ export class RAGEngine {
 			await flushEmbeddings();
 
 			this.fileHashes = newHashes;
+			this.outdated   = false;
 			this.recalcAvgLen();
 			await this.saveIndexNow();
 			this.indexed = true;
@@ -351,14 +406,13 @@ export class RAGEngine {
 	// ── Search (BM25 + cosine → RRF) ───────────────────────────────────────────
 
 	/**
-	 * Finds the chunks that best match the query.
-	 * Algorithm: BM25 + cosine similarity combined via Reciprocal Rank Fusion.
-	 * RRF is scale-invariant — no manual weight tuning needed.
+	 * Finds the fragments that best match the question — see rankEntries().
+	 * Returns nothing when no fragment is related to it.
 	 */
 	async search(query: string, topK = RAG_TOP_K): Promise<RAGSearchResult[]> {
 		if (!this.index.length) return [];
 
-		const qt     = tokenize(query);
+		const qt = queryTerms(query);
 		if (!qt.length) return [];
 
 		// Retrieval-time filter — covers indexes built before the current ignore list,
@@ -369,78 +423,36 @@ export class RAGEngine {
 			: this.index.filter(e => !ignored.matches(e.path));
 		if (!candidates.length) return [];
 
-		const avgLen = this.cachedAvgLen;
 		const mode = this.plugin.settings.ragSearchMode ?? "hybrid";
 		const useEmbedding = mode !== "exact" && this.embeddingsAllowed;
 
 		// Optional query embedding. Without consent the question is never sent, and
 		// stored vectors from an earlier opt-in simply go unused.
-		let qEmb:  number[] | null = null;
-		let qNorm  = 0;
+		let qEmb: number[] | null = null;
 
 		if (useEmbedding && candidates.some(e => e.embedding)) {
 			try {
-				qEmb  = await this.getEmbedding(query);
-				qNorm = vectorNorm(qEmb);
+				qEmb = await this.getEmbedding(query);
 			} catch (e) {
 				console.warn(LOG_PREFIX, "query embedding failed:", (e as Error)?.message);
 			}
 		}
 
-		// "semantic" without a query vector would score everything zero — fall back
-		// to keyword search, which runs entirely on the device.
-		const useLexical = mode !== "semantic" || !qEmb;
-
-		// Compute both scores for each chunk
-		const scored = candidates.map(e => {
-			this.ensureEntryCache(e);
-			const bm  = useLexical ? bm25Score(qt, e._tf ?? {}, e.tokens.length, avgLen) : 0;
-			const cos = (qEmb && e.embedding)
-				? cosineSim(qEmb, e.embedding, qNorm, e._embNorm ?? undefined)
-				: 0;
-			return { entry: e, bm, cos };
-		});
-
-		// Reciprocal Rank Fusion — independent of result scale
-		const K = 60;
-		const rankBM  = [...scored].sort((a, b) => b.bm  - a.bm)
-			.map((s, i) => [s.entry.path + s.entry.chunk, i] as const);
-		const rankCos = [...scored].sort((a, b) => b.cos - a.cos)
-			.map((s, i) => [s.entry.path + s.entry.chunk, i] as const);
-
-		const rrfMap = new Map<string, number>();
-		for (const [id, rank] of rankBM)  rrfMap.set(id, (rrfMap.get(id) ?? 0) + 1 / (K + rank));
-		for (const [id, rank] of rankCos) rrfMap.set(id, (rrfMap.get(id) ?? 0) + 1 / (K + rank));
-
-		// Bonus for matching the note title
-		const byFile: Record<string, RAGSearchResult> = {};
-		for (const s of scored) {
-			const id  = s.entry.path + s.entry.chunk;
-			let score = rrfMap.get(id) ?? 0;
-
-			// Title boost — a note whose name matches the query ranks higher
-			const titleTokens  = tokenize(s.entry.basename);
-			const titleMatches = qt.filter(q => titleTokens.includes(q)).length;
-			if (titleMatches > 0) score += 0.15 * (titleMatches / qt.length);
-
-			if (mode === "recent" && s.entry.mtime) {
-				const ageDays = Math.max(0, (Date.now() - s.entry.mtime) / 86_400_000);
-				score += Math.max(0, 0.2 - Math.min(0.2, ageDays / 365));
-			}
-
-			if (!byFile[s.entry.path] || score > byFile[s.entry.path].score) {
-				byFile[s.entry.path] = {
-					path:     s.entry.path,
-					basename: s.entry.basename,
-					chunk:    s.entry.chunk,
-					score,
-				};
-			}
+		// Statistics cover exactly the notes that can be returned, so a note that
+		// was just added to the ignore list no longer influences the ranking.
+		const ignoreKey = this.plugin.settings.ragExcludedPaths ?? "";
+		if (!this.corpusStats || this.corpusStatsFor !== ignoreKey) {
+			this.corpusStats    = buildCorpusStats(candidates);
+			this.corpusStatsFor = ignoreKey;
 		}
+		for (const e of candidates) this.ensureEntryCache(e);
 
-		return Object.values(byFile)
-			.sort((a, b) => b.score - a.score)
-			.slice(0, topK);
+		return rankEntries(candidates, qt, this.corpusStats, {
+			topK,
+			maxPerFile:     MAX_FRAGMENTS_PER_NOTE,
+			mode,
+			queryEmbedding: qEmb,
+		});
 	}
 
 	// ── Incremental updates ────────────────────────────────────────────────────
@@ -603,10 +615,9 @@ export class RAGEngine {
 		return this.index.length !== before || hashesChanged;
 	}
 
+	/** Called after every change to the index: the word statistics are stale. */
 	private recalcAvgLen(): void {
-		this.cachedAvgLen = this.index.length
-			? this.index.reduce((s, e) => s + e.tokens.length, 0) / this.index.length
-			: 0;
+		this.corpusStats = null;
 	}
 
 	/** Ensures the entry has cache populated: TF + embeddingNorm */

@@ -197,29 +197,50 @@ export function cosineSim(a: number[], b: number[], normA?: number, normB?: numb
 	return dotProduct(a, b) / (na * nb);
 }
 
-export function bm25Score(
-	qTokens:  string[],
-	docTf:    Record<string, number>,
-	docLen:   number,
-	avgLen:   number,
-	k1 = 1.5,
-	b  = 0.75,
-): number {
-	let score = 0;
-	const lenNorm = 1 - b + b * docLen / Math.max(avgLen, 1);
-	for (const token of qTokens) {
-		const tf = docTf[token];
-		if (!tf) continue;
-		score += (tf * (k1 + 1)) / (tf + k1 * lenNorm);
-	}
-	return score;
-}
-
 // ─── Chunking ─────────────────────────────────────────────────────────────────
 
+/** A fragment shorter than this says too little on its own and is joined to its neighbour. */
+const MIN_CHUNK_CHARS = 200;
+
+/** Cuts text that has no paragraph breaks into pieces of at most `size`, at a space where possible. */
+function splitOversized(text: string, size: number): string[] {
+	const pieces: string[] = [];
+	let rest = text.trim();
+
+	while (rest.length > size) {
+		let cut = Math.max(rest.lastIndexOf("\n", size), rest.lastIndexOf(" ", size));
+		if (cut < size / 2) cut = size;
+		pieces.push(rest.slice(0, cut).trim());
+		rest = rest.slice(cut).trim();
+	}
+	if (rest) pieces.push(rest);
+	return pieces;
+}
+
+/** Splits one section by paragraphs, carrying a short tail over for context. */
+function splitSection(section: string, size: number, overlap: number): string[] {
+	const chunks: string[] = [];
+	const paragraphs = section.split(/\n{2,}/).flatMap(p => p.length > size ? splitOversized(p, size) : [p]);
+	let cur = "";
+
+	for (const p of paragraphs) {
+		if (cur.length + p.length > size && cur.length > 0) {
+			chunks.push(cur.trim());
+			const tail = cur.length > overlap ? cur.slice(-overlap) : "";
+			cur = tail + (tail ? "\n\n" : "") + p;
+		} else {
+			cur += (cur ? "\n\n" : "") + p;
+		}
+	}
+
+	if (cur.trim()) chunks.push(cur.trim());
+	return chunks;
+}
+
 /**
- * Splits text into chunks — first by H1/H2 headings,
- * then by paragraphs with overlap, preserving context across fragments.
+ * Splits text into chunks — first by H1/H2 headings, then by paragraphs with
+ * overlap. A fragment that is too short to mean anything, such as a heading
+ * without its text, is joined to the fragment that follows it.
  */
 export function chunkText(
 	text:    string,
@@ -227,30 +248,34 @@ export function chunkText(
 	overlap = RAG_CHUNK_OVERLAP,
 ): string[] {
 	// Split on H1/H2 headings — natural section boundaries
-	const sections = text.split(/(?=^#{1,2}\s)/m);
+	const pieces = text
+		.split(/(?=^#{1,2}\s)/m)
+		.map(section => section.trim())
+		.filter(section => section.length > 0)
+		.flatMap(section => section.length <= size ? [section] : splitSection(section, size, overlap));
+
+	const minChars = Math.min(MIN_CHUNK_CHARS, Math.floor(size / 3));
 	const chunks: string[] = [];
+	let carry = "";
 
-	for (const section of sections) {
-		if (section.length <= size) {
-			if (section.trim()) chunks.push(section.trim());
-			continue;
+	for (const piece of pieces) {
+		const candidate = carry ? `${carry}\n\n${piece}` : piece;
+		if (candidate.length < minChars) {
+			carry = candidate;
+		} else {
+			chunks.push(candidate);
+			carry = "";
 		}
+	}
 
-		// Large sections: split by paragraphs with overlap
-		const paras = section.split(/\n{2,}/);
-		let cur = "";
-
-		for (const p of paras) {
-			if (cur.length + p.length > size && cur.length > 0) {
-				chunks.push(cur.trim());
-				const tail = cur.length > overlap ? cur.slice(-overlap) : "";
-				cur = tail + (tail ? "\n\n" : "") + p;
-			} else {
-				cur += (cur ? "\n\n" : "") + p;
-			}
+	// A short ending belongs to what came before it.
+	if (carry) {
+		const last = chunks.length - 1;
+		if (last >= 0 && chunks[last].length + carry.length <= size * 1.5) {
+			chunks[last] = `${chunks[last]}\n\n${carry}`;
+		} else {
+			chunks.push(carry);
 		}
-
-		if (cur.trim()) chunks.push(cur.trim());
 	}
 
 	return chunks.length ? chunks : [text.slice(0, size)];

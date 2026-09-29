@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.5.1] - 2026-09-29
+
+A maintenance release. It sends less than 1.5.0: note fragments that are unrelated to the question
+are no longer added to the prompt.
+
+### Fixed
+- **RAG returned note titles without their text.** Notes were split at every heading, so a heading
+  often became a fragment of its own, and the search preferred those short fragments. A heading now
+  stays with its text. The index is rebuilt once after the update.
+- **RAG missed notes when the question used another form of a word**, which in Polish is most
+  questions: "o kosmosie" did not find a note about "kosmos". Word forms now match.
+- **RAG added unrelated fragments when nothing matched.** The five "best" fragments were sent even
+  when none had anything to do with the question. Now only related fragments are sent, and when
+  there are none the model is told so, so it can say that the search found nothing instead of
+  claiming it cannot see your notes.
+- Words such as "summarize" and "notes" in a question are no longer searched for.
+- A rare word now counts for more than a common one when notes are ranked.
+- A question that names a note gets up to four fragments of that note instead of one.
+- Opening the chat while the index was being built at startup could replace the new index with the
+  older copy on disk.
+- A note that could not be read during indexing kept its old fragments. They are now removed, and
+  the note is read again the next time indexing runs.
+- The project dialog is built with Obsidian's element helpers instead of `document.createElement`.
+
+### Release
+- The release workflow now points the tag at the commit that sets the version, so `manifest.json`
+  at the tag matches the published manifest. Before, the tag stayed on the previous commit and the
+  repository manifest at the tag still named the old version.
+- The release stops without pushing anything if `main` changes while it is being built, so the
+  version commit and the tag can only ever sit on the code that was tested.
+- The tag is moved last, after the assets are uploaded, and only if the tag on GitHub has not
+  changed since it was checked out. The version commit is pushed only while `main` on GitHub is
+  still the commit that was built.
+
 ## [1.5.0] - 2026-09-29
 
 ### Added

@@ -143,12 +143,25 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Everything above was built and checked from this commit. If main has
+          # moved since, the version commit would sit on code this job never
+          # tested, so stop instead of committing on top of it.
+          BUILT_SHA="$(git rev-parse HEAD)"
           git fetch origin main
+          if [ "$(git rev-parse origin/main)" != "${BUILT_SHA}" ]; then
+            echo "::error::main changed while the release was being built. Nothing was pushed; publish the release again from the current main."
+            exit 1
+          fi
+          echo "BUILT_SHA=${BUILT_SHA}" >> "${GITHUB_ENV}"
+
           git checkout main
           git add manifest.json package.json versions.json
           git add package-lock.json 2>/dev/null || true
           git diff --cached --quiet || git commit -m "chore: update version to ${{ github.event.release.tag_name }}"
-          git push origin main
+          # The lease repeats the check above at the moment of the push: it only
+          # succeeds while main on GitHub is still the commit that was built.
+          git push --force-with-lease="refs/heads/main:${BUILT_SHA}" origin HEAD:refs/heads/main
 
       - name: Upload release assets
         env:
@@ -156,3 +169,30 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
         run: |
           gh release upload "$TAG" main.js styles.css manifest.json --clobber
+
+      - name: Point the tag at the version commit
+        # The release is created on the commit before the version files change,
+        # so manifest.json at the tag would still name the previous version and
+        # disagree with the published manifest. Moving the tag to the commit
+        # that was just pushed makes the tag, the repository and the release
+        # assets state the same version. It runs last, after the assets are
+        # uploaded, so a failed upload never leaves a moved tag behind.
+        if: ${{ !github.event.release.prerelease }}
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          # The tag may only move to the commit that was built, or to the version
+          # commit made directly on top of it.
+          HEAD_SHA="$(git rev-parse HEAD)"
+          PARENT_SHA="$(git rev-parse HEAD^)"
+          if [ "${HEAD_SHA}" != "${BUILT_SHA}" ] && [ "${PARENT_SHA}" != "${BUILT_SHA}" ]; then
+            echo "::error::Refusing to move tag ${TAG}: HEAD is not the built commit or its version commit."
+            exit 1
+          fi
+          # What the tag ref holds right now. For an annotated tag this is the tag
+          # object, not the commit, so it is read from the ref rather than assumed.
+          EXPECTED_TAG_SHA="$(git rev-parse "refs/tags/${TAG}")"
+          git tag --force "${TAG}"
+          # The lease makes the push fail if the tag on GitHub has changed since it
+          # was checked out, instead of overwriting someone else's update.
+          git push --force-with-lease="refs/tags/${TAG}:${EXPECTED_TAG_SHA}" origin "refs/tags/${TAG}"

@@ -27,6 +27,8 @@ export interface SystemPromptParts {
 	attached:   NoteExcerpt[];
 	/** Fragments found by RAG. */
 	retrieved:  NoteExcerpt[];
+	/** The vault was searched for this question and nothing related was found. */
+	searchedWithoutMatch?: boolean;
 	project:    { name: string; context: string } | null;
 }
 
@@ -63,6 +65,11 @@ export function composeSystemPrompt(parts: SystemPromptParts): string {
 			.map(note => `### ${note.title}\n${note.text}`)
 			.join(SEPARATOR);
 		prompt += section("VAULT CONTEXT (RAG):", body);
+	}
+
+	// Say so plainly, so the model can explain it instead of claiming it sees nothing.
+	if (parts.searchedWithoutMatch && !parts.retrieved.length && !parts.attached.length) {
+		prompt += `\n\n---\n${t("rag_no_match_note")}\n---`;
 	}
 
 	if (parts.project?.context) {
