@@ -143,7 +143,18 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Everything above was built and checked from this commit. If main has
+          # moved since, the version commit would sit on code this job never
+          # tested, so stop instead of committing on top of it.
+          BUILT_SHA="$(git rev-parse HEAD)"
           git fetch origin main
+          if [ "$(git rev-parse origin/main)" != "${BUILT_SHA}" ]; then
+            echo "::error::main changed while the release was being built. Nothing was pushed; publish the release again from the current main."
+            exit 1
+          fi
+          echo "BUILT_SHA=${BUILT_SHA}" >> "${GITHUB_ENV}"
+
           git checkout main
           git add manifest.json package.json versions.json
           git add package-lock.json 2>/dev/null || true
@@ -160,6 +171,14 @@ jobs:
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
+          # The tag may only move to the commit that was built, or to the version
+          # commit made directly on top of it.
+          HEAD_SHA="$(git rev-parse HEAD)"
+          PARENT_SHA="$(git rev-parse HEAD^)"
+          if [ "${HEAD_SHA}" != "${BUILT_SHA}" ] && [ "${PARENT_SHA}" != "${BUILT_SHA}" ]; then
+            echo "::error::Refusing to move tag ${TAG}: HEAD is not the built commit or its version commit."
+            exit 1
+          fi
           git tag --force "${TAG}"
           git push --force origin "refs/tags/${TAG}"
 

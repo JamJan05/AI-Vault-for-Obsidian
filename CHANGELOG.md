@@ -9,6 +9,8 @@
 - The release workflow now points the tag at the commit that sets the version, so `manifest.json`
   at the tag matches the published manifest. Before, the tag stayed on the previous commit and the
   repository manifest at the tag still named the old version.
+- The release stops without pushing anything if `main` changes while it is being built, so the
+  version commit and the tag can only ever sit on the code that was tested.
 
 ## [1.5.0] - 2026-09-29
 
