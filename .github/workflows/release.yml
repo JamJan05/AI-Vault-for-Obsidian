@@ -187,7 +187,10 @@ jobs:
             echo "::error::Refusing to move tag ${TAG}: HEAD is not the built commit or its version commit."
             exit 1
           fi
+          # What the tag ref holds right now. For an annotated tag this is the tag
+          # object, not the commit, so it is read from the ref rather than assumed.
+          EXPECTED_TAG_SHA="$(git rev-parse "refs/tags/${TAG}")"
           git tag --force "${TAG}"
-          # The lease makes the push fail if the tag on GitHub no longer points at
-          # the commit this job built, instead of overwriting someone else's update.
-          git push --force-with-lease="refs/tags/${TAG}:${BUILT_SHA}" origin "refs/tags/${TAG}"
+          # The lease makes the push fail if the tag on GitHub has changed since it
+          # was checked out, instead of overwriting someone else's update.
+          git push --force-with-lease="refs/tags/${TAG}:${EXPECTED_TAG_SHA}" origin "refs/tags/${TAG}"

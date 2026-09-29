@@ -64,8 +64,11 @@ The request contains, in this order:
    button, truncated to the first 3 000 characters each. Notes reached by a
    `[[wikilink]]` from an attached note are included too, one level deep, unless
    the link target matches your ignored RAG paths.
-3. **RAG chunks** — up to 5 fragments from your indexed notes that the search
-   ranked as relevant to your message.
+3. **RAG chunks** — up to 5 fragments from your indexed notes that are related to
+   your message: they share a word with it, their note is named after it, or,
+   with semantic search on, their meaning is close to it. When nothing is
+   related, no fragment is sent, and the prompt states that the search found
+   nothing.
 4. **Project context** — short summaries of the other conversations in the active
    project, up to 4 000 characters in total.
 5. **Conversation history** — the previous messages in the current conversation.

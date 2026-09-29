@@ -67,7 +67,8 @@ supply chain.
 | `tests/api/contracts.test.ts` | `normalizeLocalBaseUrl`, `parseLocalModelList`, and the OpenAI / Responses / Anthropic / Ollama response validators |
 | `tests/rag/ignorePaths.test.ts` | Ignored RAG path semantics: anchoring, globs, case-insensitivity, invalid patterns |
 | `tests/rag/canvasParser.test.ts` | Canvas parsing of malformed JSON, non-object JSON, cycles, dangling edges, isolated nodes |
-| `tests/rag/ranking.test.ts` | Tokenizer, BM25, cosine similarity, chunking, content hashing |
+| `tests/rag/search.test.ts` | Ranking: unrelated fragments are never returned, word forms, request words, per-note and total limits |
+| `tests/rag/ranking.test.ts` | Tokenizer, cosine similarity, chunking, content hashing |
 
 Every credential-shaped literal in the tests contains the marker
 `EXAMPLENOTAREALKEY`. The secret scanner requires that marker inside `tests/` and

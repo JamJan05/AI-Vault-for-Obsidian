@@ -112,6 +112,23 @@ describe("composeSystemPrompt", () => {
 		assert.ok(prompt.startsWith("BASE PROMPT"));
 	});
 
+	it("says so when the vault was searched and nothing matched", () => {
+		const prompt = compose({ searchedWithoutMatch: true });
+		assert.match(prompt, /no related note was found/);
+		assert.match(prompt, /Do not claim to have read notes/);
+	});
+
+	it("does not say so when notes were found or attached", () => {
+		const found    = compose({ searchedWithoutMatch: true, retrieved: [{ title: "N", text: "text" }] });
+		const attached = compose({ searchedWithoutMatch: true, attached: [{ title: "N", text: "text" }] });
+		assert.equal(found.includes("no related note"), false);
+		assert.equal(attached.includes("no related note"), false);
+	});
+
+	it("says nothing about searching when RAG did not run", () => {
+		assert.equal(compose({}).includes("searched"), false);
+	});
+
 	it("does not mention truncation when nothing was cut", () => {
 		assert.equal(compose({ retrieved: [{ title: "N", text: "short" }] }).includes("truncated"), false);
 	});

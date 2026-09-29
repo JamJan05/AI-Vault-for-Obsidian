@@ -105,6 +105,9 @@ manifest.json ──────▶  manifest.json
 │   │   └── local.ts           202  OpenAI-compatible + Ollama, model discovery
 │   ├── rag/
 │   │   ├── RAGEngine.ts       608  index build/load/save, incremental updates, hybrid search
+│   │   ├── search.ts               ranking: request words, word forms, relevance, limits
+│   │   ├── locate.ts               finds an indexed fragment in the note's current text
+│   │   ├── sources.ts              sources stored with an answer
 │   │   ├── embeddings.ts       77  opt-in gate and wire format for embeddings
 │   │   ├── ignorePaths.ts     138  ignored RAG paths
 │   │   ├── canvasParser.ts    165  .canvas JSON → readable text via graph traversal
@@ -373,27 +376,44 @@ missing, and every response is validated by `parseEmbeddingsResponse`; a failed 
 the entries simply stay lexical-only. Without consent no embedding request is made, stored vectors go
 unused, and `search` sends no query embedding.
 
-*Searching* (`search(query, topK = 5)`) is a hybrid ranker:
+*Searching* (`search(query, topK = 5)`) delegates to `rankEntries()` in `src/rag/search.ts`, which is
+pure and unit tested:
 
 ```mermaid
 flowchart LR
-    Q["query"] --> TOK["tokenize"]
-    Q --> QE["query embedding (optional)"]
-    TOK --> BM["BM25 score per chunk"]
-    QE --> COS["cosine similarity per chunk"]
-    BM --> RBM["rank list A"]
-    COS --> RCOS["rank list B"]
-    RBM --> RRF["RRF: sum of 1/(60 + rank)"]
-    RCOS --> RRF
-    RRF --> BOOST["title-match boost + optional recency boost"]
-    BOOST --> DEDUP["best chunk per file"]
-    DEDUP --> TOPK["top K results"]
+    Q["question"] --> TERMS["queryTerms: drop request words"]
+    Q --> QE["question embedding (only with consent)"]
+    TERMS --> EXP["expandQuery: add other forms of each word"]
+    EXP --> BM["BM25 with IDF per fragment"]
+    QE --> COS["cosine similarity per fragment"]
+    BM --> REL["keep only related fragments"]
+    COS --> REL
+    REL --> RRF["RRF: sum of 1/(60 + rank)"]
+    RRF --> BOOST["title boost + optional recency boost"]
+    BOOST --> CAP["at most 2 per note, 4 for a note the question names"]
+    CAP --> TOPK["top K results"]
 ```
+
+- **Request words are not searched for.** "Summarize my notes about space" is a search for "space";
+  `queryTerms()` drops words such as *summarize*, *notes*, *streszcz*, *notatki*.
+- **Word forms match.** `sharesStem()` treats words that share a beginning of at least four letters
+  and differ by an ending of at most two as the same word, at a lower weight. This matters for
+  Polish, where "kosmos" appears as "kosmosie" or "kosmosu".
+- **Nothing unrelated is returned.** A fragment is a candidate only if it shares a word with the
+  question, its note is named after it, or its embedding is close to it (cosine ≥ 0.25). When nothing
+  is related the result is empty, and the prompt says that the search found nothing.
+- **Short fragments are scored down**, because BM25 favours them and the shortest is a bare heading.
 
 Reciprocal Rank Fusion is used deliberately instead of a weighted score sum: it is scale-invariant, so
 BM25 magnitudes and cosine values never need normalizing against each other. `ragSearchMode` gates the
 two arms — `hybrid` (both), `semantic` (embeddings only), `exact` (lexical only), `recent` (hybrid plus
-a freshness bonus). Results are deduplicated to the best-scoring chunk per file.
+a freshness bonus).
+
+*Chunking* (`chunkText` in `utils.ts`) splits on H1/H2 headings, then by paragraphs, cuts paragraphs
+that are longer than a fragment, and joins a fragment shorter than 200 characters to the one that
+follows it, so a heading always travels with its text. The index stores a version; an index made with
+older chunking still works and is rebuilt by the next indexing run, reusing the embeddings of
+fragments whose text did not change.
 
 *Incremental updates* — `updateFile` re-chunks and re-embeds a single file (skipping unchanged
 content by hash), `removeFile` and `renameFile` patch the index in place; all three call

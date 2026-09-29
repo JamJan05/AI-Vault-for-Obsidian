@@ -12,6 +12,8 @@ export interface CollectedContext {
 	retrieved: NoteExcerpt[];
 	/** What is shown under the answer and saved with it. */
 	sources:   MessageSource[];
+	/** The index was searched for this question and nothing related was found. */
+	searchedWithoutMatch: boolean;
 }
 
 interface CollectInput {
@@ -31,7 +33,7 @@ interface CollectInput {
  */
 export async function collectContext(input: CollectInput): Promise<CollectedContext> {
 	const { app, rag, manualNotes } = input;
-	const context: CollectedContext = { attached: [], retrieved: [], sources: [] };
+	const context: CollectedContext = { attached: [], retrieved: [], sources: [], searchedWithoutMatch: false };
 	const isIgnored = (path: string): boolean => rag.isIgnoredPath(path);
 
 	if (manualNotes.length) {
@@ -70,7 +72,15 @@ export async function collectContext(input: CollectInput): Promise<CollectedCont
 			!manualNotes.some(f => f.path === r.path) && !isIgnored(r.path));
 
 		context.retrieved = usable.map(r => ({ title: r.basename, text: r.chunk }));
-		context.sources.push(...usable.map(r => toMessageSource(r.basename, r.path, r.chunk)));
+		context.searchedWithoutMatch = usable.length === 0;
+
+		// One source per note: the best fragment of each is where the button leads.
+		const listed = new Set<string>();
+		for (const result of usable) {
+			if (listed.has(result.path)) continue;
+			listed.add(result.path);
+			context.sources.push(toMessageSource(result.basename, result.path, result.chunk));
+		}
 	}
 
 	return context;
