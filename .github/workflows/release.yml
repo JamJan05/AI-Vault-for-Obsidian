@@ -161,12 +161,20 @@ jobs:
           git diff --cached --quiet || git commit -m "chore: update version to ${{ github.event.release.tag_name }}"
           git push origin main
 
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "$TAG" main.js styles.css manifest.json --clobber
+
       - name: Point the tag at the version commit
         # The release is created on the commit before the version files change,
         # so manifest.json at the tag would still name the previous version and
         # disagree with the published manifest. Moving the tag to the commit
         # that was just pushed makes the tag, the repository and the release
-        # assets state the same version.
+        # assets state the same version. It runs last, after the assets are
+        # uploaded, so a failed upload never leaves a moved tag behind.
         if: ${{ !github.event.release.prerelease }}
         env:
           TAG: ${{ github.event.release.tag_name }}
@@ -180,11 +188,6 @@ jobs:
             exit 1
           fi
           git tag --force "${TAG}"
-          git push --force origin "refs/tags/${TAG}"
-
-      - name: Upload release assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.event.release.tag_name }}
-        run: |
-          gh release upload "$TAG" main.js styles.css manifest.json --clobber
+          # The lease makes the push fail if the tag on GitHub no longer points at
+          # the commit this job built, instead of overwriting someone else's update.
+          git push --force-with-lease="refs/tags/${TAG}:${BUILT_SHA}" origin "refs/tags/${TAG}"

@@ -1,6 +1,8 @@
 # Changelog
 
-## [Unreleased]
+## [1.5.1] - 2026-09-29
+
+A maintenance release. No change to what the plugin sends or stores.
 
 ### Fixed
 - The project dialog is built with Obsidian's element helpers instead of `document.createElement`.
@@ -11,6 +13,8 @@
   repository manifest at the tag still named the old version.
 - The release stops without pushing anything if `main` changes while it is being built, so the
   version commit and the tag can only ever sit on the code that was tested.
+- The tag is moved last, after the assets are uploaded, and only if the tag on GitHub still points
+  at the commit that was built.
 
 ## [1.5.0] - 2026-09-29
 
