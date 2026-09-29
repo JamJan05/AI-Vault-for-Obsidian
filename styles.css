@@ -244,29 +244,16 @@
 @keyframes gpt-pulse-web { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
 
 /* ─── Code blocks ────────────────────────────────────────────────────────────── */
-.gpt-code-block {
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 8px; overflow: hidden; margin: 8px 0;
-}
-.gpt-code-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 5px 10px;
-  background: color-mix(in srgb, var(--background-modifier-border) 50%, var(--background-secondary));
-  border-bottom: 1px solid var(--background-modifier-border); min-height: 28px;
-}
-.gpt-code-lang {
-  font-size: 10px; font-weight: 700; color: var(--text-faint);
-  text-transform: uppercase; letter-spacing: .08em;
-  font-family: var(--font-monospace);
-}
+.gpt-code-block { position: relative; }
 .gpt-code-copy {
-  display: flex; align-items: center; gap: 4px;
-  padding: 3px 9px; font-size: 11px; border-radius: 5px;
+  position: absolute; top: 6px; right: 6px;
+  display: flex; align-items: center;
+  padding: 4px 6px; border-radius: 5px;
   border: 1px solid var(--background-modifier-border);
   background: var(--background-secondary); color: var(--text-muted);
-  cursor: pointer; transition: all .15s;
-  font-family: var(--font-interface); margin-left: auto; line-height: 1;
+  cursor: pointer; transition: all .15s; line-height: 1; opacity: 0;
 }
+.gpt-code-block:hover .gpt-code-copy, .gpt-code-copy:focus-visible { opacity: 1; }
 .gpt-code-copy:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
 .gpt-code-copy.gpt-code-copy--ok {
   color: var(--gpt-color-openai);

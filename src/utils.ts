@@ -28,6 +28,58 @@ export function debounce<T extends unknown[]>(fn: (...args: T) => void, delay: n
 	return debounced;
 }
 
+/**
+ * Debounce with one timer per key. A call for one key never cancels a pending
+ * call for another — with a single shared timer, editing note B within the delay
+ * would silently drop the update for note A.
+ */
+export interface KeyedDebounce<T> {
+	(key: string, value: T): void;
+	/** Cancels every pending call. */
+	cancel(): void;
+	/** Number of calls still waiting. */
+	readonly pending: number;
+}
+
+export function createKeyedDebounce<T>(
+	fn: (key: string, value: T) => void,
+	delay: number,
+): KeyedDebounce<T> {
+	const timers = new Map<string, number>();
+
+	const debounced = (key: string, value: T): void => {
+		const existing = timers.get(key);
+		if (existing !== undefined) window.clearTimeout(existing);
+		timers.set(key, window.setTimeout(() => {
+			timers.delete(key);
+			fn(key, value);
+		}, delay));
+	};
+
+	debounced.cancel = (): void => {
+		for (const timer of timers.values()) window.clearTimeout(timer);
+		timers.clear();
+	};
+
+	Object.defineProperty(debounced, "pending", { get: () => timers.size });
+	return debounced as KeyedDebounce<T>;
+}
+
+// ─── Identifiers ──────────────────────────────────────────────────────────────
+
+/**
+ * Unique id for a session or a project. Only letters, digits and dashes, so it is
+ * safe inside a file name. A timestamp alone collides when two are made in the
+ * same millisecond, and two conversations would then share one file.
+ */
+export function newId(): string {
+	const cryptoApi = window.crypto;
+	if (typeof cryptoApi?.randomUUID === "function") return cryptoApi.randomUUID();
+
+	const random = Math.random().toString(36).slice(2, 10).padEnd(8, "0");
+	return `${Date.now().toString(36)}-${random}`;
+}
+
 // ─── Retry helper ─────────────────────────────────────────────────────────────
 
 interface RetryOptions {
@@ -82,20 +134,6 @@ export function sanitizeUrl(url: string): string {
 	if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
 	if (/^[/.#]/.test(trimmed)) return trimmed;
 	return "#";
-}
-
-/** UTF-8 safe base64 encode */
-export function utf8ToBase64(str: string): string {
-	return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_match: string, p1: string) =>
-		String.fromCharCode(parseInt(p1, 16)),
-	));
-}
-
-/** UTF-8 safe base64 decode */
-export function base64ToUtf8(b64: string): string {
-	return decodeURIComponent(
-		atob(b64).split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join(""),
-	);
 }
 
 /** Formats a timestamp as a locale date and time */

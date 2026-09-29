@@ -21,16 +21,16 @@ import {
 	getFallbackModel,
 	supportsWebSearch,
 } from "../models";
-import {
-	formatDate,
-	base64ToUtf8,
-} from "../utils";
+import { formatDate } from "../utils";
 import { callOpenAI }  from "../api/openai";
 import { callClaude }  from "../api/anthropic";
 import { callLocalApi } from "../api/local";
 import { parseCanvasToText }   from "../rag/canvasParser";
 import { resolveNoteWithLinks } from "../rag/linkResolver";
 import { FallbackModal } from "./FallbackModal";
+import { ConfirmModal } from "./ConfirmModal";
+import { normalizeLocalBaseUrl } from "../api/contracts";
+import { assessLocalBaseUrl } from "../security/urlPolicy";
 import { NotePickerModal } from "./NotePickerModal";
 import { describeOutgoing } from "./sendSummary";
 import type { ChatMessage } from "../types";
@@ -750,6 +750,7 @@ export class GPTChatView extends ItemView {
 		if (activeProvider === "openai" && !this.settings.apiKey) { new Notice(t("err_no_openai_key")); return; }
 		if (activeProvider === "anthropic" && !this.settings.claudeApiKey) { new Notice(t("err_no_claude_key")); return; }
 		if (activeProvider === "local" && !this.settings.localBaseUrl.trim()) { new Notice(t("err_no_ollama_url")); return; }
+		if (activeProvider === "local" && !(await this.confirmPlainHttpEndpoint())) return;
 
 		if (!override) this.inputEl.value = "";
 		this.sendBtn.disabled = true;
@@ -802,6 +803,7 @@ export class GPTChatView extends ItemView {
 			} else if (activeProvider === "local") {
 				const text = await callLocalApi(this.settings, msgs, {
 					maxTokens: this.getMaxTokensForMode(activeMode),
+					signal:    this.abortController.signal,
 				});
 				onChunk(text);
 				result = { text, usage: null };
@@ -915,6 +917,36 @@ export class GPTChatView extends ItemView {
 			this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
 			this.updateSendSummary();
 		}
+	}
+
+	/** Base URLs the user has agreed to use over plain HTTP, for this session only. */
+	private readonly acceptedPlainHttp = new Set<string>();
+
+	/**
+	 * Asks before the first message to a remote Local API over plain HTTP.
+	 * @returns false when the user declined and nothing may be sent
+	 */
+	private confirmPlainHttpEndpoint(): Promise<boolean> {
+		const base = normalizeLocalBaseUrl(this.settings.localBaseUrl, this.settings.localApiType);
+		const assessment = assessLocalBaseUrl(base);
+		if (assessment.verdict !== "remote-http" || this.acceptedPlainHttp.has(base)) {
+			return Promise.resolve(true);
+		}
+
+		return new Promise<boolean>(resolve => {
+			let accepted = false;
+			const modal = new ConfirmModal(
+				this.plugin.app,
+				t("confirm_plain_http", assessment.hostname ?? base),
+				() => { accepted = true; this.acceptedPlainHttp.add(base); },
+				t("confirm_plain_http_accept"),
+				t("chat_notes_cancel"),
+			);
+			// Escape and the close button count as declining.
+			const close = modal.onClose.bind(modal);
+			modal.onClose = (): void => { close(); resolve(accepted); };
+			modal.open();
+		});
 	}
 
 	// ── System message builder ──────────────────────────────────────────────────
@@ -1165,22 +1197,19 @@ export class GPTChatView extends ItemView {
 
 	/** Final render — native Obsidian renderer */
 	private renderContent(el: HTMLElement, text: string): void {
+		el.empty();
+		void this.renderMarkdown(el, text);
+	}
+
+	private async renderMarkdown(el: HTMLElement, text: string): Promise<void> {
 		try {
-			el.empty();
-			if (typeof MarkdownRenderer.render === "function") {
-				void MarkdownRenderer.render(this.plugin.app, text, el, "", this.renderComponent);
-			} else {
-				// Fallback for older Obsidian versions
-				(MarkdownRenderer as unknown as {
-					renderMarkdown: (md: string, el: HTMLElement, path: string, comp: Component) => void;
-				}).renderMarkdown(text, el, "", this.renderComponent);
-			}
-			this.addCodeCopyButtons(el);
+			await MarkdownRenderer.render(this.plugin.app, text, el, "", this.renderComponent);
 		} catch (e) {
 			console.warn("[AI-Vault] native renderer failed, using fallback:", (e as Error)?.message);
 			this.renderPlainTextContent(el, text);
-			this.addCodeCopyButtons(el);
 		}
+		// Rendering is asynchronous — the code blocks only exist now.
+		this.addCodeCopyButtons(el);
 	}
 
 	private renderPlainTextContent(el: HTMLElement, text: string, withCursor = false): void {
@@ -1193,41 +1222,31 @@ export class GPTChatView extends ItemView {
 		if (withCursor) el.createEl("span", { cls: "gpt-cursor", text: "▋" });
 	}
 
+	/** Adds a copy button to each code block that Obsidian has not given one already. */
 	private addCodeCopyButtons(container: HTMLElement): void {
-		const doc = container.ownerDocument;
-		container.querySelectorAll<HTMLElement>(".gpt-code-block pre[data-rawcode]").forEach(pre => {
-			if (pre.parentElement?.querySelector(".gpt-code-header")) return;
-			const lang = pre.getAttribute("data-lang") ?? "";
-			const b64  = pre.getAttribute("data-rawcode") ?? "";
+		container.querySelectorAll<HTMLElement>("pre > code").forEach(code => {
+			const pre = code.parentElement;
+			if (!pre || pre.querySelector(".copy-code-button, .gpt-code-copy")) return;
 
-			const header = doc.createElement("div");
-			header.className = "gpt-code-header";
-
-			if (lang) {
-				const langEl = doc.createElement("span");
-				langEl.className   = "gpt-code-lang";
-				langEl.textContent = lang;
-				header.appendChild(langEl);
-			}
-
-			const copyBtn = doc.createElement("button");
-			copyBtn.className = "gpt-code-copy";
-			copyBtn.title     = "Copy code";
-			this.setButtonIcon(copyBtn, "copy", "Copy");
-			copyBtn.onclick   = async () => {
+			pre.addClass("gpt-code-block");
+			const copyBtn = pre.createEl("button", {
+				cls:  "gpt-code-copy",
+				attr: { title: t("chat_copy_code"), "aria-label": t("chat_copy_code") },
+			});
+			this.setButtonIcon(copyBtn, "copy");
+			copyBtn.onclick = async () => {
 				try {
-					await navigator.clipboard.writeText(base64ToUtf8(b64));
-					this.setButtonIcon(copyBtn, "check", "Copied!");
-					copyBtn.classList.add("gpt-code-copy--ok");
+					await navigator.clipboard.writeText(code.textContent ?? "");
+					this.setButtonIcon(copyBtn, "check");
+					copyBtn.addClass("gpt-code-copy--ok");
 					window.setTimeout(() => {
-						this.setButtonIcon(copyBtn, "copy", "Copy");
-						copyBtn.classList.remove("gpt-code-copy--ok");
+						this.setButtonIcon(copyBtn, "copy");
+						copyBtn.removeClass("gpt-code-copy--ok");
 					}, 2000);
-				} catch (e) { console.warn("[AI-Vault] copy failed:", e); }
+				} catch (e) {
+					console.warn("[AI-Vault] copy failed:", (e as Error)?.message);
+				}
 			};
-
-			header.appendChild(copyBtn);
-			pre.parentElement!.insertBefore(header, pre);
 		});
 	}
 
@@ -1322,6 +1341,7 @@ export class GPTChatView extends ItemView {
 							if (provider === "anthropic") {
 								r = await callClaude(this.settings.claudeApiKey, activeModel, [{ role: "user", content: prompt }], "fast");
 							} else if (provider === "local") {
+								if (!(await this.confirmPlainHttpEndpoint())) throw new Error("declined");
 								const text = await callLocalApi(
 									this.settings,
 									[{ role: "user", content: prompt }],

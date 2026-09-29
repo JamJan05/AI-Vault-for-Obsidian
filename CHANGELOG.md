@@ -27,6 +27,8 @@
 - Requests the provider rejects (HTTP 4xx other than 408 and 429) are no longer retried.
 
 ### Privacy
+- Sending to a remote Local API over plain HTTP now asks for confirmation before the first message,
+  not only when the address is typed in settings.
 - **The chat says what it is about to send.** A line above the input names the destination and lists
   what the next message carries: the conversation, attached notes, RAG fragments, project context and
   web search. It warns when a Local API is remote and unencrypted.
@@ -46,6 +48,15 @@
 - No new network hosts. See `PRIVACY.md`.
 
 ### Fixed
+- Editing several notes within three seconds updated the RAG index for the last one only.
+- The "recent" ranking boost was missing after a full re-index.
+- The history limit of 100 removed conversations by creation order, which could delete one still in
+  use. It now removes the ones used longest ago, and the history list is sorted the same way.
+- Copy buttons on code blocks never appeared.
+- Conversations were not auto-titled when the interface language was Polish.
+- Stop had no effect on Local API requests.
+- Two conversations or projects created in the same millisecond shared an id.
+- Settings text fields wrote to disk on every keystroke.
 - Regenerate could remove the wrong messages after a failed request.
 - Stopping a request before any answer arrived left the question on screen but not in the
   conversation. The question is now returned to the input.

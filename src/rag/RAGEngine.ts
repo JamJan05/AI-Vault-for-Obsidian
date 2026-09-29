@@ -303,18 +303,14 @@ export class RAGEngine {
 					}
 
 					this.index = this.index.filter(e => e.path !== file.path);
-					if (!content.trim()) { done++; continue; }
+					if (!content.trim()) {
+						done++;
+						onProgress?.(done, files.length);
+						continue;
+					}
 
 					for (const chunk of chunkText(content)) {
-						const tokens = tokenize(chunk);
-						const entry: RAGEntry = {
-							path:      file.path,
-							basename:  file.basename,
-							chunk,
-							tokens,
-							embedding: null,
-							_tf:       buildTermFreq(tokens),
-						};
+						const entry = this.createEntry(file, chunk);
 						this.index.push(entry);
 
 						if (embed) {
@@ -465,21 +461,7 @@ export class RAGEngine {
 				return;
 			}
 
-			const chunks     = chunkText(content);
-			const newEntries: RAGEntry[] = chunks.map(chunk => {
-				const tokens = tokenize(chunk);
-				return {
-					path:      file.path,
-					basename:  file.basename,
-					extension: file.extension,
-					folder: file.parent?.path ?? "",
-					mtime: file.stat?.mtime ?? Date.now(),
-					chunk,
-					tokens,
-					embedding: null,
-					_tf:       buildTermFreq(tokens),
-				};
-			});
+			const newEntries = chunkText(content).map(chunk => this.createEntry(file, chunk));
 
 			// Batch embeddings (instead of sequential requests)
 			if (this.embeddingsAllowed && newEntries.length) {
@@ -522,11 +504,14 @@ export class RAGEngine {
 		}
 
 		let changed = false;
+		const slash  = newPath.lastIndexOf("/");
+		const folder = slash >= 0 ? newPath.slice(0, slash) : "";
 
 		for (const e of this.index) {
 			if (e.path === oldPath) {
 				e.path     = newPath;
 				e.basename = basename;
+				e.folder   = folder;
 				changed    = true;
 			}
 		}
@@ -569,6 +554,22 @@ export class RAGEngine {
 	}
 
 	// ── Helpers ────────────────────────────────────────────────────────────────
+
+	/** The one place an index entry is built, so a full and an incremental index agree. */
+	private createEntry(file: TFile, chunk: string): RAGEntry {
+		const tokens = tokenize(chunk);
+		return {
+			path:      file.path,
+			basename:  file.basename,
+			extension: file.extension,
+			folder:    file.parent?.path ?? "",
+			mtime:     file.stat?.mtime ?? Date.now(),
+			chunk,
+			tokens,
+			embedding: null,
+			_tf:       buildTermFreq(tokens),
+		};
+	}
 
 	/**
 	 * Removes index entries and hashes for paths that the ignore list now excludes.

@@ -151,6 +151,9 @@ const en: TranslationDict = {
 	chat_stop:                   "Stop",
 	chat_copy:                   "Copy",
 	chat_copied:                 "Copied!",
+	chat_copy_code:              "Copy code",
+	confirm_plain_http:          (host: string) => `Your message, note excerpts and Local API key will be sent to ${host} without encryption (plain HTTP). Anyone on the network path can read them. Send anyway?`,
+	confirm_plain_http_accept:   "Send without encryption",
 	chat_interrupted:            "⏹ Interrupted by user",
 	chat_generation_stopped:     "⏹ Generation stopped",
 	chat_role_you:               "You",
@@ -536,6 +539,9 @@ const pl: TranslationDict = {
 	chat_stop:                   "Stop",
 	chat_copy:                   "Kopiuj",
 	chat_copied:                 "Skopiowano!",
+	chat_copy_code:              "Kopiuj kod",
+	confirm_plain_http:          (host: string) => `Twoja wiadomość, fragmenty notatek i klucz lokalnego API zostaną wysłane do ${host} bez szyfrowania (zwykłe HTTP). Każdy na trasie sieciowej może je odczytać. Wysłać mimo to?`,
+	confirm_plain_http_accept:   "Wyślij bez szyfrowania",
 	chat_interrupted:            "⏹ Przerwane przez użytkownika",
 	chat_generation_stopped:     "⏹ Przerwano generowanie",
 	chat_role_you:               "Ty",
@@ -807,6 +813,14 @@ export function setLanguage(lang: string, plugin?: { settings: { systemPrompt: s
 			plugin.settings.systemPrompt = t("default_system_prompt");
 		}
 	}
+}
+
+/**
+ * True when the title is the untouched default in any language, so a conversation
+ * started in one language is still auto-titled after the language is switched.
+ */
+export function isDefaultChatTitle(title: string): boolean {
+	return [en, pl].some(dict => dict.chat_default_title === title);
 }
 
 export function getCurrentLang(): "en" | "pl" {

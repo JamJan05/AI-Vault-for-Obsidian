@@ -478,6 +478,11 @@ Notable mechanics:
   bubbles are marked `gpt-msg-failed`. Regenerate retries the failed question from the screen, the
   next message removes the marked bubbles, and marked bubbles are never counted when bubbles are
   matched to messages. An aborted request with no answer returns the question to the input.
+- **Plain HTTP confirmation** — before the first message to a remote Local API over plain HTTP,
+  `confirmPlainHttpEndpoint()` asks for confirmation; the answer is remembered for that URL until
+  the view is closed. Loopback addresses and HTTPS never ask.
+- **Code blocks** — after `MarkdownRenderer.render` resolves, `addCodeCopyButtons` adds a copy button
+  to every `pre > code` that Obsidian has not already given one.
 - **Regenerate** lives in the footer of the last message only (hidden elsewhere by CSS).
 - **Pickers** are appended to `doc.body` (not the panel) to escape Obsidian's CSS transforms, then
   positioned from `getBoundingClientRect()` via `setCssStyles`. A document-level `mousedown` handler

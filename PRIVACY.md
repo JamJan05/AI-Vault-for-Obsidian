@@ -290,8 +290,9 @@ and Local API key are sent. The plugin therefore validates it
   treated as remote.
 - A **remote plaintext HTTP** endpoint is not blocked, because running a model
   server elsewhere on your LAN is a legitimate choice. It does raise a visible
-  warning in settings before the value takes effect, because your messages and
-  your Local API key travel unencrypted.
+  warning in settings, the chat view marks the destination as unencrypted, and
+  the first message to that address asks for confirmation, because your messages
+  and your Local API key travel unencrypted.
 - A username and password embedded in the URL raises a warning: URLs end up in
   logs and error messages.
 

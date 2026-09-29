@@ -17,6 +17,14 @@ export { normalizeLocalBaseUrl, parseLocalModelList } from "./contracts";
 export interface LocalCallOptions {
 	temperature?: number;
 	maxTokens?:   number;
+	/** Lets the Stop button abandon the request. */
+	signal?:      AbortSignal | null;
+}
+
+function abortError(): Error {
+	const error = new Error("Aborted by user");
+	error.name = "AbortError";
+	return error;
 }
 
 function isAuthenticationFailure(status: number): boolean {
@@ -50,14 +58,29 @@ async function requestLocal(options: {
 	method: "GET" | "POST";
 	headers?: Record<string, string>;
 	body?: string;
+	signal?: AbortSignal | null;
 }) {
+	const { signal, ...request } = options;
+	if (signal?.aborted) throw abortError();
+
+	// requestUrl cannot be cancelled, so the wait is abandoned instead.
+	let abortHandler: (() => void) | null = null;
+	const aborted = new Promise<never>((_resolve, reject) => {
+		abortHandler = () => reject(abortError());
+		signal?.addEventListener("abort", abortHandler, { once: true });
+	});
+
 	try {
-		return await requestUrl({ ...options, throw: false });
+		const pending = requestUrl({ ...request, throw: false });
+		return signal ? await Promise.race([pending, aborted]) : await pending;
 	} catch (err: unknown) {
+		if ((err as Error)?.name === "AbortError") throw err;
 		throw new Error(safeErrorMessage(
 			"Could not connect to Local API. Check that LM Studio/Ollama is running and the Base URL is correct.",
 			err,
 		));
+	} finally {
+		if (abortHandler) signal?.removeEventListener("abort", abortHandler);
 	}
 }
 
@@ -65,8 +88,9 @@ async function requestLocal(options: {
  * Resolves the Base URL and refuses anything the URL policy rejects.
  *
  * A remote plaintext endpoint is NOT blocked here — the user may legitimately run
- * a server on their LAN — but the settings UI warns before the value is saved and
- * PRIVACY.md documents the consequence.
+ * a server on their LAN — but the settings UI warns when the value is entered, the
+ * chat view asks for confirmation before the first message, and PRIVACY.md
+ * documents the consequence.
  */
 function resolveBaseUrl(settings: PluginSettings): string {
 	const base = normalizeLocalBaseUrl(settings.localBaseUrl, settings.localApiType);
@@ -111,12 +135,18 @@ export async function fetchLocalModels(settings: PluginSettings): Promise<string
 
 // ─── Send a chat request ────────────────────────────────────────────────────────
 
-async function postLocal(settings: PluginSettings, url: string, body: Record<string, unknown>): Promise<unknown> {
+async function postLocal(
+	settings: PluginSettings,
+	url:      string,
+	body:     Record<string, unknown>,
+	signal?:  AbortSignal | null,
+): Promise<unknown> {
 	const response = await requestLocal({
 		url,
 		method:  "POST",
 		headers: buildLocalApiHeaders(settings, true),
 		body:    JSON.stringify(body),
+		signal,
 	});
 
 	if (isAuthenticationFailure(response.status)) {
@@ -151,7 +181,7 @@ export async function callLocalApi(
 			messages: payloadMessages,
 			stream:   false,
 		};
-		const data    = await postLocal(settings, `${base}/api/chat`, body);
+		const data    = await postLocal(settings, `${base}/api/chat`, body, options.signal);
 		const content = extractOllamaContent(data);
 		if (!content) throw new Error("Invalid Ollama response. Expected message.content.");
 		return content;
@@ -165,7 +195,7 @@ export async function callLocalApi(
 	};
 	if (typeof options.maxTokens === "number") body.max_tokens = options.maxTokens;
 
-	const data    = await postLocal(settings, `${base}/chat/completions`, body);
+	const data    = await postLocal(settings, `${base}/chat/completions`, body, options.signal);
 	const content = extractOpenAIContent(data);
 	if (!content) throw new Error("Invalid OpenAI-compatible response. Expected choices[0].message.content.");
 	return content;

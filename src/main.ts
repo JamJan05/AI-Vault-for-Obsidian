@@ -1,6 +1,6 @@
 import { Notice, Plugin, TFile } from "obsidian";
 
-import { t, setLanguage }          from "./i18n";
+import { t, setLanguage, isDefaultChatTitle } from "./i18n";
 import { DEFAULT_SETTINGS }        from "./settings";
 import { CHAT_VIEW_TYPE, HISTORY_VIEW_TYPE, PROJECTS_VIEW_TYPE, FILE_API_KEYS, RAG_INDEX_KEY, HISTORY_KEY } from "./constants";
 import { PluginStorage }           from "./storage/PluginStorage";
@@ -12,7 +12,8 @@ import { GPTChatView }             from "./views/ChatView";
 import { GPTHistoryView }          from "./views/HistoryView";
 import { GPTProjectsView }         from "./views/ProjectsView";
 import { GPTSettingsTab }          from "./SettingsTab";
-import { debounce }                from "./utils";
+import { createKeyedDebounce }     from "./utils";
+import type { KeyedDebounce }      from "./utils";
 import { DEFAULT_CLAUDE_MODEL, getReplacementModel } from "./models";
 import type { PluginSettings }     from "./settings";
 import type { ChatMessage }        from "./types";
@@ -31,7 +32,7 @@ export default class GPTPlugin extends Plugin {
 	currentSession:   import("./types").ChatSession | null = null;
 	activeProjectId:  string | null = null;
 
-	private debouncedUpdateFile!: ReturnType<typeof debounce<[TFile]>>;
+	private debouncedUpdateFile!: KeyedDebounce<TFile>;
 
 	/** Saved models replaced by loadSettings(), reported once the language is known. */
 	private migratedModels: Array<{ from: string; to: string }> = [];
@@ -72,7 +73,7 @@ export default class GPTPlugin extends Plugin {
 		await this.projects.load();
 
 		// Debounced RAG update — max once per 3s per file
-		this.debouncedUpdateFile = debounce((file: TFile) => {
+		this.debouncedUpdateFile = createKeyedDebounce<TFile>((_path, file) => {
 			void this.rag.updateFile(file);
 		}, 3000);
 
@@ -138,7 +139,7 @@ export default class GPTPlugin extends Plugin {
 		// Vault events — .md and .canvas
 		this.registerEvent(this.app.vault.on("modify", (file) => {
 			if (file instanceof TFile && (file.extension === "md" || file.extension === "canvas")) {
-				this.debouncedUpdateFile(file);
+				this.debouncedUpdateFile(file.path, file);
 			}
 		}));
 		this.registerEvent(this.app.vault.on("delete", (file) => {
@@ -229,7 +230,7 @@ export default class GPTPlugin extends Plugin {
 			this.settings.model;
 
 		// Auto-title from the first user message
-		if (messages.length >= 1 && session.title === "New conversation") {
+		if (messages.length >= 1 && isDefaultChatTitle(session.title)) {
 			const first = messages.find(m => m.role === "user");
 			if (first) {
 				session.title = first.content.slice(0, 50) + (first.content.length > 50 ? "…" : "");

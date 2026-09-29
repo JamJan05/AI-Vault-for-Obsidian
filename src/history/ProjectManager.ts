@@ -1,5 +1,6 @@
 import { FILE_PROJECTS } from "../constants";
 import { t } from "../i18n";
+import { newId } from "../utils";
 import type { ExternalStorage } from "../storage/ExternalStorage";
 import type { HistoryManager } from "./HistoryManager";
 import type { Project, SessionMeta, ChatMessage } from "../types";
@@ -50,7 +51,7 @@ export class ProjectManager {
 		customPrompt  = "",
 	): Promise<Project> {
 		const project: Project = {
-			id:           Date.now().toString(),
+			id:           newId(),
 			name,
 			color:        this.randomColor(),
 			systemPrompt: customPrompt,

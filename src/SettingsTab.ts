@@ -63,6 +63,9 @@ export class GPTSettingsTab extends PluginSettingTab {
 	 */
 	private readonly purgeIgnoredRagPaths = debounce(() => this.plugin.rag.applyIgnorePatterns(), 800);
 
+	/** Pending write for free-text fields, which fire onChange on every keystroke. */
+	private saveTimer: number | null = null;
+
 	/** Live banner under the Base URL field; recreated on every render. */
 	private baseUrlWarningEl: HTMLElement | null = null;
 	/** Last verdict a Notice was shown for, so typing does not spam the user. */
@@ -133,6 +136,36 @@ export class GPTSettingsTab extends PluginSettingTab {
 		const update = (this as { update?: () => void }).update;
 		if (typeof update === "function") update.call(this);
 		else this.renderLegacy();
+	}
+
+	/**
+	 * Saves shortly after the user stops typing. The setting itself is already
+	 * updated in memory; only the write to disk waits.
+	 */
+	private saveSoon(): void {
+		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
+		this.saveTimer = window.setTimeout(() => {
+			this.saveTimer = null;
+			void this.saveNow();
+		}, 400);
+	}
+
+	private async saveNow(): Promise<void> {
+		if (this.saveTimer !== null) {
+			window.clearTimeout(this.saveTimer);
+			this.saveTimer = null;
+		}
+		try {
+			await this.plugin.saveSettings();
+		} catch (e) {
+			console.error("[AI-Vault] Failed to save settings:", (e as Error)?.message);
+		}
+	}
+
+	/** Closing the tab must not lose what was typed in the last 400 ms. */
+	hide(): void {
+		if (this.saveTimer !== null) void this.saveNow();
+		super.hide();
 	}
 
 	// ── Row helpers ────────────────────────────────────────────────────────────
@@ -422,7 +455,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 							.setValue(this.plugin.settings.apiKey ?? "")
 							.onChange(async (value: string) => {
 								this.plugin.settings.apiKey = value.trim();
-								await this.plugin.saveSettings();
+								this.saveSoon();
 							});
 					});
 				},
@@ -440,7 +473,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 							.setValue(this.plugin.settings.claudeApiKey ?? "")
 							.onChange(async (value: string) => {
 								this.plugin.settings.claudeApiKey = value.trim();
-								await this.plugin.saveSettings();
+								this.saveSoon();
 							});
 					});
 				},
@@ -495,7 +528,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 						.setValue(this.plugin.settings.localBaseUrl ?? "")
 						.onChange(async (value: string) => {
 							this.plugin.settings.localBaseUrl = value.trim();
-							await this.plugin.saveSettings();
+							this.saveSoon();
 							// The Base URL decides where messages, note excerpts and RAG
 							// chunks are sent, so the verdict is recomputed on every edit.
 							this.refreshBaseUrlWarning(true);
@@ -521,7 +554,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 					txt.setValue(this.plugin.settings.localApiKey ?? "")
 						.onChange(async (value: string) => {
 							this.plugin.settings.localApiKey = value.trim();
-							await this.plugin.saveSettings();
+							this.saveSoon();
 						});
 					txt.inputEl.addClass("gpt-settings-input-full");
 				});
@@ -689,7 +722,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 							const n = parseInt(v, 10);
 							if (!isNaN(n) && n >= 256) {
 								write(n);
-								await this.plugin.saveSettings();
+								this.saveSoon();
 							}
 						});
 				});
@@ -725,7 +758,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 						ta.setValue(this.plugin.settings.systemPrompt)
 							.onChange(async (v: string) => {
 								this.plugin.settings.systemPrompt = v;
-								await this.plugin.saveSettings();
+								this.saveSoon();
 							});
 					})
 					.addButton(b => b
@@ -793,7 +826,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 							const n = parseInt(v, 10);
 							if (!isNaN(n) && n >= 0) {
 								this.plugin.settings.maxContextMessages = n;
-								await this.plugin.saveSettings();
+								this.saveSoon();
 							}
 						});
 				});
@@ -886,7 +919,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 						.setValue(this.plugin.settings.ragExcludedPaths ?? "")
 						.onChange(async (v: string) => {
 							this.plugin.settings.ragExcludedPaths = v;
-							await this.plugin.saveSettings();
+							this.saveSoon();
 							this.purgeIgnoredRagPaths();
 						});
 				});
@@ -1020,7 +1053,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 					txt.inputEl.addClass("gpt-settings-input-full");
 					txt.onChange(async (v: string) => {
 						this.plugin.settings.externalStoragePath = v.trim();
-						await this.plugin.saveSettings();
+						this.saveSoon();
 					});
 				});
 			},
