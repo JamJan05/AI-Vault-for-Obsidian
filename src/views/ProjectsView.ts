@@ -239,16 +239,12 @@ export class GPTProjectsView extends ItemView {
 		card.onclick = () => { this.plugin.setActiveProject(proj.id); this.render(); };
 	}
 
-	// ── Dialog tworzenia / edycji projektu ─────────────────────────────────────
+	// ── Create / edit project dialog ───────────────────────────────────────────
 
 	showCreateDialog(editProject?: Project): void {
 		const isEdit  = editProject !== undefined;
-		const doc     = this.containerEl.ownerDocument;
-		const overlay = doc.createElement("div");
-		overlay.className = "gpt-modal-overlay";
-
-		const box = doc.createElement("div");
-		box.className = "gpt-modal-box";
+		const overlay = this.containerEl.createDiv({ cls: "gpt-modal-overlay" });
+		const box     = overlay.createDiv({ cls: "gpt-modal-box" });
 
 		box.createEl("p", {
 			cls:  "gpt-modal-title",
@@ -314,8 +310,6 @@ export class GPTProjectsView extends ItemView {
 		});
 		nameInput.addEventListener("input", () => nameInput.removeClass("gpt-modal-input-error"));
 
-		overlay.appendChild(box);
-		this.containerEl.appendChild(overlay);
 		window.setTimeout(() => nameInput.focus(), 50);
 	}
 }

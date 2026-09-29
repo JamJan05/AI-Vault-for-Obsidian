@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- The project dialog is built with Obsidian's element helpers instead of `document.createElement`.
+
+### Release
+- The release workflow now points the tag at the commit that sets the version, so `manifest.json`
+  at the tag matches the published manifest. Before, the tag stayed on the previous commit and the
+  repository manifest at the tag still named the old version.
+
 ## [1.5.0] - 2026-09-29
 
 ### Added

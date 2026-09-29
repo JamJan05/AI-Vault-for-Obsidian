@@ -150,6 +150,19 @@ jobs:
           git diff --cached --quiet || git commit -m "chore: update version to ${{ github.event.release.tag_name }}"
           git push origin main
 
+      - name: Point the tag at the version commit
+        # The release is created on the commit before the version files change,
+        # so manifest.json at the tag would still name the previous version and
+        # disagree with the published manifest. Moving the tag to the commit
+        # that was just pushed makes the tag, the repository and the release
+        # assets state the same version.
+        if: ${{ !github.event.release.prerelease }}
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          git tag --force "${TAG}"
+          git push --force origin "refs/tags/${TAG}"
+
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
