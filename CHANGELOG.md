@@ -78,6 +78,8 @@
   and the folder outside the vault was not active. The keys now stay in `data.json` in that case.
 - A failed save of the history no longer turns a finished answer into an error.
 - A second message can no longer start while the first is still collecting context.
+- Closing the chat while a confirmation is open, or while notes are being read, cancels the
+  message instead of sending it from a closed view.
 - Claude Haiku 4.5 in Thinking mode failed when the token limit was set below 1024.
 - Re-indexing with semantic search on no longer scans the whole index once per note.
 - Quiz answers given as true/false are matched to the option text, whatever the order.

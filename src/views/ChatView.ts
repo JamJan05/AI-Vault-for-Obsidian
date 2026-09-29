@@ -602,10 +602,17 @@ export class GPTChatView extends ItemView {
 		if (activeProvider === "local" && !this.settings.localBaseUrl.trim()) { new Notice(t("err_no_ollama_url")); return; }
 		if (this.sending) return;
 		this.sending = true;
+
+		// Created before the first await, so closing the view cancels the message
+		// even while a confirmation is open or the context is still being collected.
+		const controller = new AbortController();
+		this.abortController = controller;
 		try {
 			if (activeProvider === "local" && !(await this.confirmPlainHttpEndpoint())) return;
-			await this.runExchange(userText, override === undefined, activeModel, activeProvider, webSearchEnabled);
+			if (controller.signal.aborted) return;
+			await this.runExchange(userText, override === undefined, activeModel, activeProvider, webSearchEnabled, controller);
 		} finally {
+			if (this.abortController === controller) this.abortController = null;
 			this.sending = false;
 		}
 	}
@@ -616,6 +623,7 @@ export class GPTChatView extends ItemView {
 		activeModel:      string,
 		activeProvider:   Provider,
 		webSearchEnabled: boolean,
+		controller:       AbortController,
 	): Promise<void> {
 
 		if (clearInput) this.inputEl.value = "";
@@ -638,7 +646,13 @@ export class GPTChatView extends ItemView {
 			const msgs: ChatMessage[] = [{ role: "system", content: systemMsg }, ...histMsgs];
 			const contentEl = bubble.querySelector<HTMLElement>(".gpt-msg-content");
 
-			this.abortController = new AbortController();
+			// Nothing has been sent yet. If the view was closed or Stop was pressed
+			// while the notes were being read, nothing is sent at all.
+			if (controller.signal.aborted) {
+				const aborted = new Error("Aborted by user");
+				aborted.name = "AbortError";
+				throw aborted;
+			}
 			this.showStopBtn(true);
 
 			// Providers answer with one complete response (requestUrl cannot stream),
@@ -653,13 +667,13 @@ export class GPTChatView extends ItemView {
 					activeModel,
 					msgs,
 					activeMode,
-					webSearchEnabled, onChunk, this.abortController.signal,
+					webSearchEnabled, onChunk, controller.signal,
 					this.getMaxTokensForMode(activeMode),
 				);
 			} else if (activeProvider === "local") {
 				const text = await callLocalApi(this.settings, msgs, {
 					maxTokens: this.getMaxTokensForMode(activeMode),
-					signal:    this.abortController.signal,
+					signal:    controller.signal,
 				});
 				onChunk();
 				result = { text, usage: null };
@@ -669,7 +683,7 @@ export class GPTChatView extends ItemView {
 					activeModel,
 					msgs,
 					activeMode,
-					webSearchEnabled, onChunk, this.abortController.signal,
+					webSearchEnabled, onChunk, controller.signal,
 					this.getMaxTokensForMode(activeMode),
 				);
 			}
@@ -759,7 +773,6 @@ export class GPTChatView extends ItemView {
 		} finally {
 			this.sendBtn.disabled = false;
 			this.showStopBtn(false);
-			this.abortController  = null;
 			this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
 			this.updateSendSummary();
 		}
