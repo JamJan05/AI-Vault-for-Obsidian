@@ -97,7 +97,7 @@ AI-Vault can add your notes to the model context in two ways:
 
 Canvas files are parsed into readable text using their nodes and edges, so the model can understand the flow of a canvas instead of receiving raw JSON.
 
-The RAG engine combines keyword search and embeddings when available. If no OpenAI key is configured for embeddings, lexical search can still provide useful matches.
+The RAG engine uses keyword search, which runs entirely on your machine. **Semantic search** (embeddings created by OpenAI) is optional and off by default — see [What RAG sends](#-what-rag-sends).
 
 Building the enabled vault-wide RAG index enumerates Markdown and Canvas files. File contents are read incrementally for indexing; ordinary wikilink resolution uses Obsidian's metadata cache and does not scan the vault.
 
@@ -182,15 +182,17 @@ Every request is caused by something you did — sending a message, refreshing t
 ### 🔑 Accounts, API keys and costs
 
 - OpenAI and Anthropic each require **your own account and API key**.
-- Those providers **bill you for usage**, including the embedding requests the RAG index makes. AI-Vault itself is free and never charges anything.
+- Those providers **bill you for usage**, including the embedding requests semantic search makes if you turn it on. AI-Vault itself is free and never charges anything.
 - A local model server needs no account and costs nothing beyond your own hardware.
 - Web search is billed by the provider that performs it.
 
 ### 📚 What RAG sends
 
-With RAG enabled and an OpenAI key configured, the text of **every indexed note** is sent to OpenAI's embeddings endpoint — not only the notes you are asking about. Indexing is on by default and starts when the plugin loads.
+By default, **nothing**: the RAG index is a keyword index that is built and searched on your machine.
 
-To control this: turn off **Auto-index**, use **Ignored RAG paths**, or leave the OpenAI key empty (RAG then falls back to keyword-only search, which runs entirely on your machine).
+**Semantic search is opt-in** (**Settings → RAG → Semantic search**, off by default). If you turn it on and confirm the dialog, the text of **every indexed note** is sent to OpenAI's embeddings endpoint — not only the notes you are asking about — and so is every question you ask with RAG on, even when you chat with Claude or a local model. An OpenAI key alone never enables this.
+
+To control it: leave **Semantic search** off, use **Ignored RAG paths**, or turn off **Auto-index**. **Delete stored embeddings** removes the vectors from your machine.
 
 ### 💾 Storage
 

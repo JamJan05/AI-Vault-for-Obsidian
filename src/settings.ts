@@ -41,6 +41,11 @@ export interface PluginSettings {
 	// RAG
 	ragEnabled:             boolean;
 	ragAutoIndex:           boolean;
+	/**
+	 * Semantic search. When on, note text and questions are sent to OpenAI to be
+	 * turned into embeddings. Off by default — see src/rag/embeddings.ts.
+	 */
+	ragEmbeddingsEnabled:   boolean;
 	ragSearchMode:          RAGSearchMode;
 	/** One ignore pattern per line — see src/rag/ignorePaths.ts for the semantics. */
 	ragExcludedPaths:       string;
@@ -57,6 +62,8 @@ export interface PluginSettings {
 
 	// Internal flags
 	_externalMigrationDone?: boolean;
+	/** Set once the upgrade notice about opt-in semantic search has been shown. */
+	_embeddingsNoticeShown?: boolean;
 }
 
 // ─── Default system prompts ───────────────────────────────────────────────────
@@ -86,6 +93,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	systemPrompt:            DEFAULT_SYSTEM_PROMPTS.en,
 	ragEnabled:              true,
 	ragAutoIndex:            true,
+	ragEmbeddingsEnabled:    false,
 	ragSearchMode:           "hybrid",
 	ragExcludedPaths:        "",
 	externalStorageEnabled:  true,

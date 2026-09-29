@@ -638,3 +638,7 @@
   font-size: 11px;
   word-break: break-all;
 }
+
+/* ─── Consent dialog ─────────────────────────────────────────────────────────── */
+.gpt-consent-list { margin: 0 0 12px; padding-left: 20px; }
+.gpt-consent-list li { margin-bottom: 6px; line-height: 1.45; }

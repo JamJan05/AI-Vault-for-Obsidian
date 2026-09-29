@@ -20,6 +20,14 @@
 - Requests the provider rejects (HTTP 4xx other than 408 and 429) are no longer retried.
 
 ### Privacy
+- **Semantic search is now opt-in.** Earlier versions sent the text of every indexed note to OpenAI
+  for embeddings as soon as an OpenAI key was configured. The new **Semantic search** setting is off
+  by default, for existing installs too, and turning it on shows what will be sent and asks for
+  confirmation. Without it RAG uses keyword search, which never leaves the device.
+- Questions are no longer sent to OpenAI for embedding when you chat with Claude or a local model,
+  unless semantic search is on.
+- New **Delete stored embeddings** button removes the vectors from the local index.
+- Embedding responses are validated before use, and rejected embedding requests are not retried.
 - OpenAI reasoning models are called through the Responses API (`/v1/responses`). Every such request
   is sent with `store: false`, which declines OpenAI's default 30-day storage of the response.
 - Claude Sonnet 5.5 and Claude Opus 5.5 are sent with Anthropic's server-side refusal fallback: a

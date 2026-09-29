@@ -21,7 +21,7 @@ document and the source, the source is right — please open an issue.
 | Does it collect telemetry or analytics? | No. |
 | Does it require an account with this project? | No. |
 | Does it send your notes anywhere? | Only to the model provider you select, and only as described below. |
-| Can it work fully offline? | Yes, with a local model server and RAG embeddings turned off. |
+| Can it work fully offline? | Yes, with a local model server. Semantic search (embeddings) is off unless you turn it on. |
 | Where is your data stored? | On your machine, by default in a folder next to your vault. |
 
 ---
@@ -32,7 +32,7 @@ The plugin can contact exactly three kinds of endpoint. Nothing else.
 
 | Service | Host | When it is contacted | Why |
 |---|---|---|---|
-| OpenAI | `api.openai.com` | You send a message with the OpenAI provider selected, or the RAG index is built while an OpenAI API key is configured | The Responses API (`/v1/responses`, used for GPT-6 and GPT-5.6 models and for any OpenAI model with web search), chat completions (`/v1/chat/completions`, used for older models such as GPT-4o), and text embeddings (`/v1/embeddings`) |
+| OpenAI | `api.openai.com` | You send a message with the OpenAI provider selected; or, **only if you turned on semantic search**, the RAG index is built or a question is asked with RAG on | The Responses API (`/v1/responses`, used for GPT-6 and GPT-5.6 models and for any OpenAI model with web search), chat completions (`/v1/chat/completions`, used for older models such as GPT-4o), and text embeddings (`/v1/embeddings`) |
 | Anthropic | `api.anthropic.com` | You send a message with the Anthropic provider selected | Messages API (`/v1/messages`), including Anthropic's server-side web search when you enable it and Anthropic's server-side refusal fallback |
 | Local API | **whatever Base URL you configure** | You send a message with the Local API provider selected, or you press "Refresh models" | Chat with a model server you run or choose — LM Studio, Ollama, LocalAI, llama.cpp, vLLM, or an OpenAI-compatible gateway |
 
@@ -78,24 +78,41 @@ The assembled system prompt is truncated at 120 000 characters.
 
 ### When the RAG index is built
 
-If an OpenAI API key is configured, the text of **every indexed note** is sent to
-`api.openai.com/v1/embeddings` in batches of 20 chunks, using the
-`text-embedding-3-small` model. Each chunk is truncated to 8 000 characters.
+**By default, building the index sends nothing.** The index is a keyword (BM25)
+index that is built and searched entirely on your machine. Indexing is on by
+default (`ragEnabled` and `ragAutoIndex` are both `true`) and starts when the
+plugin loads, but it stays local.
 
-This matters, so it is worth stating plainly:
+**Semantic search is opt-in.** It is controlled by **Settings → RAG → Semantic
+search**, which is off by default (`ragEmbeddingsEnabled: false`). Turning it on
+opens a dialog that states what will be sent, and nothing is enabled unless you
+confirm. An OpenAI API key on its own never enables it.
 
-> **With RAG enabled and an OpenAI key configured, the content of your vault is
-> sent to OpenAI — not only the notes you are asking about.** Indexing is on by
-> default (`ragEnabled` and `ragAutoIndex` are both `true`), and it starts when
-> the plugin loads.
+Once you have turned it on, and an OpenAI API key is configured:
+
+> **The content of your vault is sent to OpenAI — not only the notes you are
+> asking about.** The text of every indexed note is sent to
+> `api.openai.com/v1/embeddings` in batches of 20 chunks, using the
+> `text-embedding-3-small` model. Each chunk is truncated to 8 000 characters.
+> **Every question you ask with RAG on is sent there too**, to be compared with
+> the stored vectors — even when you chat with Anthropic or a local model.
 
 Ways to control this:
 
-- Turn off **Auto-index** and/or **RAG** in settings.
+- Leave **Semantic search** off. Search then uses keywords only and sends nothing.
 - Add paths to **Ignored RAG paths** — matching notes are never read, never
   embedded, never retrieved and never listed as sources.
-- Leave the OpenAI API key empty. RAG then falls back to keyword-only (BM25)
-  search, which runs entirely on your machine and sends nothing.
+- Turn off **Auto-index** and/or **RAG** in settings.
+- **Delete stored embeddings** removes the vectors from your machine. It cannot
+  remove anything OpenAI has already received.
+
+Turning semantic search off stops all embedding requests immediately. Vectors
+created earlier stay in `rag-index.json` on your machine, unused, until you
+delete them or turn semantic search back on.
+
+**Upgrading from 1.1.x or earlier.** Those versions created embeddings whenever
+an OpenAI key was configured. From 1.2.0 the setting starts off for everyone,
+including existing installs, and a notice says so once.
 
 `.md` and `.canvas` files are indexed. Canvas files are converted to readable text
 (nodes and edges) before indexing.

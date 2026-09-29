@@ -346,9 +346,13 @@ their persistable fields, dropping the underscore caches.
 
 *Building* (`buildIndex(onProgress?)`) is guarded by an `indexing` flag. It enumerates `.md`/`.canvas`
 files, drops index entries for files that disappeared, then per file: `cachedRead` → canvas parse if
-needed → `contentHash` → skip if unchanged → re-chunk → tokenize → push entries. Embedding requests
-are queued into batches of 20 and flushed through
-`text-embedding-3-small`; a failed batch is logged and the entries simply stay lexical-only.
+needed → `contentHash` → skip if unchanged → re-chunk → tokenize → push entries. Embeddings are
+created only when `canUseEmbeddings(settings)` (`src/rag/embeddings.ts`) is true — semantic search
+switched on by the user, RAG on, and an OpenAI key present. In that case requests are queued into
+batches of 20 and flushed through `text-embedding-3-small`, unchanged files get the vectors they are
+missing, and every response is validated by `parseEmbeddingsResponse`; a failed batch is logged and
+the entries simply stay lexical-only. Without consent no embedding request is made, stored vectors go
+unused, and `search` sends no query embedding.
 
 *Searching* (`search(query, topK = 5)`) is a hybrid ranker:
 

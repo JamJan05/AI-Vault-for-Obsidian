@@ -7,6 +7,8 @@ import { FILE_API_KEYS } from "./constants";
 import { debounce } from "./utils";
 import { assessLocalBaseUrl } from "./security/urlPolicy";
 import { sanitizeErrorDetail } from "./security/redact";
+import { ConfirmModal } from "./views/ConfirmModal";
+import { EmbeddingsConsentModal } from "./views/EmbeddingsConsentModal";
 import type { BaseUrlAssessment } from "./security/urlPolicy";
 import type { SettingDefinitionGroup, SettingDefinitionItem, SettingDefinitionRender } from "obsidian";
 import type { ExternalStorage } from "./storage/ExternalStorage";
@@ -831,6 +833,49 @@ export class GPTSettingsTab extends PluginSettingTab {
 			},
 		};
 
+		const hasOpenAIKey = Boolean(this.plugin.settings.apiKey?.trim());
+		const semanticRow: SettingDefinitionRender = {
+			name: t("settings_rag_semantic_name"),
+			desc: t("settings_rag_semantic_desc")
+				+ (hasOpenAIKey ? "" : " " + t("settings_rag_semantic_nokey")),
+			render: (setting: Setting) => {
+				setting.addToggle(tog => tog
+					.setValue(this.plugin.settings.ragEmbeddingsEnabled === true)
+					.onChange((v: boolean) => {
+						if (v === (this.plugin.settings.ragEmbeddingsEnabled === true)) return;
+						if (v) this.requestEmbeddingsConsent();
+						else void this.setEmbeddingsEnabled(false);
+					}),
+				);
+			},
+		};
+
+		const storedEmbeddings = this.plugin.rag.stats.embeddings;
+		const clearEmbeddingsRow: SettingDefinitionRender = {
+			name: t("settings_rag_clear_name"),
+			desc: t("settings_rag_clear_desc", storedEmbeddings),
+			visible: () => this.plugin.rag.stats.embeddings > 0,
+			render: (setting: Setting) => {
+				setting.addButton(b => b
+					.setButtonText(t("settings_rag_clear_btn"))
+					.setClass("mod-warning")
+					.onClick(() => {
+						new ConfirmModal(
+							this.app,
+							t("settings_rag_clear_confirm"),
+							async () => {
+								const removed = await this.plugin.rag.clearEmbeddings();
+								new Notice(t("notice_embeddings_cleared", removed));
+								this.rerender();
+							},
+							t("settings_rag_clear_btn"),
+							t("chat_notes_cancel"),
+						).open();
+					}),
+				);
+			},
+		};
+
 		const ignoredPathsRow: SettingDefinitionRender = {
 			name: t("settings_rag_ignored_name"),
 			desc: t("settings_rag_ignored_desc"),
@@ -878,8 +923,28 @@ export class GPTSettingsTab extends PluginSettingTab {
 		return {
 			type: "group",
 			heading: t("settings_rag_title"),
-			items: [enableRow, autoIndexRow, ignoredPathsRow, statusRow, reindexRow],
+			items: [
+				enableRow, autoIndexRow, semanticRow, ignoredPathsRow,
+				statusRow, reindexRow, clearEmbeddingsRow,
+			],
 		};
+	}
+
+	/** Semantic search is only ever switched on from the consent dialog. */
+	private requestEmbeddingsConsent(): void {
+		new EmbeddingsConsentModal(
+			this.app,
+			() => this.setEmbeddingsEnabled(true),
+			// Declined — redraw so the toggle goes back to off.
+			() => this.rerender(),
+		).open();
+	}
+
+	private async setEmbeddingsEnabled(enabled: boolean): Promise<void> {
+		this.plugin.settings.ragEmbeddingsEnabled = enabled;
+		await this.plugin.saveSettings();
+		new Notice(t(enabled ? "notice_embeddings_enabled" : "notice_embeddings_disabled"), 6000);
+		this.rerender();
 	}
 
 	// ── Storage ────────────────────────────────────────────────────────────────

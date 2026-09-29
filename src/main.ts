@@ -36,6 +36,9 @@ export default class GPTPlugin extends Plugin {
 	/** Saved models replaced by loadSettings(), reported once the language is known. */
 	private migratedModels: Array<{ from: string; to: string }> = [];
 
+	/** True on the first load after an upgrade from a version with automatic embeddings. */
+	private embeddingsBecameOptIn = false;
+
 	// ── Lifecycle ──────────────────────────────────────────────────────────────
 
 	async onload(): Promise<void> {
@@ -54,6 +57,9 @@ export default class GPTPlugin extends Plugin {
 
 		// API keys — from keys.json outside the vault, migrated from old data.json
 		await this._loadApiKeys();
+
+		// Semantic search became opt-in in 1.2.0 — tell people who were using it
+		this._announceEmbeddingsOptIn();
 
 		// Auto-migrate history when external storage has just been enabled
 		if (externalActive) await this._maybeAutoMigrate();
@@ -336,7 +342,29 @@ export default class GPTPlugin extends Plugin {
 			changed = true;
 		}
 
+		// Settings saved before 1.2.0 have no opt-in field. Embeddings used to be
+		// created whenever an OpenAI key was present; now they need explicit consent.
+		if (!("ragEmbeddingsEnabled" in raw) && !raw._embeddingsNoticeShown) {
+			this.embeddingsBecameOptIn = true;
+			this.settings.ragEmbeddingsEnabled   = false;
+			this.settings._embeddingsNoticeShown = true;
+			raw.ragEmbeddingsEnabled   = false;
+			raw._embeddingsNoticeShown = true;
+			changed = true;
+		}
+
 		if (changed) await this.saveData(raw);
+	}
+
+	/**
+	 * Runs after the API keys are loaded: only someone with an OpenAI key and RAG
+	 * switched on was sending notes for embeddings, so only they are told.
+	 */
+	private _announceEmbeddingsOptIn(): void {
+		if (!this.embeddingsBecameOptIn) return;
+		this.embeddingsBecameOptIn = false;
+		if (!this.settings.ragEnabled || !this.settings.apiKey?.trim()) return;
+		new Notice(t("notice_embeddings_optin"), 15000);
 	}
 
 	/** Maps old ollama provider/fields onto the new Local API settings (one-time, non-destructive). */
