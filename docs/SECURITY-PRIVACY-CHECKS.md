@@ -63,10 +63,11 @@ supply chain.
 | `tests/security/urlPolicy.test.ts` | Loopback detection, forbidden schemes, remote plaintext HTTP, IPv6, host-confusion look-alikes, embedded credentials |
 | `tests/security/redact.test.ts` | Bearer/`x-api-key` redaction, OpenAI and Anthropic key shapes, plugin key fields, URL credentials, control-character stripping, length capping |
 | `tests/security/paths.test.ts` | Path traversal, absolute paths, drive letters, NUL bytes, prefix-collision containment, safe joining |
+| `tests/chat/*.test.ts` | System prompt limits, quiz parsing of untrusted model output, export file names, the model list |
 | `tests/api/contracts.test.ts` | `normalizeLocalBaseUrl`, `parseLocalModelList`, and the OpenAI / Responses / Anthropic / Ollama response validators |
 | `tests/rag/ignorePaths.test.ts` | Ignored RAG path semantics: anchoring, globs, case-insensitivity, invalid patterns |
 | `tests/rag/canvasParser.test.ts` | Canvas parsing of malformed JSON, non-object JSON, cycles, dangling edges, isolated nodes |
-| `tests/rag/ranking.test.ts` | Tokenizer, BM25, cosine similarity, chunking, content hashing, URL sanitizing |
+| `tests/rag/ranking.test.ts` | Tokenizer, BM25, cosine similarity, chunking, content hashing |
 
 Every credential-shaped literal in the tests contains the marker
 `EXAMPLENOTAREALKEY`. The secret scanner requires that marker inside `tests/` and
@@ -105,7 +106,7 @@ be an exception entry with an owner, a justification and an expiry date.
 | `logging-hygiene` | OBS-GUIDE-002 | No note content, prompt, history or credential reaches the console |
 | `trademark-usage` | OBS-POL-015 | No first-party implication in the name or README |
 | `no-ads` | OBS-POL-003 | No advertising code |
-| `secret-storage-adoption` | OBS-SEC-002 | Reports whether `SecretStorage` is used; the migration is a product decision |
+| `secret-storage-adoption` | OBS-SEC-002 | Reports whether `SecretStorage` is used. It is, on Obsidian 1.11.4+, with the key file kept as the fallback for older versions |
 | `fork-policy` | OBS-POL-016 | Always `MANUAL_REVIEW` — origin cannot be derived from the repository |
 
 ### Privacy and network — `scripts/compliance/checks/privacy.mjs`
@@ -243,7 +244,7 @@ gh attestation verify /tmp/published/main.js -R JamJan05/AI-Vault-for-Obsidian
 |---|---|---|
 | Fork origin (`OBS-POL-016`) | Not derivable from the repository | Maintainer |
 | Trademark confusion (`OBS-POL-015`) | Automated checks catch only the obvious cases | Maintainer |
-| Migration to `SecretStorage` (`OBS-SEC-002`) | Requires raising `minAppVersion` and dropping support for older installs | Product decision |
+| `SecretStorage` on older Obsidian (`OBS-SEC-002`) | Versions before 1.11.4 have no SecretStorage, so they keep the plaintext key file until `minAppVersion` is raised | Product decision |
 | Prompt injection | Application-level risk with no static signal | Ongoing design |
 | Adapter API usage (`OBS-GUIDE-015`) | Each call must be confirmed to target the plugin's own storage, not a user note | Maintainer |
 | Licence obligations for review-list licences | Attribution requirements need reading | Maintainer |

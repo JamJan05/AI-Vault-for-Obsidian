@@ -104,14 +104,18 @@ is about deserving that trust, not about a sandbox that would enforce it.
 
 ### Where secrets live
 
-API keys are stored in plaintext JSON, by default in `keys.json` in the storage
-folder outside your vault, restricted to your user account where the operating
-system supports it. If you enable **"Sync API keys via Obsidian Sync"** they move
-into `data.json` inside the vault and travel with your sync and your backups.
+On Obsidian 1.11.4 and newer, API keys are kept in Obsidian's `SecretStorage` on
+the device; the plugin's settings hold only the names of the secrets. Existing
+keys are moved there automatically, and the old copies are deleted only after
+every key has been read back successfully.
 
-Keys are not currently held in Obsidian's `SecretStorage`; that API requires a
-newer Obsidian than this plugin's `minAppVersion`. See `PRIVACY.md` and
-`.compliance/obsidian-policy-map.json` (`OBS-SEC-002`).
+On older Obsidian versions, API keys are stored in plaintext JSON in `keys.json`
+in the storage folder outside your vault, restricted to your user account where
+the operating system supports it.
+
+If you enable **"Sync API keys via Obsidian Sync"** the keys are stored as
+plaintext in `data.json` inside the vault and travel with your sync and your
+backups; SecretStorage is not used in that mode. See `PRIVACY.md`.
 
 **If you suspect a key was exposed, rotate it at the provider immediately.** The
 plugin cannot revoke a key.

@@ -6,9 +6,14 @@ import {
 	extractOllamaContent,
 	extractOpenAIChatText,
 	extractOpenAIContent,
+	extractOpenAIResponsesCitations,
 	extractOpenAIResponsesText,
+	formatCitations,
 	normalizeLocalBaseUrl,
 	parseLocalModelList,
+	readAnthropicContent,
+	readAnthropicStopReason,
+	readServedModel,
 } from "../../src/api/contracts";
 
 describe("normalizeLocalBaseUrl", () => {
@@ -171,5 +176,121 @@ describe("extractAnthropicText", () => {
 
 	it("ignores a text block whose text is not a string", () => {
 		assert.equal(extractAnthropicText({ content: [{ type: "text", text: 5 }] }), null);
+	});
+});
+
+describe("extractOpenAIResponsesCitations", () => {
+	const withAnnotations = (annotations: unknown): Record<string, unknown> => ({
+		output: [{ content: [{ type: "output_text", text: "answer", annotations }] }],
+	});
+
+	it("collects url citations in order and drops duplicates", () => {
+		const citations = extractOpenAIResponsesCitations(withAnnotations([
+			{ type: "url_citation", url: "https://a.example/page", title: "A" },
+			{ type: "url_citation", url: "https://b.example/", title: "B" },
+			{ type: "url_citation", url: "https://a.example/page", title: "A again" },
+		]));
+		assert.deepEqual(citations, [
+			{ url: "https://a.example/page", title: "A" },
+			{ url: "https://b.example/", title: "B" },
+		]);
+	});
+
+	it("refuses every scheme except http and https", () => {
+		const citations = extractOpenAIResponsesCitations(withAnnotations([
+			{ type: "url_citation", url: "javascript:alert(1)", title: "x" },
+			{ type: "url_citation", url: "file:///etc/passwd", title: "x" },
+			{ type: "url_citation", url: "data:text/html,<script>1</script>", title: "x" },
+			{ type: "url_citation", url: "obsidian://open?vault=x", title: "x" },
+			{ type: "url_citation", url: "not a url", title: "x" },
+			{ type: "url_citation", url: "http://ok.example/", title: "ok" },
+		]));
+		assert.deepEqual(citations, [{ url: "http://ok.example/", title: "ok" }]);
+	});
+
+	it("ignores other annotation types and mistyped fields", () => {
+		const citations = extractOpenAIResponsesCitations(withAnnotations([
+			{ type: "file_citation", url: "https://a.example/" },
+			{ type: "url_citation", url: 42 },
+			{ type: "url_citation" },
+			null,
+			"text",
+			{ type: "url_citation", url: "https://b.example/", title: 7 },
+		]));
+		assert.deepEqual(citations, [{ url: "https://b.example/", title: "" }]);
+	});
+
+	it("returns an empty list for malformed input", () => {
+		for (const bad of [{}, { output: "x" }, { output: [null] }, { output: [{ content: [{ type: "output_text", annotations: "x" }] }] }]) {
+			assert.deepEqual(extractOpenAIResponsesCitations(bad as Record<string, unknown>), []);
+		}
+	});
+});
+
+describe("formatCitations", () => {
+	it("lists only the sources the answer does not already link", () => {
+		const out = formatCitations(
+			"See [A](https://a.example/page).",
+			[{ url: "https://a.example/page", title: "A" }, { url: "https://b.example/", title: "B" }],
+			"Sources",
+		);
+		assert.equal(out, "\n\n**Sources**\n- [B](https://b.example/)");
+	});
+
+	it("returns an empty string when there is nothing to add", () => {
+		assert.equal(formatCitations("text", [], "Sources"), "");
+		assert.equal(formatCitations("https://a.example/", [{ url: "https://a.example/", title: "A" }], "Sources"), "");
+	});
+
+	it("falls back to the URL when the title is empty", () => {
+		const out = formatCitations("", [{ url: "https://a.example/", title: "" }], "Sources");
+		assert.ok(out.endsWith("- [https://a.example/](https://a.example/)"));
+	});
+
+	it("keeps a hostile title from breaking out of the link", () => {
+		const out = formatCitations(
+			"",
+			[{ url: "https://a.example/", title: "x](https://evil.example/) [y\n# heading" }],
+			"Sources",
+		);
+		const line = out.split("\n").pop() ?? "";
+		assert.equal(line.includes("["), true);
+		assert.equal((line.match(/\[/g) ?? []).length, 1);
+		assert.equal((line.match(/\]/g) ?? []).length, 1);
+		assert.ok(line.endsWith("](https://a.example/)"));
+	});
+
+	it("caps the title length", () => {
+		const out = formatCitations("", [{ url: "https://a.example/", title: "t".repeat(500) }], "Sources");
+		assert.ok(out.length < 200);
+	});
+
+	it("escapes characters that would end the link target", () => {
+		const out = formatCitations("", [{ url: "https://a.example/wiki/X_(y)", title: "X" }], "Sources");
+		assert.ok(out.endsWith("- [X](https://a.example/wiki/X_%28y%29)"));
+	});
+});
+
+describe("Anthropic response readers", () => {
+	it("reads the stop reason only when it is a string", () => {
+		assert.equal(readAnthropicStopReason({ stop_reason: "refusal" }), "refusal");
+		assert.equal(readAnthropicStopReason({ stop_reason: "pause_turn" }), "pause_turn");
+		assert.equal(readAnthropicStopReason({ stop_reason: null }), null);
+		assert.equal(readAnthropicStopReason({ stop_reason: 3 }), null);
+		assert.equal(readAnthropicStopReason({}), null);
+	});
+
+	it("returns the content blocks, or an empty list when they are missing", () => {
+		const blocks = [{ type: "text", text: "a" }];
+		assert.deepEqual(readAnthropicContent({ content: blocks }), blocks);
+		assert.deepEqual(readAnthropicContent({ content: "text" }), []);
+		assert.deepEqual(readAnthropicContent({}), []);
+	});
+
+	it("reads the serving model only when it is a non-empty string", () => {
+		assert.equal(readServedModel({ model: "claude-opus-4-8" }), "claude-opus-4-8");
+		assert.equal(readServedModel({ model: "" }), null);
+		assert.equal(readServedModel({ model: 1 }), null);
+		assert.equal(readServedModel({}), null);
 	});
 });

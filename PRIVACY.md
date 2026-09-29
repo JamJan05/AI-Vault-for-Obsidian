@@ -1,6 +1,6 @@
 # Privacy policy — AI-Vault for Obsidian
 
-**Version 1.1.1 · last reviewed 2026-08-08**
+**Version 1.5.0 · last reviewed 2026-09-29**
 
 AI-Vault is a local Obsidian plugin. It has no backend of its own, no account, and
 no analytics. Everything it sends leaves your machine only because you asked it to
@@ -21,7 +21,7 @@ document and the source, the source is right — please open an issue.
 | Does it collect telemetry or analytics? | No. |
 | Does it require an account with this project? | No. |
 | Does it send your notes anywhere? | Only to the model provider you select, and only as described below. |
-| Can it work fully offline? | Yes, with a local model server and RAG embeddings turned off. |
+| Can it work fully offline? | Yes, with a local model server. Semantic search (embeddings) is off unless you turn it on. |
 | Where is your data stored? | On your machine, by default in a folder next to your vault. |
 
 ---
@@ -32,8 +32,8 @@ The plugin can contact exactly three kinds of endpoint. Nothing else.
 
 | Service | Host | When it is contacted | Why |
 |---|---|---|---|
-| OpenAI | `api.openai.com` | You send a message with the OpenAI provider selected, or the RAG index is built while an OpenAI API key is configured | Chat completions (`/v1/chat/completions`), the Responses API (`/v1/responses`, used for GPT-5 with web search), and text embeddings (`/v1/embeddings`) |
-| Anthropic | `api.anthropic.com` | You send a message with the Anthropic provider selected | Messages API (`/v1/messages`), including Anthropic's server-side web search when you enable it |
+| OpenAI | `api.openai.com` | You send a message with the OpenAI provider selected; or, **only if you turned on semantic search**, the RAG index is built or a question is asked with RAG on | The Responses API (`/v1/responses`, used for GPT-6 and GPT-5.6 models and for any OpenAI model with web search), chat completions (`/v1/chat/completions`, used for older models such as GPT-4o), and text embeddings (`/v1/embeddings`) |
+| Anthropic | `api.anthropic.com` | You send a message with the Anthropic provider selected | Messages API (`/v1/messages`), including Anthropic's server-side web search when you enable it and Anthropic's server-side refusal fallback |
 | Local API | **whatever Base URL you configure** | You send a message with the Local API provider selected, or you press "Refresh models" | Chat with a model server you run or choose — LM Studio, Ollama, LocalAI, llama.cpp, vLLM, or an OpenAI-compatible gateway |
 
 Your data is processed by those providers under **their** privacy policies and
@@ -76,26 +76,47 @@ The request contains, in this order:
 
 The assembled system prompt is truncated at 120 000 characters.
 
+The chat view shows a one-line summary of this above the input before you send:
+the destination (the provider, "this device" for a loopback Local API, or the
+hostname of a remote one) and which of the items above the message will carry.
+
 ### When the RAG index is built
 
-If an OpenAI API key is configured, the text of **every indexed note** is sent to
-`api.openai.com/v1/embeddings` in batches of 20 chunks, using the
-`text-embedding-3-small` model. Each chunk is truncated to 8 000 characters.
+**By default, building the index sends nothing.** The index is a keyword (BM25)
+index that is built and searched entirely on your machine. Indexing is on by
+default (`ragEnabled` and `ragAutoIndex` are both `true`) and starts when the
+plugin loads, but it stays local.
 
-This matters, so it is worth stating plainly:
+**Semantic search is opt-in.** It is controlled by **Settings → RAG → Semantic
+search**, which is off by default (`ragEmbeddingsEnabled: false`). Turning it on
+opens a dialog that states what will be sent, and nothing is enabled unless you
+confirm. An OpenAI API key on its own never enables it.
 
-> **With RAG enabled and an OpenAI key configured, the content of your vault is
-> sent to OpenAI — not only the notes you are asking about.** Indexing is on by
-> default (`ragEnabled` and `ragAutoIndex` are both `true`), and it starts when
-> the plugin loads.
+Once you have turned it on, and an OpenAI API key is configured:
+
+> **The content of your vault is sent to OpenAI — not only the notes you are
+> asking about.** The text of every indexed note is sent to
+> `api.openai.com/v1/embeddings` in batches of 20 chunks, using the
+> `text-embedding-3-small` model. Each chunk is truncated to 8 000 characters.
+> **Every question you ask with RAG on is sent there too**, to be compared with
+> the stored vectors — even when you chat with Anthropic or a local model.
 
 Ways to control this:
 
-- Turn off **Auto-index** and/or **RAG** in settings.
+- Leave **Semantic search** off. Search then uses keywords only and sends nothing.
 - Add paths to **Ignored RAG paths** — matching notes are never read, never
   embedded, never retrieved and never listed as sources.
-- Leave the OpenAI API key empty. RAG then falls back to keyword-only (BM25)
-  search, which runs entirely on your machine and sends nothing.
+- Turn off **Auto-index** and/or **RAG** in settings.
+- **Delete stored embeddings** removes the vectors from your machine. It cannot
+  remove anything OpenAI has already received.
+
+Turning semantic search off stops all embedding requests immediately. Vectors
+created earlier stay in `rag-index.json` on your machine, unused, until you
+delete them or turn semantic search back on.
+
+**Upgrading from 1.1.x or earlier.** Those versions created embeddings whenever
+an OpenAI key was configured. From 1.5.0 the setting starts off for everyone,
+including existing installs, and a notice says so once.
 
 `.md` and `.canvas` files are indexed. Canvas files are converted to readable text
 (nodes and edges) before indexing.
@@ -104,15 +125,37 @@ Ways to control this:
 
 Web search runs **on the provider's side**, not in Obsidian:
 
-- OpenAI: `tools: [{ type: "web_search" }]`, `web_search_options` for
-  `gpt-5-search-api`, or the Responses API for GPT-5 with search.
-- Anthropic: the `web_search_20260209` server tool.
+- OpenAI: the `web_search` tool of the Responses API. Pages the answer cites are
+  listed under it as ordinary links; the plugin does not open them.
+- Anthropic: the `web_search_20260209` server tool, or `web_search_20250305` for
+  Claude Haiku 4.5.
 
 Your message and its context reach the provider, which then performs the searches.
 The plugin does not open connections to search engines itself. Web search is not
 available for the Local API.
 
+### What the provider keeps, and which model answers
+
+- **OpenAI Responses API.** By default OpenAI stores every Responses API result
+  for 30 days. The plugin sends `store: false` with every such request, so that
+  storage is declined. This does not change OpenAI's own abuse-monitoring
+  retention, which is governed by their policy and your account settings.
+- **Anthropic refusal fallback.** For Claude Sonnet 5.5 and Claude Opus 5.5 the
+  plugin sends `fallbacks: "default"`. If the selected model declines a request,
+  Anthropic re-runs the same request on another Claude model that Anthropic
+  chooses. Your data does not reach any additional company or host — it stays
+  with Anthropic — but the answer can come from a different Claude model than
+  the one you picked. When that happens the message is labelled with the model
+  that answered. This uses an Anthropic beta feature
+  (`server-side-fallback-2026-07-01`).
+- **No automatic retries of rejected requests.** A request the provider rejects
+  as invalid or unauthorized is not sent again. Only timeouts, rate limits and
+  server errors are retried, up to three times.
+
 ### What is never sent
+
+- The sources saved with an answer are kept for you, not for the model. They are
+  removed from the conversation before it is sent to any provider.
 
 - The plugin sends nothing on its own schedule. Every request is caused by an
   action you took: sending a message, refreshing the model list, or indexing.
@@ -137,9 +180,9 @@ You can point this anywhere via **Settings → Storage → Storage path**.
 
 | File | Contents |
 |---|---|
-| `keys.json` | Your OpenAI, Anthropic and Local API keys |
+| `keys.json` | Your OpenAI, Anthropic and Local API keys — only on Obsidian older than 1.11.4; newer versions keep them in Obsidian's secret storage instead |
 | `history-index.json` | Conversation titles, timestamps, model, project link |
-| `history/session-*.json` | The full text of every saved conversation |
+| `history/session-*.json` | The full text of every saved conversation and, for each answer, the sources it used: the note name, its path in the vault, and the first 200 characters of the fragment that was sent |
 | `projects.json` | Project names, descriptions and custom system prompts |
 | `rag-index.json` | Note fragments and their embedding vectors |
 
@@ -168,16 +211,32 @@ trade-off you choose, not a default.
 - `data.json` in the plugin folder always holds your settings. It is inside the
   vault and therefore synced.
 - API keys have their own switch, **"Sync API keys via Obsidian Sync"**:
-  - **Off (default)** — keys live in `keys.json` outside the vault and are not
-    synced. On Linux and macOS the file is set to owner-only permissions (`0600`);
-    Windows has no equivalent and the call is a no-op there.
-  - **On** — keys are written into `data.json` inside the vault, which means they
-    travel through Obsidian Sync and land in every synced device and backup.
-- Keys are stored in plaintext JSON. They are **not** currently held in Obsidian's
-  `SecretStorage`. That API arrived in the Obsidian 1.11 line, and this plugin
-  still supports 1.7.2, so adopting it would drop support for existing installs.
-  See `.compliance/obsidian-policy-map.json` (rule `OBS-SEC-002`) for the decision
-  record.
+  - **Off (default), Obsidian 1.11.4 or newer** — keys are kept in Obsidian's
+    `SecretStorage`. `data.json` stores only the *name* of each secret. According
+    to Obsidian's documentation the values are held in local storage, keyed to
+    the vault, on that device; they are not part of the vault and are not
+    synced. The plugin writes no key file in this mode.
+  - **Off (default), older Obsidian** — keys live in `keys.json` outside the vault
+    and are not synced. On Linux and macOS the file is set to owner-only
+    permissions (`0600`); Windows has no equivalent and the call is a no-op
+    there. The file is plaintext JSON.
+  - **On** — keys are written into `data.json` inside the vault as plaintext,
+    which means they travel through Obsidian Sync and land in every synced
+    device and backup. SecretStorage is not used in this mode, because it would
+    not sync.
+- **Moving to SecretStorage is automatic and verified.** On the first start with
+  Obsidian 1.11.4 or newer, each key is written to SecretStorage and read back.
+  Only when every key reads back correctly are the copies in `keys.json` and
+  `data.json` deleted. If anything fails, nothing is deleted and the plugin keeps
+  using its key file.
+- Secrets in SecretStorage are shared by name: another plugin that knows a
+  secret's name can read it. That is how Obsidian designed the store. The plugin
+  names its secrets `ai-vault-openai-api-key`, `ai-vault-anthropic-api-key` and
+  `ai-vault-local-api-key`.
+- SecretStorage is not described by Obsidian as encrypted, and this plugin makes
+  no such claim. It keeps keys out of the vault, out of sync and out of the
+  plugin's own files; it does not protect them from someone with access to your
+  user account.
 
 ### Exported conversations
 
@@ -201,7 +260,7 @@ To delete your data:
 | A single conversation | Delete it in the History view |
 | A project | Delete it in the Projects view |
 | All history, projects and the RAG index | Delete the storage folder shown in **Settings → Storage** |
-| API keys | Clear the key fields in settings, then delete `keys.json` from the storage folder |
+| API keys | Remove the secrets in Obsidian's secret storage (the key field in settings opens it). On Obsidian older than 1.11.4: clear the key fields, then delete `keys.json` from the storage folder |
 | Settings | Delete `data.json` from the plugin folder inside your vault |
 | Everything | Uninstall the plugin, then delete both the plugin folder inside the vault and the external storage folder |
 
@@ -250,8 +309,9 @@ and Local API key are sent. The plugin therefore validates it
   treated as remote.
 - A **remote plaintext HTTP** endpoint is not blocked, because running a model
   server elsewhere on your LAN is a legitimate choice. It does raise a visible
-  warning in settings before the value takes effect, because your messages and
-  your Local API key travel unencrypted.
+  warning in settings, the chat view marks the destination as unencrypted, and
+  the first message to that address asks for confirmation, because your messages
+  and your Local API key travel unencrypted.
 - A username and password embedded in the URL raises a warning: URLs end up in
   logs and error messages.
 

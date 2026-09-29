@@ -272,12 +272,14 @@ export async function run(ctx) {
 	// ── RAG ignore list is enforced everywhere content can leave ────────────
 	{
 		const engine = ctx.grepSources(/ignored\.matches|isIgnoredPath|purgeIgnoredEntries/).filter(h => h.file.startsWith("src/rag/"));
-		const view = ctx.grepSources(/ragIgnored|isIgnoredPath/).filter(h => h.file.startsWith("src/views/"));
+		// Prompt assembly lives in src/chat/ since the chat view was split up.
+		const view = ctx.grepSources(/ragIgnored|isIgnoredPath/)
+			.filter(h => h.file.startsWith("src/views/") || h.file.startsWith("src/chat/"));
 		const resolver = ctx.grepSources(/isIgnored/).filter(h => h.file.includes("linkResolver"));
 
 		const gaps = [];
 		if (!engine.length) gaps.push("the RAG engine does not apply the ignore list");
-		if (!view.length) gaps.push("the chat view does not filter ignored paths before building the prompt");
+		if (!view.length) gaps.push("the chat layer does not filter ignored paths before building the prompt");
 		if (!resolver.length) gaps.push("wikilink resolution does not respect the ignore list");
 
 		out.push(result({
@@ -289,7 +291,7 @@ export async function run(ctx) {
 			source: "https://cheatsheetseries.owasp.org/cheatsheets/User_Privacy_Protection_Cheat_Sheet.html",
 			summary: gaps.length
 				? gaps.join("; ")
-				: `enforced in the engine (${engine.length} sites), the chat view (${view.length}) and the link resolver (${resolver.length})`,
+				: `enforced in the engine (${engine.length} sites), the chat layer (${view.length}) and the link resolver (${resolver.length})`,
 			findings: gaps.map(g => finding({ file: "src/rag/RAGEngine.ts", detail: g, severity: "high" })),
 			remediation: "Filter ignored paths before reading a file, before requesting an embedding, before ranking and again before the text is put into a prompt.",
 		}));

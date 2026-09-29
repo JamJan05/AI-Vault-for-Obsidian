@@ -2,9 +2,22 @@
 
 export type MessageRole = "user" | "assistant" | "system";
 
+/** A note that was put into the prompt for an answer. Never sent to a provider. */
+export interface MessageSource {
+	label:   string;
+	/** Vault-relative path of the note. */
+	path:    string;
+	/** Beginning of the fragment that was used, to find the passage again. */
+	anchor?: string;
+	/** Length of the whole fragment, so the passage can be selected. */
+	length?: number;
+}
+
 export interface ChatMessage {
 	role:    MessageRole;
 	content: string;
+	/** Kept with an assistant message in the history; stripped from every request. */
+	sources?: MessageSource[];
 }
 
 // ─── History ──────────────────────────────────────────────────────────────────
@@ -31,10 +44,6 @@ export interface SessionMeta {
 	model?:    string;
 }
 
-export interface HistoryIndex {
-	sessions: SessionMeta[];
-}
-
 // ─── Projects ─────────────────────────────────────────────────────────────────
 
 export interface Project {
@@ -44,10 +53,6 @@ export interface Project {
 	systemPrompt: string;
 	createdAt:    number;
 	updatedAt:    number;
-}
-
-export interface ProjectsFile {
-	projects: Project[];
 }
 
 // ─── RAG ──────────────────────────────────────────────────────────────────────
@@ -78,22 +83,4 @@ export interface RAGSearchResult {
 	basename: string;
 	chunk:    string;
 	score:    number;
-}
-
-// ─── API ──────────────────────────────────────────────────────────────────────
-
-export interface UsageStats {
-	inputTokens?:     number;
-	outputTokens?:    number;
-	reasoningTokens?: number;
-}
-
-export interface APICallOptions {
-	apiKey:     string;
-	model:      string;
-	messages:   ChatMessage[];
-	mode:       string;
-	webSearch?: boolean;
-	onChunk?:   ((delta: string) => void) | null;
-	signal?:    AbortSignal | null;
 }

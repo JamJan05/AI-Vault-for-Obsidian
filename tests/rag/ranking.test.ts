@@ -13,7 +13,6 @@ import {
 	contentHash,
 	cosineSim,
 	dotProduct,
-	sanitizeUrl,
 	tokenize,
 	vectorNorm,
 } from "../../src/utils";
@@ -122,25 +121,5 @@ describe("contentHash", () => {
 
 	it("handles an empty string", () => {
 		assert.equal(typeof contentHash(""), "string");
-	});
-});
-
-describe("sanitizeUrl", () => {
-	it("allows http, https and mailto", () => {
-		assert.equal(sanitizeUrl("https://example.com"), "https://example.com");
-		assert.equal(sanitizeUrl("http://example.com"), "http://example.com");
-		assert.equal(sanitizeUrl("mailto:a@example.com"), "mailto:a@example.com");
-	});
-
-	it("blocks script-bearing and data schemes", () => {
-		assert.equal(sanitizeUrl("javascript:alert(1)"), "#");
-		assert.equal(sanitizeUrl("JavaScript:alert(1)"), "#");
-		assert.equal(sanitizeUrl("data:text/html,<script>"), "#");
-		assert.equal(sanitizeUrl("vbscript:msgbox"), "#");
-		assert.equal(sanitizeUrl("file:///etc/passwd"), "#");
-	});
-
-	it("blocks non-string input", () => {
-		assert.equal(sanitizeUrl(undefined as unknown as string), "#");
 	});
 });

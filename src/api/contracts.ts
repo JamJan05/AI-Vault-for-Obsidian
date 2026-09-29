@@ -118,6 +118,81 @@ export function extractOpenAIResponsesText(response: Record<string, unknown>): s
 	return fragments.join("") || null;
 }
 
+export interface WebCitation {
+	url:   string;
+	title: string;
+}
+
+/** Only http(s) links are ever turned into a clickable source. */
+function isWebUrl(value: string): boolean {
+	try {
+		const protocol = new URL(value).protocol;
+		return protocol === "http:" || protocol === "https:";
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Responses API: `url_citation` annotations on `output_text` parts, de-duplicated
+ * by URL in order of first appearance. Anything that is not a plain web link is dropped.
+ */
+export function extractOpenAIResponsesCitations(response: Record<string, unknown>): WebCitation[] {
+	if (!isUnknownArray(response.output)) return [];
+	const seen = new Map<string, WebCitation>();
+
+	for (const item of response.output) {
+		if (!isRecord(item) || !isUnknownArray(item.content)) continue;
+		for (const content of item.content) {
+			if (!isRecord(content) || content.type !== "output_text") continue;
+			if (!isUnknownArray(content.annotations)) continue;
+
+			for (const annotation of content.annotations) {
+				if (!isRecord(annotation) || annotation.type !== "url_citation") continue;
+				const url = typeof annotation.url === "string" ? annotation.url.trim() : "";
+				if (!url || !isWebUrl(url) || seen.has(url)) continue;
+				const title = typeof annotation.title === "string" ? annotation.title.trim() : "";
+				seen.set(url, { url, title });
+			}
+		}
+	}
+	return [...seen.values()];
+}
+
+/**
+ * Renders the sources that the answer does not already link to as a Markdown list.
+ * Titles come from the open web, so everything that could break out of the link
+ * text is stripped. Returns an empty string when there is nothing to add.
+ */
+export function formatCitations(text: string, citations: WebCitation[], heading: string): string {
+	const missing = citations.filter(c => !text.includes(c.url));
+	if (!missing.length) return "";
+
+	const lines = missing.map(c => {
+		const title = c.title.replace(/[[\]\r\n]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+		// encodeURIComponent leaves parentheses alone, and they end a Markdown link.
+		const url   = c.url.replace(/[()<>\s]/g, ch =>
+			"%" + ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0"));
+		return `- [${title || url}](${url})`;
+	});
+	return `\n\n**${heading}**\n${lines.join("\n")}`;
+}
+
+/** Anthropic Messages: `stop_reason`, or null when absent/mistyped. */
+export function readAnthropicStopReason(response: Record<string, unknown>): string | null {
+	return typeof response.stop_reason === "string" ? response.stop_reason : null;
+}
+
+/** Anthropic Messages: the raw `content` blocks, needed to resume a paused turn. */
+export function readAnthropicContent(response: Record<string, unknown>): unknown[] {
+	return isUnknownArray(response.content) ? response.content : [];
+}
+
+/** The model that actually produced the response, or null when absent/mistyped. */
+export function readServedModel(response: Record<string, unknown>): string | null {
+	return typeof response.model === "string" && response.model ? response.model : null;
+}
+
 /** Anthropic Messages: concatenated `content[].text` for `text` blocks. */
 export function extractAnthropicText(event: Record<string, unknown>): string | null {
 	if (!isUnknownArray(event.content)) return null;

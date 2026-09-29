@@ -1,11 +1,18 @@
 import { requestUrl, TFile } from "obsidian";
-import { RAG_TOP_K } from "../constants";
+import { FILE_RAG_INDEX, RAG_TOP_K } from "../constants";
 import {
 	tokenize, buildTermFreq, chunkText,
 	bm25Score, cosineSim, vectorNorm,
 	contentHash, withRetry,
 } from "../utils";
 import { parseCanvasToText } from "./canvasParser";
+import {
+	EMBEDDINGS_URL,
+	buildEmbeddingsBody,
+	canUseEmbeddings,
+	parseEmbeddingsResponse,
+} from "./embeddings";
+import { nonRetryableError } from "../api/streaming";
 import { parseRagIgnorePatterns } from "./ignorePaths";
 import type { RagIgnoreMatcher } from "./ignorePaths";
 import type { ExternalStorage } from "../storage/ExternalStorage";
@@ -15,13 +22,15 @@ import type { RAGEntry, RAGIndex, RAGSearchResult } from "../types";
 
 const BATCH_SIZE    = 20;
 const SAVE_DELAY_MS = 5000;
-const FILE_RAG_INDEX = "rag-index.json";
+const LOG_PREFIX     = "[AI-Vault] RAG:";
 
 interface PluginWithDeps {
 	app:             import("obsidian").App;
 	externalStorage: ExternalStorage;
 	settings: {
 		apiKey:    string;
+		ragEnabled: boolean;
+		ragEmbeddingsEnabled: boolean;
 		ragAutoIndex: boolean;
 		ragSearchMode: "hybrid" | "semantic" | "exact" | "recent";
 		ragExcludedPaths: string;
@@ -71,6 +80,12 @@ export class RAGEngine {
 	// ── Getters ────────────────────────────────────────────────────────────────
 
 	private get apiKey():   string { return this.plugin.settings.apiKey; }
+
+	/**
+	 * The only gate in front of every embeddings request. Note text and questions
+	 * leave the device for embedding only when the user switched semantic search on.
+	 */
+	get embeddingsAllowed(): boolean { return canUseEmbeddings(this.plugin.settings); }
 	private get indexPath(): string { return this.storage.resolve(FILE_RAG_INDEX); }
 
 	/** Compiled ignore list — cached per settings value, so this is cheap to call in loops. */
@@ -168,40 +183,39 @@ export class RAGEngine {
 	// ── Embeddings (OpenAI) ────────────────────────────────────────────────────
 
 	private async getEmbedding(text: string): Promise<number[]> {
-		return withRetry(async () => {
-			const r = await requestUrl({
-				url:     "https://api.openai.com/v1/embeddings",
-				method:  "POST",
-				headers: {
-					"Content-Type":  "application/json",
-					"Authorization": `Bearer ${this.apiKey}`,
-				},
-				body:  JSON.stringify({ model: "text-embedding-3-small", input: text.slice(0, 8000) }),
-				throw: false,
-			});
-			if (r.status !== 200) throw new Error(`Embedding error ${r.status}`);
-			return (r.json as { data: { embedding: number[] }[] }).data[0].embedding;
-		});
+		const [embedding] = await this.getEmbeddingsBatch([text]);
+		return embedding;
 	}
 
 	private async getEmbeddingsBatch(texts: string[]): Promise<number[][]> {
 		if (!texts.length) return [];
+		// Checked here as well as at the call sites: nothing reaches the network
+		// through this method unless semantic search is on.
+		if (!this.embeddingsAllowed) throw nonRetryableError("Semantic search is turned off");
+
 		return withRetry(async () => {
 			const r = await requestUrl({
-				url:     "https://api.openai.com/v1/embeddings",
+				url:     EMBEDDINGS_URL,
 				method:  "POST",
 				headers: {
 					"Content-Type":  "application/json",
 					"Authorization": `Bearer ${this.apiKey}`,
 				},
-				body:  JSON.stringify({
-					model: "text-embedding-3-small",
-					input: texts.map(t => t.slice(0, 8000)),
-				}),
+				body:  JSON.stringify(buildEmbeddingsBody(texts)),
 				throw: false,
 			});
-			if (r.status !== 200) throw new Error(`Embedding error ${r.status}`);
-			return (r.json as { data: { embedding: number[] }[] }).data.map(d => d.embedding);
+			if (r.status !== 200) {
+				const message = `Embedding error ${r.status}`;
+				// A rejected request is not sent again; only timeouts, rate limits and
+				// server errors are worth a retry.
+				const retryable = r.status === 408 || r.status === 429 || r.status >= 500;
+				throw retryable ? new Error(message) : nonRetryableError(message);
+			}
+			try {
+				return parseEmbeddingsResponse(r.json, texts.length);
+			} catch (e) {
+				throw nonRetryableError((e as Error).message);
+			}
 		});
 	}
 
@@ -239,8 +253,22 @@ export class RAGEngine {
 			let pendingChunks:   PendingChunk[] = [];
 			let done = 0;
 
+			const embed = this.embeddingsAllowed;
+
+			// Chunks that still need a vector, by note — built once, so unchanged
+			// files do not each scan the whole index.
+			const missingByPath = new Map<string, RAGEntry[]>();
+			if (embed) {
+				for (const entry of this.index) {
+					if (entry.embedding) continue;
+					const list = missingByPath.get(entry.path);
+					if (list) list.push(entry);
+					else missingByPath.set(entry.path, [entry]);
+				}
+			}
+
 			const flushEmbeddings = async (): Promise<void> => {
-				if (!pendingChunks.length || !this.apiKey) { pendingChunks = []; return; }
+				if (!pendingChunks.length || !embed) { pendingChunks = []; return; }
 				try {
 					const embeddings = await this.getEmbeddingsBatch(pendingChunks.map(c => c.text));
 					for (let i = 0; i < embeddings.length; i++) {
@@ -248,7 +276,7 @@ export class RAGEngine {
 						pendingChunks[i].entry._embNorm   = vectorNorm(embeddings[i]);
 					}
 				} catch (e) {
-					console.warn("[GPT RAG] batch embedding failed:", (e as Error)?.message);
+					console.warn(LOG_PREFIX, "batch embedding failed:", (e as Error)?.message);
 				}
 				pendingChunks = [];
 			};
@@ -271,33 +299,37 @@ export class RAGEngine {
 
 					// Skip files that have not changed
 					if (this.fileHashes[file.path] === hash) {
+						// Semantic search may have been switched on after this file was
+						// indexed — give its chunks the embeddings they are missing.
+						if (embed) {
+							for (const entry of missingByPath.get(file.path) ?? []) {
+								pendingChunks.push({ entry, text: entry.chunk });
+								if (pendingChunks.length >= BATCH_SIZE) await flushEmbeddings();
+							}
+						}
 						done++;
 						onProgress?.(done, files.length);
 						continue;
 					}
 
 					this.index = this.index.filter(e => e.path !== file.path);
-					if (!content.trim()) { done++; continue; }
+					if (!content.trim()) {
+						done++;
+						onProgress?.(done, files.length);
+						continue;
+					}
 
 					for (const chunk of chunkText(content)) {
-						const tokens = tokenize(chunk);
-						const entry: RAGEntry = {
-							path:      file.path,
-							basename:  file.basename,
-							chunk,
-							tokens,
-							embedding: null,
-							_tf:       buildTermFreq(tokens),
-						};
+						const entry = this.createEntry(file, chunk);
 						this.index.push(entry);
 
-						if (this.apiKey) {
+						if (embed) {
 							pendingChunks.push({ entry, text: chunk });
 							if (pendingChunks.length >= BATCH_SIZE) await flushEmbeddings();
 						}
 					}
 				} catch (e) {
-					console.warn("[GPT RAG] file failed:", file.path, (e as Error)?.message);
+					console.warn(LOG_PREFIX, "file failed:", file.path, (e as Error)?.message);
 				}
 
 				done++;
@@ -339,28 +371,31 @@ export class RAGEngine {
 
 		const avgLen = this.cachedAvgLen;
 		const mode = this.plugin.settings.ragSearchMode ?? "hybrid";
-		const useEmbedding = mode !== "exact";
-		const useLexical = mode !== "semantic";
+		const useEmbedding = mode !== "exact" && this.embeddingsAllowed;
 
-
-		// Optional query embedding
+		// Optional query embedding. Without consent the question is never sent, and
+		// stored vectors from an earlier opt-in simply go unused.
 		let qEmb:  number[] | null = null;
 		let qNorm  = 0;
 
-		if (useEmbedding && this.apiKey && candidates.some(e => e.embedding)) {
+		if (useEmbedding && candidates.some(e => e.embedding)) {
 			try {
 				qEmb  = await this.getEmbedding(query);
 				qNorm = vectorNorm(qEmb);
 			} catch (e) {
-				console.warn("[GPT RAG] query embedding failed:", (e as Error)?.message);
+				console.warn(LOG_PREFIX, "query embedding failed:", (e as Error)?.message);
 			}
 		}
+
+		// "semantic" without a query vector would score everything zero — fall back
+		// to keyword search, which runs entirely on the device.
+		const useLexical = mode !== "semantic" || !qEmb;
 
 		// Compute both scores for each chunk
 		const scored = candidates.map(e => {
 			this.ensureEntryCache(e);
 			const bm  = useLexical ? bm25Score(qt, e._tf ?? {}, e.tokens.length, avgLen) : 0;
-			const cos = (useEmbedding && qEmb && e.embedding)
+			const cos = (qEmb && e.embedding)
 				? cosineSim(qEmb, e.embedding, qNorm, e._embNorm ?? undefined)
 				: 0;
 			return { entry: e, bm, cos };
@@ -436,24 +471,10 @@ export class RAGEngine {
 				return;
 			}
 
-			const chunks     = chunkText(content);
-			const newEntries: RAGEntry[] = chunks.map(chunk => {
-				const tokens = tokenize(chunk);
-				return {
-					path:      file.path,
-					basename:  file.basename,
-					extension: file.extension,
-					folder: file.parent?.path ?? "",
-					mtime: file.stat?.mtime ?? Date.now(),
-					chunk,
-					tokens,
-					embedding: null,
-					_tf:       buildTermFreq(tokens),
-				};
-			});
+			const newEntries = chunkText(content).map(chunk => this.createEntry(file, chunk));
 
 			// Batch embeddings (instead of sequential requests)
-			if (this.apiKey && newEntries.length) {
+			if (this.embeddingsAllowed && newEntries.length) {
 				try {
 					const embeddings = await this.getEmbeddingsBatch(newEntries.map(e => e.chunk));
 					for (let i = 0; i < embeddings.length; i++) {
@@ -461,7 +482,7 @@ export class RAGEngine {
 						newEntries[i]._embNorm  = vectorNorm(embeddings[i]);
 					}
 				} catch (e) {
-					console.warn("[GPT RAG] updateFile embedding failed:", (e as Error)?.message);
+					console.warn(LOG_PREFIX, "updateFile embedding failed:", (e as Error)?.message);
 				}
 			}
 
@@ -469,7 +490,7 @@ export class RAGEngine {
 			this.recalcAvgLen();
 			this.scheduleSave();
 		} catch (e) {
-			console.warn("[GPT RAG] updateFile error:", file?.path, (e as Error)?.message);
+			console.warn(LOG_PREFIX, "updateFile error:", file?.path, (e as Error)?.message);
 		}
 	}
 
@@ -493,11 +514,14 @@ export class RAGEngine {
 		}
 
 		let changed = false;
+		const slash  = newPath.lastIndexOf("/");
+		const folder = slash >= 0 ? newPath.slice(0, slash) : "";
 
 		for (const e of this.index) {
 			if (e.path === oldPath) {
 				e.path     = newPath;
 				e.basename = basename;
+				e.folder   = folder;
 				changed    = true;
 			}
 		}
@@ -522,7 +546,40 @@ export class RAGEngine {
 		this.scheduleSave();
 	}
 
+	/**
+	 * Deletes every stored embedding vector and persists the result. The keyword
+	 * index is untouched, so RAG keeps working on the device.
+	 * @returns the number of vectors removed
+	 */
+	async clearEmbeddings(): Promise<number> {
+		let removed = 0;
+		for (const entry of this.index) {
+			if (!entry.embedding) continue;
+			entry.embedding = null;
+			entry._embNorm  = undefined;
+			removed++;
+		}
+		if (removed) await this.saveIndexNow();
+		return removed;
+	}
+
 	// ── Helpers ────────────────────────────────────────────────────────────────
+
+	/** The one place an index entry is built, so a full and an incremental index agree. */
+	private createEntry(file: TFile, chunk: string): RAGEntry {
+		const tokens = tokenize(chunk);
+		return {
+			path:      file.path,
+			basename:  file.basename,
+			extension: file.extension,
+			folder:    file.parent?.path ?? "",
+			mtime:     file.stat?.mtime ?? Date.now(),
+			chunk,
+			tokens,
+			embedding: null,
+			_tf:       buildTermFreq(tokens),
+		};
+	}
 
 	/**
 	 * Removes index entries and hashes for paths that the ignore list now excludes.

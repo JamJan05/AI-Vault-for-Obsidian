@@ -81,40 +81,59 @@ manifest.json ──────▶  manifest.json
 .
 ├── src/
 │   ├── main.ts               431  plugin entry — lifecycle, commands, views, sessions, settings I/O
-│   ├── SettingsTab.ts         739  settings UI (9 sections)
-│   ├── i18n.ts                722  EN + PL dictionaries (296 keys each) + t() runtime
-│   ├── settings.ts             93  PluginSettings shape, defaults, provider/mode unions
-│   ├── types.ts                99  domain types: messages, sessions, projects, RAG, usage
-│   ├── models.ts              120  model catalogues, provider detection, thinking modes, ModelAccessError
-│   ├── constants.ts            23  view types, file names, RAG tuning constants
-│   ├── utils.ts               236  debounce, retry, hashing, tokenizer, BM25, cosine, chunking
+│   ├── SettingsTab.ts        1102  settings UI, built from setting definitions
+│   ├── i18n.ts                788  EN + PL dictionaries (321 keys each) + t() runtime
+│   ├── settings.ts            104  PluginSettings shape, defaults, provider/mode unions
+│   ├── types.ts                73  domain types: messages, sessions, projects, RAG
+│   ├── models.ts              307  model catalogue, retired models, provider detection, thinking modes
+│   ├── constants.ts            20  view types, file names, RAG tuning constants
+│   ├── utils.ts               255  debounce, ids, retry, hashing, tokenizer, BM25, cosine, chunking
+│   ├── security/
+│   │   ├── keyStore.ts       SecretStorage migration and lookup, verified by read-back
+│   │   ├── paths.ts           112  path containment for storage
+│   │   ├── redact.ts          113  secret redaction for errors and logs
+│   │   └── urlPolicy.ts       175  Local API Base URL policy
 │   ├── storage/
-│   │   ├── PluginStorage.ts    93  vault-adapter storage (always available)
-│   │   ├── ExternalStorage.ts 393  Node fs storage outside the vault + migration
-│   │   └── index.ts             3  barrel (unused)
+│   │   ├── PluginStorage.ts   151  vault-adapter storage (always available)
+│   │   └── ExternalStorage.ts 464  Node fs storage outside the vault + migration
 │   ├── api/
-│   │   ├── streaming.ts       142  shared requestUrl transport, error mapping, usage parsing
-│   │   ├── openai.ts          174  Chat Completions + Responses API
-│   │   ├── anthropic.ts        79  Messages API, extended thinking, server-side web search
-│   │   ├── local.ts           211  OpenAI-compatible + Ollama, model discovery
-│   │   └── index.ts             5  barrel (unused)
+│   │   ├── streaming.ts       176  shared requestUrl transport, error mapping, usage parsing
+│   │   ├── requests.ts        190  pure request-body builders for OpenAI and Anthropic
+│   │   ├── contracts.ts       208  response validators, citations, Base URL shaping
+│   │   ├── openai.ts           55  Responses API + Chat Completions
+│   │   ├── anthropic.ts        81  Messages API: thinking, web search, refusal fallback
+│   │   └── local.ts           202  OpenAI-compatible + Ollama, model discovery
 │   ├── rag/
-│   │   ├── RAGEngine.ts       480  index build/load/save, incremental updates, hybrid search
-│   │   ├── canvasParser.ts    158  .canvas JSON → readable text via graph traversal
-│   │   ├── linkResolver.ts     47  recursive [[wikilink]] expansion via MetadataCache
-│   │   └── index.ts             4  barrel (unused)
+│   │   ├── RAGEngine.ts       608  index build/load/save, incremental updates, hybrid search
+│   │   ├── embeddings.ts       77  opt-in gate and wire format for embeddings
+│   │   ├── ignorePaths.ts     138  ignored RAG paths
+│   │   ├── canvasParser.ts    165  .canvas JSON → readable text via graph traversal
+│   │   └── linkResolver.ts     51  recursive [[wikilink]] expansion via MetadataCache
 │   ├── history/
-│   │   ├── HistoryManager.ts  151  session index + lazy per-session message files
-│   │   ├── ProjectManager.ts  152  projects CRUD + cross-chat project context
-│   │   └── index.ts             2  barrel (unused)
+│   │   ├── HistoryManager.ts  154  session index + lazy per-session message files
+│   │   ├── retention.ts        38  which conversations are kept when history is full
+│   │   └── ProjectManager.ts  153  projects CRUD + cross-chat project context
+│   ├── chat/                       chat logic without Obsidian imports (except the collector)
+│   │   ├── systemPrompt.ts     76  assembles the system prompt, holds its limits
+│   │   ├── contextCollector.ts 73  gathers attached and retrieved note text, applies ignored paths
+│   │   ├── quiz.ts            181  parses and normalizes model-written quizzes
+│   │   ├── modelOptions.ts     99  what the model picker lists
+│   │   └── exportNote.ts       58  conversation → Markdown note, safe file names
 │   └── views/
-│       ├── ChatView.ts       1524  the chat panel — largest module by far
+│       ├── ChatView.ts        996  the chat panel: layout, controls, send flow, sessions
+│       ├── ModelPicker.ts      90  the model list popup
+│       ├── QuizRenderer.ts    122  draws a quiz and grades answers
+│       ├── messageRenderer.ts  84  Markdown rendering, copy buttons
+│       ├── sourceLinks.ts      64  source buttons, opening a note at a fragment
+│       ├── sendSummary.ts      71  what the next message sends, and to whom
+│       ├── NotePickerModal.ts  98  note attachment dialog
+│       ├── EmbeddingsConsentModal.ts 64  consent dialog for semantic search
 │       ├── ProjectsView.ts    321  projects sidebar + create/edit dialog
 │       ├── HistoryView.ts     132  history sidebar
 │       ├── FallbackModal.ts   100  "model unavailable → switch to fallback" dialog
-│       ├── ConfirmModal.ts     40  generic confirm dialog (replaces native confirm())
-│       └── index.ts             3  barrel (unused)
-├── styles.css                 652  228 top-level .gpt-* class selectors
+│       └── ConfirmModal.ts     40  generic confirm dialog (replaces native confirm())
+├── styles.css                 618  theme-variable based styles, .gpt-* classes
+├── tests/                          unit tests (node:test), mirrors src/
 ├── esbuild.config.mjs
 ├── eslint.config.mjs
 ├── tsconfig.json
@@ -124,7 +143,7 @@ manifest.json ──────▶  manifest.json
 └── .github/workflows/{validate,release,security-privacy}.yml
 ```
 
-Total: **6 677 lines** of TypeScript across 29 files (6 of which are unused barrels).
+Total: **9 642 lines** of TypeScript across 47 files in `src/`.
 
 ---
 
@@ -242,14 +261,18 @@ re-renders both sidebars.
 `history-index.json`, `projects.json`, `keys.json`, `history/`), legacy `data.json` keys, and RAG
 tuning (`RAG_TOP_K = 5`, `RAG_CHUNK_SIZE = 1200`, `RAG_CHUNK_OVERLAP = 150`).
 
-**`types.ts`** — `ChatMessage`, `ChatSession` / `SessionMeta` / `HistoryIndex`, `Project` /
-`ProjectsFile`, `RAGEntry` / `RAGIndex` / `RAGSearchResult`, `UsageStats`, `APICallOptions`. Note the
+**`types.ts`** — `ChatMessage`, `ChatSession` / `SessionMeta`, `Project`,
+`RAGEntry` / `RAGIndex` / `RAGSearchResult`. Note the
 `_tf` / `_embNorm` fields on `RAGEntry`: underscore-prefixed cache fields deliberately stripped before
 serialization and rebuilt on load.
 
-**`models.ts`** — capability sets (`WEB_SEARCH_CAPABLE`, `GPT5_MODELS`), `isGPT5` / `isGPT5Search`,
+**`models.ts`** — `MODEL_CATALOG`, the single source of truth for the models offered (id, label,
+provider, reasoning effort per thinking mode, web search support, Claude thinking style),
+`RETIRED_MODELS` with the replacement for every model earlier versions offered,
+`resolveOpenAIProfile` / `resolveAnthropicProfile` (catalogue entry, or a conservative guess for a
+hand-typed id), `getFallbackModel`, `supportsWebSearch`,
 `detectProvider(model)` (prefix rules: `claude*` → anthropic, `gpt-`/`o1`/`o3`/`o4`/`chatgpt-`/
-`text-davinci` → openai, everything else → local), `mapEffortForGPT5`, the `THINKING_MODES` table
+`text-davinci` → openai, everything else → local), the `THINKING_MODES` table
 (lazy `label`/`desc` getters so switching language needs no rebuild), and the `ModelAccessError` class
 carrying `model` / `status` / `code`.
 
@@ -264,10 +287,11 @@ carrying `model` / `status` / `code`.
 - `buildTermFreq`, `bm25Score` (k1 = 1.5, b = 0.75), `dotProduct`, `vectorNorm`, `cosineSim` with
   optional precomputed norms.
 - `chunkText` — splits on H1/H2 boundaries first, then by paragraph with a character overlap tail.
-- `formatDate`, plus `escapeHtml` / `sanitizeUrl` / `utf8ToBase64` / `base64ToUtf8` (see
-  `CODE-ANALYSIS.md` — most of these are now unreachable).
+- `createKeyedDebounce` — one timer per key, so an update for one note never cancels another's.
+- `newId` — collision-free, file-name-safe ids for sessions and projects.
+- `formatDate`.
 
-**`i18n.ts`** — two flat dictionaries (`en`, `pl`) of 296 keys each. Values are either strings or
+**`i18n.ts`** — two flat dictionaries (`en`, `pl`) of 321 keys each. Values are either strings or
 arrow functions for parameterized messages. `t(key, ...args)` falls back `pl → en → key`, so a missing
 Polish key degrades to English rather than throwing. `setLanguage()` also swaps the default system
 prompt when the user has not customized it.
@@ -341,9 +365,13 @@ their persistable fields, dropping the underscore caches.
 
 *Building* (`buildIndex(onProgress?)`) is guarded by an `indexing` flag. It enumerates `.md`/`.canvas`
 files, drops index entries for files that disappeared, then per file: `cachedRead` → canvas parse if
-needed → `contentHash` → skip if unchanged → re-chunk → tokenize → push entries. Embedding requests
-are queued into batches of 20 and flushed through
-`text-embedding-3-small`; a failed batch is logged and the entries simply stay lexical-only.
+needed → `contentHash` → skip if unchanged → re-chunk → tokenize → push entries. Embeddings are
+created only when `canUseEmbeddings(settings)` (`src/rag/embeddings.ts`) is true — semantic search
+switched on by the user, RAG on, and an OpenAI key present. In that case requests are queued into
+batches of 20 and flushed through `text-embedding-3-small`, unchanged files get the vectors they are
+missing, and every response is validated by `parseEmbeddingsResponse`; a failed batch is logged and
+the entries simply stay lexical-only. Without consent no embedding request is made, stored vectors go
+unused, and `search` sends no query embedding.
 
 *Searching* (`search(query, topK = 5)`) is a hybrid ranker:
 
@@ -384,8 +412,13 @@ top-to-bottom, appends orphan nodes, then emits a `# Canvas: <name>` document wi
 
 ### 5.5 API layer
 
-**`streaming.ts` is the single network chokepoint.** `requestCompletion(url, headers, body,
-extractText, onChunk, signal)`:
+**`requests.ts` builds every cloud request body.** `buildOpenAIRequest` and `buildAnthropicRequest`
+are pure functions with no Obsidian imports and no credentials, so the exact payload that leaves the
+device is covered by `tests/api/requests.test.ts`. They read the model catalogue in `models.ts`.
+
+**`streaming.ts` is the single network chokepoint.** `requestJson(url, headers, body, signal)` sends
+one request and returns the validated JSON; `requestCompletion(url, headers, body, extractText,
+onChunk, signal)` wraps it and extracts the text:
 
 1. Fast-fails if the signal is already aborted.
 2. Forces `stream: false` into the body and strips `stream_options`.
@@ -393,6 +426,7 @@ extractText, onChunk, signal)`:
    abort listener in `finally`.
 4. Maps non-2xx responses through `throwHttpError`, which digs `error.message` / `message` out of the
    JSON body and raises `ModelAccessError` for 403 / 404 / `model_not_found`, plain `Error` otherwise.
+   Client errors other than 408 and 429 carry `noRetry`, so a rejected request is never re-sent.
 5. Catches provider-level errors that arrive with a 2xx status (`json.error`, `json.type === "error"`).
 6. Delegates text extraction to the caller-supplied `extractText` — the per-provider response shape is
    the *only* thing that differs between providers.
@@ -404,24 +438,29 @@ extractText, onChunk, signal)`:
 Every extractor validates the payload with local type guards rather than casting — there is no `any`
 in this layer.
 
-**`openai.ts`** picks one of four request shapes:
+**`openai.ts`** sends one of two request shapes, chosen by `buildOpenAIRequest`:
 
 | Condition | Endpoint | Distinguishing params |
 | --- | --- | --- |
-| GPT-5 family **and** web search | `/v1/responses` | `input[]`, `instructions`, `max_output_tokens`, `reasoning.effort`, `tools:[web_search]` |
-| `gpt-5-search-api` | `/v1/chat/completions` | `max_tokens`, `web_search_options: {}` |
-| GPT-5 family, no web search | `/v1/chat/completions` | `max_completion_tokens`, `reasoning_effort` |
-| everything else | `/v1/chat/completions` | `max_tokens`, optional `tools:[web_search]` |
+| reasoning model (GPT-6, GPT-5.x, o-series) | `/v1/responses` | `input[]`, `instructions`, `max_output_tokens`, `reasoning.effort`, `store: false`, optional `tools:[web_search]` |
+| classic model **and** web search | `/v1/responses` | as above, without `reasoning` |
+| classic model, no web search | `/v1/chat/completions` | `max_tokens` |
 
-Reasoning models get a padded token budget (`+12000` for high effort, `+4000` for medium) so the
-reasoning tokens do not eat the visible answer.
+Every Responses API request carries `store: false`. The thinking mode is translated to a reasoning
+effort per model (`effortByMode` in the catalogue); effort `none` is raised to `low` when web search
+is on. Reasoning models get a padded token budget (`+12000` for high effort, `+4000` for medium,
+`+2000` for low) so the reasoning tokens do not eat the visible answer. `url_citation` annotations
+are appended to the answer as a Markdown source list, restricted to `http(s)` links.
 
 **`anthropic.ts`** — `/v1/messages` with `anthropic-version: 2023-06-01`. The system message is lifted
-out of `messages` into the top-level `system` field. In `think` mode it sends
-`thinking: { type: "enabled", budget_tokens: tokens }` and raises `max_tokens` to `tokens + 8000`.
-Web search is the server-side tool `web_search_20260209`, so Anthropic performs the searches inside the
-same request. The extractor concatenates all `content[].type === "text"` blocks, which naturally skips
-thinking and tool-use blocks.
+out of `messages` into the top-level `system` field. Models from the 4.6 generation on get
+`thinking: { type: "adaptive" }` plus `output_config.effort`; older models (Claude Haiku 4.5) get
+`thinking: { type: "enabled", budget_tokens }` in `think` mode only. Web search is a server-side tool
+whose version comes from the catalogue, so Anthropic performs the searches inside the same request.
+Claude Sonnet 5.5 and Claude Opus 5.5 are sent with `fallbacks: "default"` and the
+`server-side-fallback-2026-07-01` beta header; `stop_reason: "refusal"` becomes a non-retryable error
+and `stop_reason: "pause_turn"` is resumed up to three times. The extractor concatenates all
+`content[].type === "text"` blocks, which naturally skips thinking, tool-use and fallback blocks.
 
 **`local.ts`** — self-contained, does not use `requestCompletion`:
 
@@ -435,17 +474,57 @@ thinking and tool-use blocks.
 
 ### 5.6 View layer
 
-**`ChatView` (`gpt-chat-view`, 1 524 lines)** owns the entire chat experience. Its UI is assembled in
-`buildUI()` from seven regions: header (provider picker, model picker, RAG badge, history/projects
-buttons, new chat), thinking-mode bar, project bar, RAG status line, manual-context bar, message list,
-input area with the tool row.
+**`ChatView` (`gpt-chat-view`)** owns the chat panel: layout, controls, the send flow and sessions.
+Everything that can be decided without the DOM lives in `src/chat/` and is unit tested; the popup,
+the quiz, Markdown rendering and the source buttons are separate modules in `src/views/`.
 
-State it holds: `messages`, `webSearchActive`, `learnMode`, `codeMode`, `manualNotes`, `currentMode`,
-`abortController`, `lastUsage`, `lastRagSources`, plus picker bookkeeping
-(`currentPicker`, `currentPickerKind`, `pickerCloseHandler`).
+| Concern | Module | Tested |
+| --- | --- | --- |
+| System prompt text and its limits | `chat/systemPrompt.ts` | yes |
+| Which note text goes into the prompt | `chat/contextCollector.ts` | by hand (uses the vault) |
+| Quiz parsing and normalization | `chat/quiz.ts` | yes |
+| Model list for the picker | `chat/modelOptions.ts` | yes |
+| Export to Markdown, file names | `chat/exportNote.ts` | yes |
+| Model popup | `views/ModelPicker.ts` | by hand |
+| Quiz drawing and grading | `views/QuizRenderer.ts` | by hand |
+| Markdown, copy buttons | `views/messageRenderer.ts` | by hand |
+| Source buttons | `views/sourceLinks.ts` | by hand (`rag/locate.ts` is tested) |
+
+Its UI is assembled in
+`buildUI()` from six regions: header (model picker covering every provider, history/projects buttons,
+a "more" menu with export and re-index, new chat), project bar, RAG status line, manual-context bar,
+message list, and the input area — tool row (RAG, notes, web search, conversation mode), the send
+summary, the textarea, and a row with the thinking-mode menu, token counter and Send.
+
+State it holds: `messages`, `webSearchActive`, `chatMode` (`chat` / `learn` / `code`, one at a time),
+`manualNotes`, `currentMode`, `abortController`, `lastUsage`, and a `ModelPicker`.
 
 Notable mechanics:
 
+- **Send summary** — `updateSendSummary()` renders `describeOutgoing()` (`src/views/sendSummary.ts`,
+  pure and unit tested) above the input: the destination and everything the next message will carry.
+  A loopback Local API is shown as "this device", a remote one by hostname, and plain HTTP to a
+  remote host is flagged. When semantic search is on and the chat provider is not OpenAI, it also
+  says that the question goes to OpenAI.
+- **Menus** — the thinking mode, the conversation mode and the header actions use Obsidian's `Menu`.
+  The note picker is `NotePickerModal`, a regular Obsidian `Modal`.
+- **Failed exchanges** — when a request fails, the question is removed from `messages` and both
+  bubbles are marked `gpt-msg-failed`. Regenerate retries the failed question from the screen, the
+  next message removes the marked bubbles, and marked bubbles are never counted when bubbles are
+  matched to messages. An aborted request with no answer returns the question to the input.
+- **Plain HTTP confirmation** — before the first message to a remote Local API over plain HTTP,
+  `confirmPlainHttpEndpoint()` asks for confirmation; the answer is remembered for that URL until
+  the view is closed. Loopback addresses and HTTPS never ask.
+- **Code blocks** — after `MarkdownRenderer.render` resolves, `addCodeCopyButtons` adds a copy button
+  to every `pre > code` that Obsidian has not already given one.
+- **Sources** — each chip under an answer is a button. `openSource()` opens the note and, for a
+  search result, uses `locateChunk()` (`src/rag/locate.ts`, pure and unit tested) to find the
+  fragment in the note's current text, then scrolls to it and selects it. If the note changed too
+  much to find the fragment, the note is opened and a notice says so. Sources are stored on the
+  assistant message (`ChatMessage.sources`) as a label, a path and a 200-character anchor
+  (`src/rag/sources.ts`), validated by `sanitizeSources()` when a session is loaded, and dropped by
+  the request builders, which copy `role` and `content` only.
+- **Regenerate** lives in the footer of the last message only (hidden elsewhere by CSS).
 - **Pickers** are appended to `doc.body` (not the panel) to escape Obsidian's CSS transforms, then
   positioned from `getBoundingClientRect()` via `setCssStyles`. A document-level `mousedown` handler
   closes them; it is registered on a `setTimeout(0)` so the opening click cannot immediately close it,
@@ -456,9 +535,9 @@ Notable mechanics:
 - **Markdown rendering** — `renderContent` uses `MarkdownRenderer.render` with a `renderMarkdown`
   fallback for older Obsidian versions, and degrades to `renderPlainTextContent` (text nodes + `<br>`)
   if rendering throws.
-- **Learn mode / quizzes** — `tryRenderQuiz` attempts three JSON extraction strategies (fenced
+- **Learn mode / quizzes** — `parseQuiz` attempts three JSON extraction strategies (fenced
   ```json block, a `{…"questions"…}` substring, whole-content parse). `normalizeQuestion` then
-  reconciles the many shapes models actually emit: type aliases (`multiple_choice`, `tf`,
+  returns a fixed, fully typed shape and reconciles the many shapes models actually emit: type aliases (`multiple_choice`, `tf`,
   `short_answer`, `fill_blank`, …), `answers`/`choices` as option arrays, and
   `correct_answer`/`correctAnswer` given as an index, a boolean, an exact string, a case-insensitive
   string or a letter `A`–`D`. Open answers are graded by a second model call with a strict JSON
@@ -475,9 +554,10 @@ custom-prompt tag, up to 5 recent chats with per-chat delete — plus an active-
 create/edit dialog. Project color is passed to CSS as the custom property `--gpt-project-color` via
 `setCssProps`, so theming stays in `styles.css`.
 
-**`FallbackModal`** appears when OpenAI returns 403/404: it explains the failure, adds a Tier-1 hint
-for GPT-5 models, shows the raw API message, and offers to retry on a fallback model
-(`gpt-4o` for GPT-5 failures, otherwise `gpt-4o-mini`) with an optional "save as default" checkbox.
+**`FallbackModal`** appears when OpenAI returns 403/404: it explains the failure, adds an account-tier
+hint for reasoning models, shows the sanitized API message, and offers to retry on the model returned
+by `getFallbackModel` (`gpt-6-luna`, or `gpt-4o-mini` when that is the one that failed) with an
+optional "save as default" checkbox.
 
 **`ConfirmModal`** is the mobile-safe replacement for `window.confirm()`; it disables the confirm
 button while the async handler runs and always closes in `finally`.
@@ -669,8 +749,8 @@ explicitly and the choice of location is the user's.
 
 | Goal | Touch points |
 | --- | --- |
-| Add an OpenAI/Anthropic model | `ALL_MODELS` in `ChatView.ts`, the dropdown in `SettingsTab.renderModelSelector`, `WEB_SEARCH_CAPABLE`/`GPT5_MODELS` in `models.ts` if it changes capabilities, `model_desc_*` i18n keys |
-| Add a provider | new `src/api/<provider>.ts` with an `extractText` for `requestCompletion`; extend `Provider` in `settings.ts`, `detectProvider`, `PROVIDER_OPTIONS`, the credential checks and dispatch in `ChatView.sendMessage`, and `SettingsTab` |
+| Add an OpenAI/Anthropic model | one entry in `MODEL_CATALOG` in `models.ts` and its `model_desc_*` i18n key in both languages; add the model it replaces to `RETIRED_MODELS` |
+| Add a provider | new `src/api/<provider>.ts` with an `extractText` for `requestCompletion`; extend `Provider` in `settings.ts`, `detectProvider`, the picker groups in `ChatView.getModelPickerGroups`, the credential checks and dispatch in `ChatView.sendMessage`, and `SettingsTab` |
 | Add a UI language | append a dictionary in `i18n.ts`, extend the `Language` union and `DEFAULT_SYSTEM_PROMPTS`, add the dropdown option |
 | Add a RAG search mode | extend `RAGSearchMode`, handle it in `RAGEngine.search`, expose a control in `SettingsTab` (none exists today) |
 | Change chunking or ranking | `chunkText` / `bm25Score` / `cosineSim` in `utils.ts`, `RAG_CHUNK_*` in `constants.ts`; bump `_version` in `RAGEngine` so old indexes are rebuilt |
@@ -695,13 +775,11 @@ explicitly and the choice of location is the user's.
 
 **Where the architecture is under strain**
 
-- `ChatView` is 1 524 lines and mixes six responsibilities (layout, pickers, request orchestration,
-  system-prompt assembly, markdown rendering, quiz engine). It is the natural first split: a
-  `ChatController`, a `SystemPromptBuilder` and a `QuizRenderer` would each be independently testable.
-- The `stream: false` reality has left dead scaffolding behind — the streaming render throttle, the
-  partial-abort branch and the code-block copy pipeline are all unreachable. See `CODE-ANALYSIS.md`.
-- Feature flags exist in the settings type without UI (`ragSearchMode`) or without effect
-  (`autoDetectProvider`), so the configuration surface promises more than the code delivers.
-- No test suite at all. The pure functions in `utils.ts`, `canvasParser`, `normalizeLocalBaseUrl`,
-  `parseLocalModelList` and `normalizeQuestion` are trivially unit-testable and are exactly the code
-  paths where silent regressions would hurt most.
+- `ChatView` is still the largest module. What remains in it is layout, controls and the send
+  flow; the send flow (`sendMessage`) is the next candidate for extraction.
+- Responses are not streamed: `requestUrl` returns one complete response, so the answer appears
+  at once and Stop abandons the wait rather than the generation.
+- A feature flag exists in the settings type without UI (`ragSearchMode`), so the configuration
+  surface promises more than the code delivers.
+- Tests cover the pure modules only. Anything that imports `obsidian` — the views, `RAGEngine`,
+  the storage classes' Obsidian side — is verified by hand in the app.

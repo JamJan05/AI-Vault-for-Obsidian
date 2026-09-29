@@ -1,5 +1,7 @@
 import { DIR_HISTORY, FILE_HISTORY_INDEX } from "../constants";
 import { t } from "../i18n";
+import { newId } from "../utils";
+import { MAX_SESSIONS, sortByRecency, splitForRetention } from "./retention";
 import type { ExternalStorage } from "../storage/ExternalStorage";
 import type { ChatMessage, ChatSession, SessionMeta } from "../types";
 
@@ -11,7 +13,7 @@ interface PluginWithStorage {
  * Manages chat history.
  * Architecture: a lightweight index (SessionMeta[]) kept in memory plus lazy
  * loading of messages from per-session files (session-{id}.json) — loaded
- * only on demand. Capped at 100 sessions — oldest are evicted.
+ * only on demand. Capped at MAX_SESSIONS — the ones used longest ago are evicted.
  */
 export class HistoryManager {
 	/** Lightweight index — metadata without message bodies */
@@ -30,7 +32,7 @@ export class HistoryManager {
 	get indexPath():  string { return this.storage.resolve(FILE_HISTORY_INDEX); }
 
 	private sessionPath(id: string): string {
-		// Validate id — only alphanumerics, underscores and dashes (id = Date.now() in practice)
+		// Validate id — only alphanumerics, underscores and dashes
 		const safe = String(id).replace(/[^a-zA-Z0-9_-]/g, "");
 		return `${this.historyDir}/session-${safe}.json`;
 	}
@@ -41,7 +43,7 @@ export class HistoryManager {
 		await this.storage.ensureDir(this.historyDir);
 		const index = await this.storage.readJson<SessionMeta[] | null>(this.indexPath, null);
 		if (Array.isArray(index) && index.length) {
-			this.sessions = index;
+			this.sessions = sortByRecency(index);
 		}
 	}
 
@@ -88,7 +90,7 @@ export class HistoryManager {
 	newSession(projectId: string | null = null): ChatSession {
 		const now = Date.now();
 		return {
-			id:        now.toString(),
+			id:        newId(),
 			title:     t("chat_default_title"),
 			createdAt: now,
 			updatedAt: now,
@@ -98,7 +100,9 @@ export class HistoryManager {
 	}
 
 	async saveSession(session: ChatSession): Promise<void> {
-		// Persist messages to their own file
+		// Persist messages to their own file. An empty list never deletes the file:
+		// "empty" can also mean the messages failed to load, and the file is the
+		// only copy of the conversation.
 		if (session.messages?.length) {
 			await this.storage.writeJson(this.sessionPath(session.id), session.messages);
 			this.messagesCache[session.id] = session.messages;
@@ -122,13 +126,12 @@ export class HistoryManager {
 			this.sessions.unshift(meta);
 		}
 
-		// Cap at 100 sessions — drop the oldest
-		if (this.sessions.length > 100) {
-			const removed = this.sessions.splice(100);
-			for (const old of removed) {
-				await this.storage.remove(this.sessionPath(old.id));
-				delete this.messagesCache[old.id];
-			}
+		// Keep the list most-recent-first, then drop what was used longest ago
+		const { kept, evicted } = splitForRetention(this.sessions, MAX_SESSIONS);
+		this.sessions = kept;
+		for (const old of evicted) {
+			await this.storage.remove(this.sessionPath(old.id));
+			delete this.messagesCache[old.id];
 		}
 
 		await this.saveIndex();

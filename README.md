@@ -38,19 +38,19 @@ AI-Vault turns your Obsidian workspace into an AI assistant that can use your no
 
 ### OpenAI
 
-- GPT-5
-- GPT-5 Mini
-- GPT-5 Nano
-- GPT-5 Search
-- GPT-4o
-- GPT-4o Mini
-- GPT-4 Turbo
+- GPT-6 Sol (default)
+- GPT-6 Astra
+- GPT-6 Luna
+- GPT-5.6 Terra
+- GPT-4o and GPT-4o Mini (older models)
 
 ### Anthropic
 
-- Claude Opus 4.5
-- Claude Sonnet 4.5
+- Claude Sonnet 5.5 (default)
+- Claude Opus 5.5
 - Claude Haiku 4.5
+
+Models offered by earlier versions (GPT-5, GPT-5 Mini, GPT-5 Nano, GPT-5 Search, GPT-4 Turbo, Claude Opus 4.5, Claude Sonnet 4.5) are replaced in your settings with their closest current equivalent the first time the plugin loads, and a notice tells you which model was chosen. Any other model id can still be typed in by hand.
 
 ### Local API
 
@@ -97,7 +97,7 @@ AI-Vault can add your notes to the model context in two ways:
 
 Canvas files are parsed into readable text using their nodes and edges, so the model can understand the flow of a canvas instead of receiving raw JSON.
 
-The RAG engine combines keyword search and embeddings when available. If no OpenAI key is configured for embeddings, lexical search can still provide useful matches.
+The RAG engine uses keyword search, which runs entirely on your machine. **Semantic search** (embeddings created by OpenAI) is optional and off by default — see [What RAG sends](#-what-rag-sends).
 
 Building the enabled vault-wide RAG index enumerates Markdown and Canvas files. File contents are read incrementally for indexing; ordinary wikilink resolution uses Obsidian's metadata cache and does not scan the vault.
 
@@ -143,17 +143,18 @@ This works well for long-running research, coding tasks, study topics, writing w
 
 Inside the AI-Vault chat view you can:
 
-- 🧠 switch reasoning mode,
+- 👀 see what the next message will send, and to whom, before you send it,
+- 🤖 pick a model from any provider in one list,
+- 🧠 switch the thinking mode (Fast, Normal, Thinking),
+- 💬 switch the conversation mode (Chat, Learn, Code),
+- 📚 toggle RAG,
+- 📎 attach notes manually,
+- 🌐 toggle web search,
 - 🔁 regenerate the last response,
 - ⏹️ stop generation,
 - 📋 copy messages and code blocks,
-- 📤 export a conversation to a note,
-- 📚 toggle RAG,
-- 🔄 re-index the vault,
-- 📎 attach notes manually,
-- 🌐 toggle web search,
-- 🎓 enable Learn mode,
-- 💻 enable Code mode.
+- 🔎 click a source under an answer to open the note at the fragment that was used,
+- 📤 export a conversation to a note and 🔄 re-index the vault from the "more" menu.
 
 ---
 
@@ -173,8 +174,8 @@ AI-Vault contacts three kinds of endpoint and nothing else:
 
 | Service | Host | Why |
 | --- | --- | --- |
-| OpenAI | `api.openai.com` | Chat completions, the Responses API (GPT-5 with web search), and text embeddings for the RAG index |
-| Anthropic | `api.anthropic.com` | Messages API, including Anthropic's server-side web search |
+| OpenAI | `api.openai.com` | The Responses API (sent with `store: false`, so OpenAI does not keep the response), chat completions for older models, and text embeddings for the RAG index |
+| Anthropic | `api.anthropic.com` | Messages API, including Anthropic's server-side web search and refusal fallback (a declined request may be answered by another Claude model) |
 | Local API | the Base URL **you** configure | Chat with a model server you run or choose |
 
 Every request is caused by something you did — sending a message, refreshing the model list, or indexing. The plugin has **no backend of its own**, sends **no telemetry, analytics or crash reports**, and has no install, device or vault identifier.
@@ -182,15 +183,17 @@ Every request is caused by something you did — sending a message, refreshing t
 ### 🔑 Accounts, API keys and costs
 
 - OpenAI and Anthropic each require **your own account and API key**.
-- Those providers **bill you for usage**, including the embedding requests the RAG index makes. AI-Vault itself is free and never charges anything.
+- Those providers **bill you for usage**, including the embedding requests semantic search makes if you turn it on. AI-Vault itself is free and never charges anything.
 - A local model server needs no account and costs nothing beyond your own hardware.
 - Web search is billed by the provider that performs it.
 
 ### 📚 What RAG sends
 
-With RAG enabled and an OpenAI key configured, the text of **every indexed note** is sent to OpenAI's embeddings endpoint — not only the notes you are asking about. Indexing is on by default and starts when the plugin loads.
+By default, **nothing**: the RAG index is a keyword index that is built and searched on your machine.
 
-To control this: turn off **Auto-index**, use **Ignored RAG paths**, or leave the OpenAI key empty (RAG then falls back to keyword-only search, which runs entirely on your machine).
+**Semantic search is opt-in** (**Settings → RAG → Semantic search**, off by default). If you turn it on and confirm the dialog, the text of **every indexed note** is sent to OpenAI's embeddings endpoint — not only the notes you are asking about — and so is every question you ask with RAG on, even when you chat with Claude or a local model. An OpenAI key alone never enables this.
+
+To control it: leave **Semantic search** off, use **Ignored RAG paths**, or turn off **Auto-index**. **Delete stored embeddings** removes the vectors from your machine.
 
 ### 💾 Storage
 

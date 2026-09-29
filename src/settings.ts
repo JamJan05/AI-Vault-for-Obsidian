@@ -1,3 +1,5 @@
+import { DEFAULT_CLAUDE_MODEL, DEFAULT_OPENAI_MODEL } from "./models";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ThinkingMode = "fast" | "normal" | "think";
@@ -17,6 +19,14 @@ export interface PluginSettings {
 	claudeApiKey:           string;
 	localApiKey:            string;
 	apiKeysInSync:          boolean;
+	/**
+	 * Names of the secrets in Obsidian's SecretStorage that hold the keys above.
+	 * When these are in use the key values themselves are never written to disk
+	 * by the plugin — see src/security/keyStore.ts.
+	 */
+	openaiSecretName:       string;
+	claudeSecretName:       string;
+	localSecretName:        string;
 
 	// Models
 	provider:               Provider;
@@ -26,7 +36,6 @@ export interface PluginSettings {
 	localBaseUrl:           string;
 	localModel:             string;
 	localModelsCache:       string[];
-	autoDetectProvider:     boolean;
 	thinkingMode:           ThinkingMode;
 
 	// Max tokens per thinking mode
@@ -40,6 +49,11 @@ export interface PluginSettings {
 	// RAG
 	ragEnabled:             boolean;
 	ragAutoIndex:           boolean;
+	/**
+	 * Semantic search. When on, note text and questions are sent to OpenAI to be
+	 * turned into embeddings. Off by default — see src/rag/embeddings.ts.
+	 */
+	ragEmbeddingsEnabled:   boolean;
 	ragSearchMode:          RAGSearchMode;
 	/** One ignore pattern per line — see src/rag/ignorePaths.ts for the semantics. */
 	ragExcludedPaths:       string;
@@ -56,6 +70,8 @@ export interface PluginSettings {
 
 	// Internal flags
 	_externalMigrationDone?: boolean;
+	/** Set once the upgrade notice about opt-in semantic search has been shown. */
+	_embeddingsNoticeShown?: boolean;
 }
 
 // ─── Default system prompts ───────────────────────────────────────────────────
@@ -72,13 +88,12 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	claudeApiKey:            "",
 	localApiKey:             "",
 	provider:                "openai",
-	model:                   "gpt-4o",
-	claudeModel:             "claude-sonnet-4-5",
+	model:                   DEFAULT_OPENAI_MODEL,
+	claudeModel:             DEFAULT_CLAUDE_MODEL,
 	localApiType:            "openai-compatible",
 	localBaseUrl:            DEFAULT_LOCAL_OPENAI_URL,
 	localModel:              "",
 	localModelsCache:        [],
-	autoDetectProvider:      true,
 	thinkingMode:            "normal",
 	maxTokensFast:           4096,
 	maxTokensNormal:         8192,
@@ -86,11 +101,15 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	systemPrompt:            DEFAULT_SYSTEM_PROMPTS.en,
 	ragEnabled:              true,
 	ragAutoIndex:            true,
+	ragEmbeddingsEnabled:    false,
 	ragSearchMode:           "hybrid",
 	ragExcludedPaths:        "",
 	externalStorageEnabled:  true,
 	externalStoragePath:     "",
 	apiKeysInSync:           false,
+	openaiSecretName:        "",
+	claudeSecretName:        "",
+	localSecretName:         "",
 	maxContextMessages:      0,
 	language:                "en",
 };

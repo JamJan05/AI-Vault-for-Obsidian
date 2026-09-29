@@ -7,7 +7,7 @@
       {
         "host": "api.openai.com",
         "purpose": "OpenAI chat completions, the Responses API and text embeddings for the RAG index.",
-        "triggeredBy": "A chat message sent with the OpenAI provider selected, or RAG indexing while an OpenAI key is configured.",
+        "triggeredBy": "A chat message sent with the OpenAI provider selected. Embeddings only when the user has turned on semantic search (ragEmbeddingsEnabled, off by default): RAG indexing, and each question asked with RAG on.",
         "dataSent": [
           "chat message",
           "system prompt",

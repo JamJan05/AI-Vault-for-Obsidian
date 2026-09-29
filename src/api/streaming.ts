@@ -13,6 +13,8 @@ export interface StreamUsage {
 export interface StreamResult {
 	text:  string;
 	usage: StreamUsage | null;
+	/** Set when the provider answered with a different model than the one requested. */
+	servedBy?: string;
 }
 
 interface HttpResponse {
@@ -37,7 +39,20 @@ function abortError(): Error {
 	return error;
 }
 
-function parseUsage(response: Record<string, unknown>): StreamUsage | null {
+/** An error that withRetry must not repeat: sending the request again cannot help. */
+export function nonRetryableError(message: string): Error {
+	return Object.assign(new Error(message), { noRetry: true });
+}
+
+/**
+ * A client error means the request itself was rejected. Repeating it would only
+ * send the same conversation again, so only timeouts and rate limits are retried.
+ */
+function isRetryableStatus(status: number): boolean {
+	return status === 408 || status === 429 || status >= 500;
+}
+
+export function parseUsage(response: Record<string, unknown>): StreamUsage | null {
 	if (!isRecord(response.usage)) return null;
 
 	const usage = response.usage;
@@ -83,21 +98,20 @@ export function throwHttpError(response: HttpResponse, modelHint?: string | null
 		});
 	}
 
-	throw new Error(errMsg);
+	throw isRetryableStatus(response.status) ? new Error(errMsg) : nonRetryableError(errMsg);
 }
 
 /**
- * Sends a provider request through Obsidian's requestUrl API.
- * requestUrl does not expose SSE streams, so providers return one JSON response.
+ * Sends one provider request through Obsidian's requestUrl API and returns the
+ * validated JSON object. requestUrl does not expose SSE streams, so every
+ * provider is asked for a single, complete JSON response.
  */
-export async function requestCompletion(
-	url:          string,
-	headers:      Record<string, string>,
-	body:         Record<string, unknown>,
-	extractText: TextExtractor,
-	onChunk:      ((fullText: string) => void) | null,
-	signal?:      AbortSignal | null,
-): Promise<StreamResult> {
+export async function requestJson(
+	url:     string,
+	headers: Record<string, string>,
+	body:    Record<string, unknown>,
+	signal?: AbortSignal | null,
+): Promise<Record<string, unknown>> {
 	if (signal?.aborted) throw abortError();
 
 	const requestBody: Record<string, unknown> = { ...body, stream: false };
@@ -137,9 +151,26 @@ export async function requestCompletion(
 		throw new Error(sanitizeErrorDetail(raw) || t("err_stream"));
 	}
 
-	const text = extractText(response.json)?.trim() ?? "";
+	return response.json;
+}
+
+/**
+ * Sends a provider request and extracts the answer text.
+ * `onChunk` is called once, with the complete answer.
+ */
+export async function requestCompletion(
+	url:          string,
+	headers:      Record<string, string>,
+	body:         Record<string, unknown>,
+	extractText: TextExtractor,
+	onChunk:      ((fullText: string) => void) | null,
+	signal?:      AbortSignal | null,
+): Promise<StreamResult> {
+	const json = await requestJson(url, headers, body, signal);
+
+	const text = extractText(json)?.trim() ?? "";
 	if (!text) throw new Error(t("err_empty_response"));
 
 	onChunk?.(text);
-	return { text, usage: parseUsage(response.json) };
+	return { text, usage: parseUsage(json) };
 }

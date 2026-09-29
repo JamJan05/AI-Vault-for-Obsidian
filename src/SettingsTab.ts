@@ -1,12 +1,14 @@
-import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, PluginSettingTab, SecretComponent, Setting, requireApiVersion } from "obsidian";
 import { t, setLanguage } from "./i18n";
 import { DEFAULT_SYSTEM_PROMPTS, DEFAULT_LOCAL_OPENAI_URL, DEFAULT_LOCAL_OLLAMA_URL } from "./settings";
-import { detectProvider } from "./models";
+import { DEFAULT_CLAUDE_MODEL, DEFAULT_OPENAI_MODEL, detectProvider, getCatalogModels } from "./models";
 import { fetchLocalModels, normalizeLocalBaseUrl } from "./api/local";
 import { FILE_API_KEYS } from "./constants";
 import { debounce } from "./utils";
 import { assessLocalBaseUrl } from "./security/urlPolicy";
 import { sanitizeErrorDetail } from "./security/redact";
+import { ConfirmModal } from "./views/ConfirmModal";
+import { EmbeddingsConsentModal } from "./views/EmbeddingsConsentModal";
 import type { BaseUrlAssessment } from "./security/urlPolicy";
 import type { SettingDefinitionGroup, SettingDefinitionItem, SettingDefinitionRender } from "obsidian";
 import type { ExternalStorage } from "./storage/ExternalStorage";
@@ -15,6 +17,8 @@ import type { ProjectManager }  from "./history/ProjectManager";
 import type { RAGEngine }       from "./rag/RAGEngine";
 import type { GPTHistoryView }  from "./views/HistoryView";
 import type { GPTProjectsView } from "./views/ProjectsView";
+import { SECRET_NAME_FIELD } from "./security/keyStore";
+import type { KeyField, SecretBackend } from "./security/keyStore";
 import type { LocalApiType, PluginSettings, Provider } from "./settings";
 
 // ─── Plugin interface ──────────────────────────────────────────────────────────
@@ -26,6 +30,10 @@ interface PluginWithDeps {
 	history:         HistoryManager;
 	projects:        ProjectManager;
 	rag:             RAGEngine;
+	keysInSecretStorage: boolean;
+	readonly secretBackend: SecretBackend | null;
+	readSecret(name: string): string;
+	useSecretStorage(): Promise<boolean>;
 	saveSettings():  Promise<void>;
 	loadData():      Promise<Record<string, unknown>>;
 	saveData(data: Record<string, unknown>): Promise<void>;
@@ -61,6 +69,9 @@ export class GPTSettingsTab extends PluginSettingTab {
 	 */
 	private readonly purgeIgnoredRagPaths = debounce(() => this.plugin.rag.applyIgnorePatterns(), 800);
 
+	/** Pending write for free-text fields, which fire onChange on every keystroke. */
+	private saveTimer: number | null = null;
+
 	/** Live banner under the Base URL field; recreated on every render. */
 	private baseUrlWarningEl: HTMLElement | null = null;
 	/** Last verdict a Notice was shown for, so typing does not spam the user. */
@@ -84,11 +95,10 @@ export class GPTSettingsTab extends PluginSettingTab {
 			...this.apiKeySyncRows(),
 			this.modelGroup(),
 			this.localApiGroup(),
-			this.thinkingGroup(),
-			this.maxTokensGroup(),
-			this.contextGroup(),
+			this.chatGroup(),
 			this.ragGroup(),
 			this.storageGroup(),
+			this.advancedGroup(),
 		];
 	}
 
@@ -132,6 +142,36 @@ export class GPTSettingsTab extends PluginSettingTab {
 		const update = (this as { update?: () => void }).update;
 		if (typeof update === "function") update.call(this);
 		else this.renderLegacy();
+	}
+
+	/**
+	 * Saves shortly after the user stops typing. The setting itself is already
+	 * updated in memory; only the write to disk waits.
+	 */
+	private saveSoon(): void {
+		if (this.saveTimer !== null) window.clearTimeout(this.saveTimer);
+		this.saveTimer = window.setTimeout(() => {
+			this.saveTimer = null;
+			void this.saveNow();
+		}, 400);
+	}
+
+	private async saveNow(): Promise<void> {
+		if (this.saveTimer !== null) {
+			window.clearTimeout(this.saveTimer);
+			this.saveTimer = null;
+		}
+		try {
+			await this.plugin.saveSettings();
+		} catch (e) {
+			console.error("[AI-Vault] Failed to save settings:", (e as Error)?.message);
+		}
+	}
+
+	/** Closing the tab must not lose what was typed in the last 400 ms. */
+	hide(): void {
+		if (this.saveTimer !== null) void this.saveNow();
+		super.hide();
 	}
 
 	// ── Row helpers ────────────────────────────────────────────────────────────
@@ -223,10 +263,45 @@ export class GPTSettingsTab extends PluginSettingTab {
 		};
 	}
 
+	/** Says where the keys are right now — the answer depends on the storage in use. */
 	private keyWarningRow(): SettingDefinitionRender {
-		return this.bannerRow("gpt-settings-warning", el => {
-			this.renderSafeInlineMarkup(el, t("settings_keys_local_warning_html"));
+		const { settings, keysInSecretStorage, externalStorage } = this.plugin;
+		const inSecretStorage = keysInSecretStorage && !settings.apiKeysInSync;
+		const key =
+			inSecretStorage            ? "settings_keys_where_secret_html" :
+			settings.apiKeysInSync     ? "settings_keys_where_sync_html" :
+			externalStorage.isEnabled  ? "settings_keys_where_file_html" :
+			"settings_keys_local_warning_html";
+
+		return this.bannerRow(inSecretStorage ? "gpt-settings-note" : "gpt-settings-warning", el => {
+			this.renderSafeInlineMarkup(el, t(key));
 		});
+	}
+
+	/**
+	 * Key field backed by SecretStorage. The setting stores the name of the
+	 * secret; Obsidian's own component handles entering and picking the value.
+	 */
+	private secretKeyRow(name: string, desc: string, field: KeyField): SettingDefinitionRender {
+		const nameField = SECRET_NAME_FIELD[field];
+		return {
+			name,
+			desc,
+			render: (setting: Setting) => {
+				// Only reached when SecretStorage is in use; the check also tells the
+				// linter that these newer APIs are never called on an older Obsidian.
+				if (requireApiVersion("1.11.4")) {
+					setting.addComponent(el => new SecretComponent(this.app, el)
+						.setValue(this.plugin.settings[nameField] ?? "")
+						.onChange((secretName: string) => {
+							this.plugin.settings[nameField] = secretName;
+							this.plugin.settings[field] = this.plugin.readSecret(secretName);
+							this.saveSoon();
+						}),
+					);
+				}
+			},
+		};
 	}
 
 	private apiKeySyncRows(): SettingDefinitionItem[] {
@@ -243,46 +318,9 @@ export class GPTSettingsTab extends PluginSettingTab {
 					.onChange(async (v: boolean) => {
 						tog.setDisabled(true);
 						try {
-							// Local-only keys require a working folder outside the vault. Try
-							// to initialize it here instead of permanently disabling the toggle.
-							if (!v && !this.plugin.externalStorage.isEnabled) {
-								if (!this.plugin.settings.externalStorageEnabled) {
-									new Notice(t("notice_keys_need_external"), 6000);
-									return;
-								}
-								if (!(await this.plugin.externalStorage.init())) {
-									new Notice(t("notice_storage_init_failed", this.plugin.externalStorage.lastError ?? "unknown error"), 7000);
-									return;
-								}
-							}
-
-							const oldApiKey       = this.plugin.settings.apiKey;
-							const oldClaudeApiKey = this.plugin.settings.claudeApiKey;
-							const oldLocalApiKey  = this.plugin.settings.localApiKey;
-							this.plugin.settings.apiKeysInSync = v;
-							this.plugin.settings.apiKey        = oldApiKey;
-							this.plugin.settings.claudeApiKey  = oldClaudeApiKey;
-							this.plugin.settings.localApiKey   = oldLocalApiKey;
-							await this.plugin.saveSettings();
-
-							if (v) {
-								// Switched to Sync → remove keys.json
-								const keysPath = this.plugin.externalStorage.resolve(FILE_API_KEYS);
-								await this.plugin.externalStorage.remove(keysPath);
-								new Notice(t("notice_keys_moved_sync"), 5000);
-							} else {
-								// Switched to local → keys saved via saveSettings, remove from data.json
-								const d = await this.plugin.loadData();
-								if (d) {
-									delete d.apiKey;
-									delete d.claudeApiKey;
-									delete d.localApiKey;
-									await this.plugin.saveData(d);
-								}
-								new Notice(t("notice_keys_moved_local"), 5000);
-							}
+							await this.setKeySync(v);
 						} catch (e) {
-							console.error("[AI-Vault] Failed to change API key sync setting:", e);
+							console.error("[AI-Vault] Failed to change API key sync setting:", (e as Error)?.message);
 							new Notice(t("notice_setting_change_failed", (e as Error)?.message ?? String(e)), 7000);
 						} finally {
 							this.rerender();
@@ -300,6 +338,66 @@ export class GPTSettingsTab extends PluginSettingTab {
 				el.setText(t("settings_keys_mobile_note"));
 			}),
 		];
+	}
+
+	/** Moves the keys between data.json (synced) and local storage (not synced). */
+	private async setKeySync(sync: boolean): Promise<void> {
+		const { plugin } = this;
+		const canUseSecrets = plugin.secretBackend !== null;
+
+		// Without SecretStorage, local-only keys need a working folder outside the
+		// vault. Try to initialize it here instead of permanently disabling the toggle.
+		if (!sync && !canUseSecrets && !plugin.externalStorage.isEnabled) {
+			if (!plugin.settings.externalStorageEnabled) {
+				new Notice(t("notice_keys_need_external"), 6000);
+				return;
+			}
+			if (!(await plugin.externalStorage.init())) {
+				new Notice(t("notice_storage_init_failed", plugin.externalStorage.lastError ?? "unknown error"), 7000);
+				return;
+			}
+		}
+
+		plugin.settings.apiKeysInSync = sync;
+
+		if (sync) {
+			// The keys in memory are written into data.json by saveSettings().
+			plugin.keysInSecretStorage = false;
+			await plugin.saveSettings();
+			if (plugin.externalStorage.isEnabled) {
+				await plugin.externalStorage.remove(plugin.externalStorage.resolve(FILE_API_KEYS));
+			}
+			new Notice(t("notice_keys_moved_sync"), 5000);
+			return;
+		}
+
+		if (await plugin.useSecretStorage() || plugin.keysInSecretStorage) {
+			await plugin.saveSettings();
+			new Notice(t("notice_keys_moved_secret"), 5000);
+			return;
+		}
+
+		// SecretStorage is missing or refused the keys, so they need the key file
+		// outside the vault. Without it the keys must stay in data.json: removing
+		// them from there would leave no copy at all.
+		if (!plugin.externalStorage.isEnabled
+			&& !(plugin.settings.externalStorageEnabled && await plugin.externalStorage.init())) {
+			plugin.settings.apiKeysInSync = true;
+			await plugin.saveSettings();
+			new Notice(t("notice_keys_need_external"), 6000);
+			return;
+		}
+
+		// Keys go to keys.json, then leave data.json.
+		await plugin.saveSettings();
+		const d = await plugin.loadData();
+		if (d) {
+			delete d.apiKey;
+			delete d.claudeApiKey;
+			delete d.localApiKey;
+			await plugin.saveData(d);
+		}
+		new Notice(t("notice_keys_moved_local"), 5000);
 	}
 
 	// ── Model ──────────────────────────────────────────────────────────────────
@@ -339,18 +437,14 @@ export class GPTSettingsTab extends PluginSettingTab {
 					};
 
 					d.addOption("__openai_header__", "--- OpenAI ---");
-					addModel("gpt-5",            "GPT-5 (reasoning, best)");
-					addModel("gpt-5-mini",       "GPT-5 Mini (reasoning, faster)");
-					addModel("gpt-5-nano",       "GPT-5 Nano (fast / affordable)");
-					addModel("gpt-5-search-api", "GPT-5 Search (web search)");
-					addModel("gpt-4o",           "GPT-4o (web search)");
-					addModel("gpt-4o-mini",      "GPT-4o Mini (web search)");
-					addModel("gpt-4-turbo",      "GPT-4 Turbo");
+					for (const entry of getCatalogModels("openai")) {
+						addModel(entry.id, `${entry.label} (${t(entry.descKey)})`);
+					}
 
 					d.addOption("__claude_header__", "--- Anthropic ---");
-					addModel("claude-opus-4-5",   "Claude Opus 4.5 (best)");
-					addModel("claude-sonnet-4-5", "Claude Sonnet 4.5 (recommended)");
-					addModel("claude-haiku-4-5",  "Claude Haiku 4.5 (fast / affordable)");
+					for (const entry of getCatalogModels("anthropic")) {
+						addModel(entry.id, `${entry.label} (${t(entry.descKey)})`);
+					}
 
 					d.addOption("__local_header__", "--- Local API ---");
 					for (const model of localModels) addModel(model, model);
@@ -386,25 +480,10 @@ export class GPTSettingsTab extends PluginSettingTab {
 			},
 		};
 
-		const autoDetectRow: SettingDefinitionRender = {
-			name: t("settings_autodetect_name"),
-			desc: t("settings_autodetect_desc"),
-			render: (setting: Setting) => {
-				setting.addToggle(toggle => toggle
-					.setValue(this.plugin.settings.autoDetectProvider)
-					.onChange(async (value: boolean) => {
-						this.plugin.settings.autoDetectProvider = value;
-						await this.plugin.saveSettings();
-						this.rerender();
-					}),
-				);
-			},
-		};
-
 		return {
 			type: "group",
 			heading: t("settings_model_heading"),
-			items: [providerRow, activeModelRow, autoDetectRow, ...this.activeApiKeyRows()],
+			items: [providerRow, activeModelRow, ...this.activeApiKeyRows()],
 		};
 	}
 
@@ -417,9 +496,9 @@ export class GPTSettingsTab extends PluginSettingTab {
 
 	private getCurrentActiveModel(): string {
 		const provider = this.plugin.settings.provider;
-		if (provider === "anthropic") return this.plugin.settings.claudeModel ?? "claude-sonnet-4-5";
+		if (provider === "anthropic") return this.plugin.settings.claudeModel ?? DEFAULT_CLAUDE_MODEL;
 		if (provider === "local") return this.plugin.settings.localModel?.trim() ?? "";
-		return this.plugin.settings.model ?? "gpt-4o";
+		return this.plugin.settings.model ?? DEFAULT_OPENAI_MODEL;
 	}
 
 	private activeApiKeyRows(): SettingDefinitionRender[] {
@@ -428,6 +507,16 @@ export class GPTSettingsTab extends PluginSettingTab {
 		const extEnabled      = this.plugin.externalStorage.isEnabled;
 		const keysStoredLocal = !keysInSync && extEnabled;
 		const keysLocation    = keysStoredLocal ? t("settings_key_local") : t("settings_key_sync");
+
+		if (this.plugin.keysInSecretStorage && !keysInSync) {
+			if (provider === "openai") {
+				return [this.secretKeyRow(t("settings_openai_key_name"), t("settings_key_secret"), "apiKey")];
+			}
+			if (provider === "anthropic") {
+				return [this.secretKeyRow(t("settings_claude_key_name"), t("settings_key_secret"), "claudeApiKey")];
+			}
+			return [];
+		}
 
 		if (provider === "openai") {
 			return [{
@@ -440,7 +529,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 							.setValue(this.plugin.settings.apiKey ?? "")
 							.onChange(async (value: string) => {
 								this.plugin.settings.apiKey = value.trim();
-								await this.plugin.saveSettings();
+								this.saveSoon();
 							});
 					});
 				},
@@ -458,7 +547,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 							.setValue(this.plugin.settings.claudeApiKey ?? "")
 							.onChange(async (value: string) => {
 								this.plugin.settings.claudeApiKey = value.trim();
-								await this.plugin.saveSettings();
+								this.saveSoon();
 							});
 					});
 				},
@@ -513,7 +602,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 						.setValue(this.plugin.settings.localBaseUrl ?? "")
 						.onChange(async (value: string) => {
 							this.plugin.settings.localBaseUrl = value.trim();
-							await this.plugin.saveSettings();
+							this.saveSoon();
 							// The Base URL decides where messages, note excerpts and RAG
 							// chunks are sent, so the verdict is recomputed on every edit.
 							this.refreshBaseUrlWarning(true);
@@ -530,7 +619,12 @@ export class GPTSettingsTab extends PluginSettingTab {
 			this.refreshBaseUrlWarning(false);
 		});
 
-		const apiKeyRow: SettingDefinitionRender = {
+		const useSecrets = this.plugin.keysInSecretStorage && !this.plugin.settings.apiKeysInSync;
+		const apiKeyRow: SettingDefinitionRender = useSecrets ? this.secretKeyRow(
+			t("settings_local_api_key_name"),
+			t("settings_local_api_key_desc") + " " + t("settings_key_secret"),
+			"localApiKey",
+		) : {
 			name: t("settings_local_api_key_name"),
 			desc: t("settings_local_api_key_desc"),
 			render: (setting: Setting) => {
@@ -539,7 +633,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 					txt.setValue(this.plugin.settings.localApiKey ?? "")
 						.onChange(async (value: string) => {
 							this.plugin.settings.localApiKey = value.trim();
-							await this.plugin.saveSettings();
+							this.saveSoon();
 						});
 					txt.inputEl.addClass("gpt-settings-input-full");
 				});
@@ -687,28 +781,6 @@ export class GPTSettingsTab extends PluginSettingTab {
 
 	// ── Thinking mode and token limits ─────────────────────────────────────────
 
-	private thinkingGroup(): SettingDefinitionGroup {
-		return {
-			type: "group",
-			heading: "⚙️ " + t("settings_openai_title") + " — " + t("settings_thinking_name"),
-			items: [{
-				name: t("settings_thinking_name"),
-				render: (setting: Setting) => {
-					setting.addDropdown(d => d
-						.addOption("fast",   t("chat_mode_fast"))
-						.addOption("normal", t("chat_mode_normal"))
-						.addOption("think",  t("chat_mode_think"))
-						.setValue(this.plugin.settings.thinkingMode)
-						.onChange(async (v: string) => {
-							this.plugin.settings.thinkingMode = v as "fast" | "normal" | "think";
-							await this.plugin.saveSettings();
-						}),
-					);
-				},
-			}],
-		};
-	}
-
 	/** Numeric input shared by the three token limits. */
 	private tokenLimitRow(
 		name: string,
@@ -729,7 +801,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 							const n = parseInt(v, 10);
 							if (!isNaN(n) && n >= 256) {
 								write(n);
-								await this.plugin.saveSettings();
+								this.saveSoon();
 							}
 						});
 				});
@@ -737,7 +809,24 @@ export class GPTSettingsTab extends PluginSettingTab {
 		};
 	}
 
-	private maxTokensGroup(): SettingDefinitionGroup {
+	private chatGroup(): SettingDefinitionGroup {
+		const thinkingRow: SettingDefinitionRender = {
+			name: t("settings_thinking_name"),
+			desc: t("settings_thinking_desc"),
+			render: (setting: Setting) => {
+				setting.addDropdown(d => d
+					.addOption("fast",   t("chat_mode_fast"))
+					.addOption("normal", t("chat_mode_normal"))
+					.addOption("think",  t("chat_mode_think"))
+					.setValue(this.plugin.settings.thinkingMode)
+					.onChange(async (v: string) => {
+						this.plugin.settings.thinkingMode = v as "fast" | "normal" | "think";
+						await this.plugin.saveSettings();
+					}),
+				);
+			},
+		};
+
 		const systemPromptRow: SettingDefinitionRender = {
 			name: t("settings_system_prompt_name"),
 			desc: t("settings_system_prompt_desc"),
@@ -748,7 +837,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 						ta.setValue(this.plugin.settings.systemPrompt)
 							.onChange(async (v: string) => {
 								this.plugin.settings.systemPrompt = v;
-								await this.plugin.saveSettings();
+								this.saveSoon();
 							});
 					})
 					.addButton(b => b
@@ -766,7 +855,18 @@ export class GPTSettingsTab extends PluginSettingTab {
 
 		return {
 			type: "group",
-			heading: t("settings_max_tokens_title"),
+			heading: t("settings_chat_title"),
+			items: [thinkingRow, systemPromptRow],
+		};
+	}
+
+	// ── Advanced ───────────────────────────────────────────────────────────────
+
+	/** Limits most people never change, kept out of the way at the bottom. */
+	private advancedGroup(): SettingDefinitionGroup {
+		return {
+			type: "group",
+			heading: t("settings_advanced_title"),
 			items: [
 				this.tokenLimitRow(
 					t("settings_max_tokens_fast_name"),
@@ -786,36 +886,30 @@ export class GPTSettingsTab extends PluginSettingTab {
 					() => this.plugin.settings.maxTokensThink ?? 16000,
 					n => { this.plugin.settings.maxTokensThink = n; },
 				),
-				systemPromptRow,
+				this.contextLimitRow(),
 			],
 		};
 	}
 
-	// ── Conversation context ───────────────────────────────────────────────────
-
-	private contextGroup(): SettingDefinitionGroup {
+	private contextLimitRow(): SettingDefinitionRender {
 		return {
-			type: "group",
-			heading: "💬 " + t("settings_context_title"),
-			items: [{
-				name: t("settings_context_name"),
-				desc: t("settings_context_desc"),
-				render: (setting: Setting) => {
-					setting.addText(txt => {
-						txt.inputEl.type = "number";
-						txt.inputEl.min  = "0";
-						txt.inputEl.addClass("gpt-settings-input-compact");
-						txt.setValue(String(this.plugin.settings.maxContextMessages ?? 0))
-							.onChange(async (v: string) => {
-								const n = parseInt(v, 10);
-								if (!isNaN(n) && n >= 0) {
-									this.plugin.settings.maxContextMessages = n;
-									await this.plugin.saveSettings();
-								}
-							});
-					});
-				},
-			}],
+			name: t("settings_context_name"),
+			desc: t("settings_context_desc"),
+			render: (setting: Setting) => {
+				setting.addText(txt => {
+					txt.inputEl.type = "number";
+					txt.inputEl.min  = "0";
+					txt.inputEl.addClass("gpt-settings-input-compact");
+					txt.setValue(String(this.plugin.settings.maxContextMessages ?? 0))
+						.onChange(async (v: string) => {
+							const n = parseInt(v, 10);
+							if (!isNaN(n) && n >= 0) {
+								this.plugin.settings.maxContextMessages = n;
+								this.saveSoon();
+							}
+						});
+				});
+			},
 		};
 	}
 
@@ -850,6 +944,49 @@ export class GPTSettingsTab extends PluginSettingTab {
 			},
 		};
 
+		const hasOpenAIKey = Boolean(this.plugin.settings.apiKey?.trim());
+		const semanticRow: SettingDefinitionRender = {
+			name: t("settings_rag_semantic_name"),
+			desc: t("settings_rag_semantic_desc")
+				+ (hasOpenAIKey ? "" : " " + t("settings_rag_semantic_nokey")),
+			render: (setting: Setting) => {
+				setting.addToggle(tog => tog
+					.setValue(this.plugin.settings.ragEmbeddingsEnabled === true)
+					.onChange((v: boolean) => {
+						if (v === (this.plugin.settings.ragEmbeddingsEnabled === true)) return;
+						if (v) this.requestEmbeddingsConsent();
+						else void this.setEmbeddingsEnabled(false);
+					}),
+				);
+			},
+		};
+
+		const storedEmbeddings = this.plugin.rag.stats.embeddings;
+		const clearEmbeddingsRow: SettingDefinitionRender = {
+			name: t("settings_rag_clear_name"),
+			desc: t("settings_rag_clear_desc", storedEmbeddings),
+			visible: () => this.plugin.rag.stats.embeddings > 0,
+			render: (setting: Setting) => {
+				setting.addButton(b => b
+					.setButtonText(t("settings_rag_clear_btn"))
+					.setClass("mod-warning")
+					.onClick(() => {
+						new ConfirmModal(
+							this.app,
+							t("settings_rag_clear_confirm"),
+							async () => {
+								const removed = await this.plugin.rag.clearEmbeddings();
+								new Notice(t("notice_embeddings_cleared", removed));
+								this.rerender();
+							},
+							t("settings_rag_clear_btn"),
+							t("chat_notes_cancel"),
+						).open();
+					}),
+				);
+			},
+		};
+
 		const ignoredPathsRow: SettingDefinitionRender = {
 			name: t("settings_rag_ignored_name"),
 			desc: t("settings_rag_ignored_desc"),
@@ -861,7 +998,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 						.setValue(this.plugin.settings.ragExcludedPaths ?? "")
 						.onChange(async (v: string) => {
 							this.plugin.settings.ragExcludedPaths = v;
-							await this.plugin.saveSettings();
+							this.saveSoon();
 							this.purgeIgnoredRagPaths();
 						});
 				});
@@ -897,8 +1034,28 @@ export class GPTSettingsTab extends PluginSettingTab {
 		return {
 			type: "group",
 			heading: t("settings_rag_title"),
-			items: [enableRow, autoIndexRow, ignoredPathsRow, statusRow, reindexRow],
+			items: [
+				enableRow, autoIndexRow, semanticRow, ignoredPathsRow,
+				statusRow, reindexRow, clearEmbeddingsRow,
+			],
 		};
+	}
+
+	/** Semantic search is only ever switched on from the consent dialog. */
+	private requestEmbeddingsConsent(): void {
+		new EmbeddingsConsentModal(
+			this.app,
+			() => this.setEmbeddingsEnabled(true),
+			// Declined — redraw so the toggle goes back to off.
+			() => this.rerender(),
+		).open();
+	}
+
+	private async setEmbeddingsEnabled(enabled: boolean): Promise<void> {
+		this.plugin.settings.ragEmbeddingsEnabled = enabled;
+		await this.plugin.saveSettings();
+		new Notice(t(enabled ? "notice_embeddings_enabled" : "notice_embeddings_disabled"), 6000);
+		this.rerender();
 	}
 
 	// ── Storage ────────────────────────────────────────────────────────────────
@@ -975,7 +1132,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 					txt.inputEl.addClass("gpt-settings-input-full");
 					txt.onChange(async (v: string) => {
 						this.plugin.settings.externalStoragePath = v.trim();
-						await this.plugin.saveSettings();
+						this.saveSoon();
 					});
 				});
 			},

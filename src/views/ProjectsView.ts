@@ -52,7 +52,7 @@ export class GPTProjectsView extends ItemView {
 	}
 
 	private addIcon(el: HTMLElement, icon: string, cls?: string): HTMLElement {
-		const iconEl = el.createEl("span");
+		const iconEl = el.createSpan();
 		if (cls) iconEl.addClass(cls);
 		setIcon(iconEl, icon);
 		return iconEl;
@@ -66,25 +66,25 @@ export class GPTProjectsView extends ItemView {
 	private setIconText(el: HTMLElement, icon: string, text: string): void {
 		el.empty();
 		this.addIcon(el, icon);
-		el.createEl("span", { text });
+		el.createSpan({ text });
 	}
 
 	// ── Sekcje ─────────────────────────────────────────────────────────────────
 
 	private buildHeader(root: HTMLElement): void {
-		const header = root.createEl("div", { cls: "gpt-projects-header" });
+		const header = root.createDiv({ cls: "gpt-projects-header" });
 
 		const backBtn = header.createEl("button", { cls: "gpt-pill-btn", text: t("projects_btn_back") });
 		backBtn.onclick = () => void this.plugin.activateHistoryView();
 
-		header.createEl("span", { cls: "gpt-header-title", text: "📁 " + t("projects_title") });
+		header.createSpan({ cls: "gpt-header-title", text: "📁 " + t("projects_title") });
 
 		const newBtn = header.createEl("button", { cls: "gpt-pill-btn", text: t("projects_btn_new") });
 		newBtn.onclick = () => this.showCreateDialog();
 
 		const closeBtn = header.createEl("button", {
 			cls:  "gpt-icon-btn",
-			attr: { "aria-label": "Zamknij" },
+			attr: { "aria-label": t("common_close") },
 		});
 		this.setIconOnly(closeBtn, "x");
 		closeBtn.onclick = () => {
@@ -98,13 +98,13 @@ export class GPTProjectsView extends ItemView {
 		const proj = this.plugin.projects.getProject(this.plugin.activeProjectId);
 		if (!proj) return;
 
-		const bar = root.createEl("div", { cls: "gpt-projects-active-bar" });
+		const bar = root.createDiv({ cls: "gpt-projects-active-bar" });
 		bar.setCssProps({ "--gpt-project-color": proj.color });
 
-		const dot = bar.createEl("span", { cls: "gpt-projects-active-dot" });
+		const dot = bar.createSpan({ cls: "gpt-projects-active-dot" });
 		dot.setCssProps({ "--gpt-project-color": proj.color });
 
-		bar.createEl("span", {
+		bar.createSpan({
 			cls:  "gpt-projects-active-name",
 			text: `${t("projects_active")} ${proj.name}`,
 		});
@@ -114,13 +114,13 @@ export class GPTProjectsView extends ItemView {
 	}
 
 	private buildProjectList(root: HTMLElement): void {
-		const list     = root.createEl("div", { cls: "gpt-projects-list" });
+		const list     = root.createDiv({ cls: "gpt-projects-list" });
 		const projects = this.plugin.projects.projects;
 
 		if (!projects.length) {
-			const empty = list.createEl("div", { cls: "gpt-projects-empty" });
-			empty.createEl("div", { text: t("projects_empty") });
-			empty.createEl("div", {
+			const empty = list.createDiv({ cls: "gpt-projects-empty" });
+			empty.createDiv({ text: t("projects_empty") });
+			empty.createDiv({
 				cls:  "gpt-projects-empty-hint",
 				text: t("projects_empty_hint_long"),
 			});
@@ -136,21 +136,21 @@ export class GPTProjectsView extends ItemView {
 		const sessions = this.plugin.projects.getProjectSessions(proj.id);
 		const isActive = this.plugin.activeProjectId === proj.id;
 
-		const card = list.createEl("div", { cls: "gpt-projects-card" });
+		const card = list.createDiv({ cls: "gpt-projects-card" });
 		card.setCssProps({ "--gpt-project-color": proj.color });
 		if (isActive) {
 			card.addClass("gpt-projects-card--active");
 		}
 
 		// ── Card header ─────────────────────────────────────────────────────────
-		const top = card.createEl("div", { cls: "gpt-projects-card-top" });
+		const top = card.createDiv({ cls: "gpt-projects-card-top" });
 
-		const dot = top.createEl("span", { cls: "gpt-projects-card-dot" });
+		const dot = top.createSpan({ cls: "gpt-projects-card-dot" });
 		dot.setCssProps({ "--gpt-project-color": proj.color });
 
-		top.createEl("span", { cls: "gpt-projects-card-name", text: proj.name });
+		top.createSpan({ cls: "gpt-projects-card-name", text: proj.name });
 
-		const badge = top.createEl("span", {
+		const badge = top.createSpan({
 			cls:  "gpt-projects-card-badge",
 			text: t("projects_chat_count", sessions.length),
 		});
@@ -159,7 +159,7 @@ export class GPTProjectsView extends ItemView {
 		// Edit button
 		const editBtn = top.createEl("button", {
 			cls:  "gpt-projects-icon-btn",
-			attr: { "aria-label": "Edytuj" },
+			attr: { "aria-label": t("common_edit") },
 		});
 		this.setIconOnly(editBtn, "pencil");
 		editBtn.onclick   = (e: MouseEvent) => { e.stopPropagation(); this.showCreateDialog(proj); };
@@ -187,20 +187,20 @@ export class GPTProjectsView extends ItemView {
 
 		// Custom prompt — badge
 		if (proj.systemPrompt) {
-			const tag = card.createEl("div", { cls: "gpt-projects-card-prompt-tag" });
+			const tag = card.createDiv({ cls: "gpt-projects-card-prompt-tag" });
 			tag.setCssProps({ "--gpt-project-color": proj.color });
 			this.setIconText(tag, "pencil", t("projects_own_prompt_btn"));
 		}
 
 		// ── Chat list ───────────────────────────────────────────────────────────
 		if (sessions.length) {
-			const chatList = card.createEl("div", { cls: "gpt-projects-card-chats" });
+			const chatList = card.createDiv({ cls: "gpt-projects-card-chats" });
 
 			for (const s of sessions.slice(0, 5)) {
-				const row = chatList.createEl("div", { cls: "gpt-projects-card-chat" });
+				const row = chatList.createDiv({ cls: "gpt-projects-card-chat" });
 				this.addIcon(row, "message-square", "gpt-projects-card-chat-icon");
-				row.createEl("span", { cls: "gpt-projects-card-chat-title", text: s.title.slice(0, 40) });
-				row.createEl("span", { cls: "gpt-projects-card-chat-date",  text: formatDate(s.updatedAt) });
+				row.createSpan({ cls: "gpt-projects-card-chat-title", text: s.title.slice(0, 40) });
+				row.createSpan({ cls: "gpt-projects-card-chat-date",  text: formatDate(s.updatedAt) });
 
 				const chatDel = row.createEl("button", {
 					cls:  "gpt-projects-card-chat-del",
@@ -229,7 +229,7 @@ export class GPTProjectsView extends ItemView {
 			}
 
 			if (sessions.length > 5) {
-				chatList.createEl("div", {
+				chatList.createDiv({
 					cls:  "gpt-projects-card-more",
 					text: t("projects_more_chats", sessions.length - 5),
 				});
@@ -261,7 +261,7 @@ export class GPTProjectsView extends ItemView {
 		});
 		if (editProject) nameInput.value = editProject.name;
 
-		const promptLabel = box.createEl("div", { cls: "gpt-modal-prompt-label" });
+		const promptLabel = box.createDiv({ cls: "gpt-modal-prompt-label" });
 		this.setIconText(promptLabel, "pencil", t("projects_prompt_label"));
 
 		const promptInput = box.createEl("textarea", {
@@ -270,10 +270,10 @@ export class GPTProjectsView extends ItemView {
 		});
 		if (editProject) promptInput.value = editProject.systemPrompt ?? "";
 
-		box.createEl("div", { cls: "gpt-modal-prompt-hint", text: t("projects_prompt_hint") });
+		box.createDiv({ cls: "gpt-modal-prompt-hint", text: t("projects_prompt_hint") });
 
 		// Przyciski
-		const btns   = box.createEl("div", { cls: "gpt-modal-btns" });
+		const btns   = box.createDiv({ cls: "gpt-modal-btns" });
 		const cancel = btns.createEl("button", {
 			cls:  "gpt-modal-cancel",
 			text: t("chat_notes_cancel"),
@@ -282,7 +282,7 @@ export class GPTProjectsView extends ItemView {
 
 		const ok = btns.createEl("button", {
 			cls:  "gpt-modal-ok",
-			text: isEdit ? "Zapisz" : t("projects_create_btn"),
+			text: isEdit ? t("common_save") : t("projects_create_btn"),
 		});
 		ok.onclick = async () => {
 			const name = nameInput.value.trim();

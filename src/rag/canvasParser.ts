@@ -134,14 +134,14 @@ export function parseCanvasToText(raw: string, basename: string): string {
 				}
 				break;
 			case "file":
-				lines.push(`### Plik: ${n.file || nodeLabel(n)}\n`);
+				lines.push(`### File: ${n.file || nodeLabel(n)}\n`);
 				break;
 			case "link":
 				lines.push(`### Link: ${n.url || nodeLabel(n)}\n`);
 				break;
 			case "group":
 				if (n.label?.trim()) {
-					lines.push(`## Grupa: ${n.label.trim()}\n`);
+					lines.push(`## Group: ${n.label.trim()}\n`);
 				}
 				break;
 		}

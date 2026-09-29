@@ -1,6 +1,6 @@
-import { Notice, Plugin, TFile } from "obsidian";
+import { Notice, Plugin, TFile, requireApiVersion } from "obsidian";
 
-import { t, setLanguage }          from "./i18n";
+import { t, setLanguage, isDefaultChatTitle } from "./i18n";
 import { DEFAULT_SETTINGS }        from "./settings";
 import { CHAT_VIEW_TYPE, HISTORY_VIEW_TYPE, PROJECTS_VIEW_TYPE, FILE_API_KEYS, RAG_INDEX_KEY, HISTORY_KEY } from "./constants";
 import { PluginStorage }           from "./storage/PluginStorage";
@@ -12,7 +12,18 @@ import { GPTChatView }             from "./views/ChatView";
 import { GPTHistoryView }          from "./views/HistoryView";
 import { GPTProjectsView }         from "./views/ProjectsView";
 import { GPTSettingsTab }          from "./SettingsTab";
-import { debounce }                from "./utils";
+import { createKeyedDebounce }     from "./utils";
+import type { KeyedDebounce }      from "./utils";
+import { DEFAULT_CLAUDE_MODEL, getReplacementModel } from "./models";
+import {
+	KEY_FIELDS,
+	SECRET_NAME_FIELD,
+	SECRET_STORAGE_MIN_VERSION,
+	isSecretBackend,
+	migrateKeysToSecrets,
+	resolveKeys,
+} from "./security/keyStore";
+import type { SecretBackend } from "./security/keyStore";
 import type { PluginSettings }     from "./settings";
 import type { ChatMessage }        from "./types";
 
@@ -30,7 +41,16 @@ export default class GPTPlugin extends Plugin {
 	currentSession:   import("./types").ChatSession | null = null;
 	activeProjectId:  string | null = null;
 
-	private debouncedUpdateFile!: ReturnType<typeof debounce<[TFile]>>;
+	private debouncedUpdateFile!: KeyedDebounce<TFile>;
+
+	/** Saved models replaced by loadSettings(), reported once the language is known. */
+	private migratedModels: Array<{ from: string; to: string }> = [];
+
+	/** True while the API keys live in Obsidian's SecretStorage instead of a file. */
+	keysInSecretStorage = false;
+
+	/** True on the first load after an upgrade from a version with automatic embeddings. */
+	private embeddingsBecameOptIn = false;
 
 	// ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -39,6 +59,10 @@ export default class GPTPlugin extends Plugin {
 		this.storage = new PluginStorage(this);
 		await this.loadSettings();
 		setLanguage(this.settings.language ?? "en", this);
+		for (const { from, to } of this.migratedModels) {
+			new Notice(t("notice_model_migrated", from, to), 8000);
+		}
+		this.migratedModels = [];
 
 		// External storage — outside the vault (desktop only, bypasses Obsidian Sync)
 		this.externalStorage = new ExternalStorage(this, this.storage);
@@ -46,6 +70,12 @@ export default class GPTPlugin extends Plugin {
 
 		// API keys — from keys.json outside the vault, migrated from old data.json
 		await this._loadApiKeys();
+
+		// Prefer Obsidian's SecretStorage for the keys where it exists (1.11.4+)
+		if (await this.useSecretStorage()) new Notice(t("notice_keys_moved_secret"), 8000);
+
+		// Semantic search became opt-in in 1.5.0 — tell people who were using it
+		this._announceEmbeddingsOptIn();
 
 		// Auto-migrate history when external storage has just been enabled
 		if (externalActive) await this._maybeAutoMigrate();
@@ -58,7 +88,7 @@ export default class GPTPlugin extends Plugin {
 		await this.projects.load();
 
 		// Debounced RAG update — max once per 3s per file
-		this.debouncedUpdateFile = debounce((file: TFile) => {
+		this.debouncedUpdateFile = createKeyedDebounce<TFile>((_path, file) => {
 			void this.rag.updateFile(file);
 		}, 3000);
 
@@ -124,7 +154,7 @@ export default class GPTPlugin extends Plugin {
 		// Vault events — .md and .canvas
 		this.registerEvent(this.app.vault.on("modify", (file) => {
 			if (file instanceof TFile && (file.extension === "md" || file.extension === "canvas")) {
-				this.debouncedUpdateFile(file);
+				this.debouncedUpdateFile(file.path, file);
 			}
 		}));
 		this.registerEvent(this.app.vault.on("delete", (file) => {
@@ -210,12 +240,12 @@ export default class GPTPlugin extends Plugin {
 		session.messages  = messages;
 		session.updatedAt = Date.now();
 		session.model     =
-			this.settings.provider === "anthropic" ? (this.settings.claudeModel ?? "claude-sonnet-4-5") :
+			this.settings.provider === "anthropic" ? (this.settings.claudeModel ?? DEFAULT_CLAUDE_MODEL) :
 			this.settings.provider === "local"     ? (this.settings.localModel || "") :
 			this.settings.model;
 
 		// Auto-title from the first user message
-		if (messages.length >= 1 && session.title === "New conversation") {
+		if (messages.length >= 1 && isDefaultChatTitle(session.title)) {
 			const first = messages.find(m => m.role === "user");
 			if (first) {
 				session.title = first.content.slice(0, 50) + (first.content.length > 50 ? "…" : "");
@@ -297,6 +327,60 @@ export default class GPTPlugin extends Plugin {
 
 		// Migrate the legacy standalone "ollama" provider → unified Local API
 		if (d) this._migrateLegacyOllamaSettings(d);
+
+		if (d) await this._migrateStoredSettings(d);
+	}
+
+	/**
+	 * Replaces models that are no longer offered and drops settings that no longer
+	 * exist. Only the affected fields are written back, straight to data.json:
+	 * saveSettings() would also rewrite keys.json, and the API keys have not been
+	 * loaded yet at this point.
+	 */
+	private async _migrateStoredSettings(raw: Record<string, unknown>): Promise<void> {
+		let changed = false;
+
+		for (const field of ["model", "claudeModel"] as const) {
+			const current     = this.settings[field];
+			const replacement = typeof current === "string" ? getReplacementModel(current) : null;
+			if (!replacement) continue;
+
+			this.migratedModels.push({ from: current, to: replacement });
+			this.settings[field] = replacement;
+			raw[field] = replacement;
+			changed = true;
+		}
+
+		// Removed in 1.5.0 — the toggle never changed which provider was used.
+		if ("autoDetectProvider" in raw) {
+			delete raw.autoDetectProvider;
+			delete (this.settings as unknown as Record<string, unknown>).autoDetectProvider;
+			changed = true;
+		}
+
+		// Settings saved before 1.5.0 have no opt-in field. Embeddings used to be
+		// created whenever an OpenAI key was present; now they need explicit consent.
+		if (!("ragEmbeddingsEnabled" in raw) && !raw._embeddingsNoticeShown) {
+			this.embeddingsBecameOptIn = true;
+			this.settings.ragEmbeddingsEnabled   = false;
+			this.settings._embeddingsNoticeShown = true;
+			raw.ragEmbeddingsEnabled   = false;
+			raw._embeddingsNoticeShown = true;
+			changed = true;
+		}
+
+		if (changed) await this.saveData(raw);
+	}
+
+	/**
+	 * Runs after the API keys are loaded: only someone with an OpenAI key and RAG
+	 * switched on was sending notes for embeddings, so only they are told.
+	 */
+	private _announceEmbeddingsOptIn(): void {
+		if (!this.embeddingsBecameOptIn) return;
+		this.embeddingsBecameOptIn = false;
+		if (!this.settings.ragEnabled || !this.settings.apiKey?.trim()) return;
+		new Notice(t("notice_embeddings_optin"), 15000);
 	}
 
 	/** Maps old ollama provider/fields onto the new Local API settings (one-time, non-destructive). */
@@ -322,7 +406,11 @@ export default class GPTPlugin extends Plugin {
 		delete toSave[RAG_INDEX_KEY];
 		delete toSave[HISTORY_KEY];
 
-		if (this.settings.apiKeysInSync || !this.externalStorage.isEnabled) {
+		if (this.keysInSecretStorage && !this.settings.apiKeysInSync) {
+			// The key values live in SecretStorage; settings keep only their names.
+			for (const field of KEY_FIELDS) delete toSave[field];
+			await this.saveData(toSave);
+		} else if (this.settings.apiKeysInSync || !this.externalStorage.isEnabled) {
 			await this.saveData(toSave);
 		} else {
 			// Keys go to keys.json outside the vault, the rest to data.json.
@@ -342,6 +430,84 @@ export default class GPTPlugin extends Plugin {
 	}
 
 	// ── API Keys ───────────────────────────────────────────────────────────────
+
+	/** Obsidian's SecretStorage, or null on versions that do not have it. */
+	get secretBackend(): SecretBackend | null {
+		if (!requireApiVersion(SECRET_STORAGE_MIN_VERSION)) return null;
+		const storage: unknown = (this.app as { secretStorage?: unknown }).secretStorage;
+		return isSecretBackend(storage) ? storage : null;
+	}
+
+	/** The key behind a secret name, or an empty string. Never logged. */
+	readSecret(name: string): string {
+		const backend = this.secretBackend;
+		if (!backend) return "";
+		return resolveKeys({ apiKey: name }, backend).apiKey;
+	}
+
+	/**
+	 * Moves the API keys into SecretStorage and loads them from there.
+	 *
+	 * Each key is written and read back before anything else happens. The
+	 * plaintext copies in keys.json and data.json are removed only when every key
+	 * was verified; on any failure the plugin keeps using its key file untouched.
+	 *
+	 * @returns true when keys were moved by this call
+	 */
+	async useSecretStorage(): Promise<boolean> {
+		this.keysInSecretStorage = false;
+		const backend = this.secretBackend;
+		// Someone who chose to sync their keys keeps them in data.json.
+		if (!backend || this.settings.apiKeysInSync) return false;
+
+		const names = {
+			apiKey:       this.settings.openaiSecretName,
+			claudeApiKey: this.settings.claudeSecretName,
+			localApiKey:  this.settings.localSecretName,
+		};
+		const result = migrateKeysToSecrets(this.settings, names, backend);
+		if (result.failed.length) {
+			console.warn(`[AI-Vault] SecretStorage refused ${result.failed.length} key(s); keeping the key file`);
+			return false;
+		}
+
+		const keys = resolveKeys(result.names, backend);
+		for (const field of KEY_FIELDS) {
+			this.settings[SECRET_NAME_FIELD[field]] = result.names[field];
+			this.settings[field] = keys[field];
+		}
+		this.keysInSecretStorage = true;
+
+		const removed = await this._removePlaintextKeys();
+		if (result.migrated.length) await this.saveSettings();
+		return result.migrated.length > 0 || removed;
+	}
+
+	/**
+	 * Deletes the key copies left in data.json and keys.json. Only called once
+	 * every key has been verified in SecretStorage.
+	 * @returns true when a copy was found and removed
+	 */
+	private async _removePlaintextKeys(): Promise<boolean> {
+		let removed = false;
+
+		const raw = await this.loadData() as Record<string, unknown> | null;
+		if (raw && KEY_FIELDS.some(field => field in raw)) {
+			for (const field of KEY_FIELDS) delete raw[field];
+			for (const field of KEY_FIELDS) raw[SECRET_NAME_FIELD[field]] = this.settings[SECRET_NAME_FIELD[field]];
+			await this.saveData(raw);
+			removed = true;
+		}
+
+		if (this.externalStorage.isEnabled) {
+			const keysPath = this.externalStorage.resolve(FILE_API_KEYS);
+			if (await this.externalStorage.exists(keysPath)) {
+				await this.externalStorage.remove(keysPath);
+				removed = true;
+			}
+		}
+		return removed;
+	}
 
 	private async _loadApiKeys(): Promise<void> {
 		if (this.settings.apiKeysInSync) {

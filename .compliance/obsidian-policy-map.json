@@ -651,7 +651,7 @@
       "automated": true,
       "files": ["src/SettingsTab.ts", "src/main.ts", "manifest.json"],
       "manualReview": true,
-      "notes": "SecretStorage and SecretComponent were exposed to plugins in the Obsidian 1.11.x line (see https://obsidian.md/changelog/2026-01-07-desktop-v1.11.4/). The plugin currently declares minAppVersion 1.7.2, so adopting the API means dropping support for every 1.7–1.10 install."
+      "notes": "SecretStorage and SecretComponent were exposed to plugins in the Obsidian 1.11.x line (see https://obsidian.md/changelog/2026-01-07-desktop-v1.11.4/). The plugin uses them when requireApiVersion('1.11.4') holds and the user has not chosen to sync keys; settings then store only secret names. minAppVersion stays at 1.7.2, so 1.7–1.10 installs keep the key file (src/security/keyStore.ts, src/main.ts useSecretStorage)."
     }
   ]
 }
