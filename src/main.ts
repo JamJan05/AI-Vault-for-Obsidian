@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile } from "obsidian";
+import { Notice, Plugin, TFile, requireApiVersion } from "obsidian";
 
 import { t, setLanguage, isDefaultChatTitle } from "./i18n";
 import { DEFAULT_SETTINGS }        from "./settings";
@@ -15,6 +15,15 @@ import { GPTSettingsTab }          from "./SettingsTab";
 import { createKeyedDebounce }     from "./utils";
 import type { KeyedDebounce }      from "./utils";
 import { DEFAULT_CLAUDE_MODEL, getReplacementModel } from "./models";
+import {
+	KEY_FIELDS,
+	SECRET_NAME_FIELD,
+	SECRET_STORAGE_MIN_VERSION,
+	isSecretBackend,
+	migrateKeysToSecrets,
+	resolveKeys,
+} from "./security/keyStore";
+import type { SecretBackend } from "./security/keyStore";
 import type { PluginSettings }     from "./settings";
 import type { ChatMessage }        from "./types";
 
@@ -37,6 +46,9 @@ export default class GPTPlugin extends Plugin {
 	/** Saved models replaced by loadSettings(), reported once the language is known. */
 	private migratedModels: Array<{ from: string; to: string }> = [];
 
+	/** True while the API keys live in Obsidian's SecretStorage instead of a file. */
+	keysInSecretStorage = false;
+
 	/** True on the first load after an upgrade from a version with automatic embeddings. */
 	private embeddingsBecameOptIn = false;
 
@@ -58,6 +70,9 @@ export default class GPTPlugin extends Plugin {
 
 		// API keys — from keys.json outside the vault, migrated from old data.json
 		await this._loadApiKeys();
+
+		// Prefer Obsidian's SecretStorage for the keys where it exists (1.11.4+)
+		if (await this.useSecretStorage()) new Notice(t("notice_keys_moved_secret"), 8000);
 
 		// Semantic search became opt-in in 1.2.0 — tell people who were using it
 		this._announceEmbeddingsOptIn();
@@ -391,7 +406,11 @@ export default class GPTPlugin extends Plugin {
 		delete toSave[RAG_INDEX_KEY];
 		delete toSave[HISTORY_KEY];
 
-		if (this.settings.apiKeysInSync || !this.externalStorage.isEnabled) {
+		if (this.keysInSecretStorage && !this.settings.apiKeysInSync) {
+			// The key values live in SecretStorage; settings keep only their names.
+			for (const field of KEY_FIELDS) delete toSave[field];
+			await this.saveData(toSave);
+		} else if (this.settings.apiKeysInSync || !this.externalStorage.isEnabled) {
 			await this.saveData(toSave);
 		} else {
 			// Keys go to keys.json outside the vault, the rest to data.json.
@@ -411,6 +430,84 @@ export default class GPTPlugin extends Plugin {
 	}
 
 	// ── API Keys ───────────────────────────────────────────────────────────────
+
+	/** Obsidian's SecretStorage, or null on versions that do not have it. */
+	get secretBackend(): SecretBackend | null {
+		if (!requireApiVersion(SECRET_STORAGE_MIN_VERSION)) return null;
+		const storage: unknown = (this.app as { secretStorage?: unknown }).secretStorage;
+		return isSecretBackend(storage) ? storage : null;
+	}
+
+	/** The key behind a secret name, or an empty string. Never logged. */
+	readSecret(name: string): string {
+		const backend = this.secretBackend;
+		if (!backend) return "";
+		return resolveKeys({ apiKey: name }, backend).apiKey;
+	}
+
+	/**
+	 * Moves the API keys into SecretStorage and loads them from there.
+	 *
+	 * Each key is written and read back before anything else happens. The
+	 * plaintext copies in keys.json and data.json are removed only when every key
+	 * was verified; on any failure the plugin keeps using its key file untouched.
+	 *
+	 * @returns true when keys were moved by this call
+	 */
+	async useSecretStorage(): Promise<boolean> {
+		this.keysInSecretStorage = false;
+		const backend = this.secretBackend;
+		// Someone who chose to sync their keys keeps them in data.json.
+		if (!backend || this.settings.apiKeysInSync) return false;
+
+		const names = {
+			apiKey:       this.settings.openaiSecretName,
+			claudeApiKey: this.settings.claudeSecretName,
+			localApiKey:  this.settings.localSecretName,
+		};
+		const result = migrateKeysToSecrets(this.settings, names, backend);
+		if (result.failed.length) {
+			console.warn(`[AI-Vault] SecretStorage refused ${result.failed.length} key(s); keeping the key file`);
+			return false;
+		}
+
+		const keys = resolveKeys(result.names, backend);
+		for (const field of KEY_FIELDS) {
+			this.settings[SECRET_NAME_FIELD[field]] = result.names[field];
+			this.settings[field] = keys[field];
+		}
+		this.keysInSecretStorage = true;
+
+		const removed = await this._removePlaintextKeys();
+		if (result.migrated.length) await this.saveSettings();
+		return result.migrated.length > 0 || removed;
+	}
+
+	/**
+	 * Deletes the key copies left in data.json and keys.json. Only called once
+	 * every key has been verified in SecretStorage.
+	 * @returns true when a copy was found and removed
+	 */
+	private async _removePlaintextKeys(): Promise<boolean> {
+		let removed = false;
+
+		const raw = await this.loadData() as Record<string, unknown> | null;
+		if (raw && KEY_FIELDS.some(field => field in raw)) {
+			for (const field of KEY_FIELDS) delete raw[field];
+			for (const field of KEY_FIELDS) raw[SECRET_NAME_FIELD[field]] = this.settings[SECRET_NAME_FIELD[field]];
+			await this.saveData(raw);
+			removed = true;
+		}
+
+		if (this.externalStorage.isEnabled) {
+			const keysPath = this.externalStorage.resolve(FILE_API_KEYS);
+			if (await this.externalStorage.exists(keysPath)) {
+				await this.externalStorage.remove(keysPath);
+				removed = true;
+			}
+		}
+		return removed;
+	}
 
 	private async _loadApiKeys(): Promise<void> {
 		if (this.settings.apiKeysInSync) {

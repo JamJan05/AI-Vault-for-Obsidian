@@ -33,6 +33,11 @@
 - Requests the provider rejects (HTTP 4xx other than 408 and 429) are no longer retried.
 
 ### Privacy
+- **API keys move to Obsidian's secret storage** on Obsidian 1.11.4 and newer. Settings keep only the
+  names of the secrets, and the plugin no longer writes a key file there. Existing keys are moved
+  automatically: each is written, read back, and only then are the old copies in `keys.json` and
+  `data.json` deleted. Older Obsidian versions, and anyone who syncs their keys, are unchanged.
+- The settings tab now says where the keys actually are, instead of one fixed warning.
 - Sending to a remote Local API over plain HTTP now asks for confirmation before the first message,
   not only when the address is typed in settings.
 - **The chat says what it is about to send.** A line above the input names the destination and lists

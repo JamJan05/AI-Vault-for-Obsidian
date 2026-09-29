@@ -105,7 +105,7 @@ be an exception entry with an owner, a justification and an expiry date.
 | `logging-hygiene` | OBS-GUIDE-002 | No note content, prompt, history or credential reaches the console |
 | `trademark-usage` | OBS-POL-015 | No first-party implication in the name or README |
 | `no-ads` | OBS-POL-003 | No advertising code |
-| `secret-storage-adoption` | OBS-SEC-002 | Reports whether `SecretStorage` is used; the migration is a product decision |
+| `secret-storage-adoption` | OBS-SEC-002 | Reports whether `SecretStorage` is used. It is, on Obsidian 1.11.4+, with the key file kept as the fallback for older versions |
 | `fork-policy` | OBS-POL-016 | Always `MANUAL_REVIEW` — origin cannot be derived from the repository |
 
 ### Privacy and network — `scripts/compliance/checks/privacy.mjs`
@@ -243,7 +243,7 @@ gh attestation verify /tmp/published/main.js -R JamJan05/AI-Vault-for-Obsidian
 |---|---|---|
 | Fork origin (`OBS-POL-016`) | Not derivable from the repository | Maintainer |
 | Trademark confusion (`OBS-POL-015`) | Automated checks catch only the obvious cases | Maintainer |
-| Migration to `SecretStorage` (`OBS-SEC-002`) | Requires raising `minAppVersion` and dropping support for older installs | Product decision |
+| `SecretStorage` on older Obsidian (`OBS-SEC-002`) | Versions before 1.11.4 have no SecretStorage, so they keep the plaintext key file until `minAppVersion` is raised | Product decision |
 | Prompt injection | Application-level risk with no static signal | Ongoing design |
 | Adapter API usage (`OBS-GUIDE-015`) | Each call must be confirmed to target the plugin's own storage, not a user note | Maintainer |
 | Licence obligations for review-list licences | Attribution requirements need reading | Maintainer |

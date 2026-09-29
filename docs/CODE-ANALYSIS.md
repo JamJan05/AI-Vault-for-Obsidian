@@ -35,8 +35,8 @@ numbers refer to that version. This table is the current state.
 | F-19 settings search | Fixed in 1.1.x |
 | F-20 lint warnings | Partly — `prefer-create-el` warnings remain in older view code |
 
-Still open from the backlog: splitting `ChatView` into smaller units, and storing API keys in
-Obsidian's `SecretStorage`.
+Still open from the backlog: splitting `ChatView` into smaller units. API keys are stored in
+Obsidian's `SecretStorage` where it exists (1.11.4+).
 
 ---
 

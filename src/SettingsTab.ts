@@ -1,4 +1,4 @@
-import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, PluginSettingTab, SecretComponent, Setting, requireApiVersion } from "obsidian";
 import { t, setLanguage } from "./i18n";
 import { DEFAULT_SYSTEM_PROMPTS, DEFAULT_LOCAL_OPENAI_URL, DEFAULT_LOCAL_OLLAMA_URL } from "./settings";
 import { DEFAULT_CLAUDE_MODEL, DEFAULT_OPENAI_MODEL, detectProvider, getCatalogModels } from "./models";
@@ -17,6 +17,8 @@ import type { ProjectManager }  from "./history/ProjectManager";
 import type { RAGEngine }       from "./rag/RAGEngine";
 import type { GPTHistoryView }  from "./views/HistoryView";
 import type { GPTProjectsView } from "./views/ProjectsView";
+import { SECRET_NAME_FIELD } from "./security/keyStore";
+import type { KeyField, SecretBackend } from "./security/keyStore";
 import type { LocalApiType, PluginSettings, Provider } from "./settings";
 
 // ─── Plugin interface ──────────────────────────────────────────────────────────
@@ -28,6 +30,10 @@ interface PluginWithDeps {
 	history:         HistoryManager;
 	projects:        ProjectManager;
 	rag:             RAGEngine;
+	keysInSecretStorage: boolean;
+	readonly secretBackend: SecretBackend | null;
+	readSecret(name: string): string;
+	useSecretStorage(): Promise<boolean>;
 	saveSettings():  Promise<void>;
 	loadData():      Promise<Record<string, unknown>>;
 	saveData(data: Record<string, unknown>): Promise<void>;
@@ -257,10 +263,45 @@ export class GPTSettingsTab extends PluginSettingTab {
 		};
 	}
 
+	/** Says where the keys are right now — the answer depends on the storage in use. */
 	private keyWarningRow(): SettingDefinitionRender {
-		return this.bannerRow("gpt-settings-warning", el => {
-			this.renderSafeInlineMarkup(el, t("settings_keys_local_warning_html"));
+		const { settings, keysInSecretStorage, externalStorage } = this.plugin;
+		const inSecretStorage = keysInSecretStorage && !settings.apiKeysInSync;
+		const key =
+			inSecretStorage            ? "settings_keys_where_secret_html" :
+			settings.apiKeysInSync     ? "settings_keys_where_sync_html" :
+			externalStorage.isEnabled  ? "settings_keys_where_file_html" :
+			"settings_keys_local_warning_html";
+
+		return this.bannerRow(inSecretStorage ? "gpt-settings-note" : "gpt-settings-warning", el => {
+			this.renderSafeInlineMarkup(el, t(key));
 		});
+	}
+
+	/**
+	 * Key field backed by SecretStorage. The setting stores the name of the
+	 * secret; Obsidian's own component handles entering and picking the value.
+	 */
+	private secretKeyRow(name: string, desc: string, field: KeyField): SettingDefinitionRender {
+		const nameField = SECRET_NAME_FIELD[field];
+		return {
+			name,
+			desc,
+			render: (setting: Setting) => {
+				// Only reached when SecretStorage is in use; the check also tells the
+				// linter that these newer APIs are never called on an older Obsidian.
+				if (requireApiVersion("1.11.4")) {
+					setting.addComponent(el => new SecretComponent(this.app, el)
+						.setValue(this.plugin.settings[nameField] ?? "")
+						.onChange((secretName: string) => {
+							this.plugin.settings[nameField] = secretName;
+							this.plugin.settings[field] = this.plugin.readSecret(secretName);
+							this.saveSoon();
+						}),
+					);
+				}
+			},
+		};
 	}
 
 	private apiKeySyncRows(): SettingDefinitionItem[] {
@@ -277,46 +318,9 @@ export class GPTSettingsTab extends PluginSettingTab {
 					.onChange(async (v: boolean) => {
 						tog.setDisabled(true);
 						try {
-							// Local-only keys require a working folder outside the vault. Try
-							// to initialize it here instead of permanently disabling the toggle.
-							if (!v && !this.plugin.externalStorage.isEnabled) {
-								if (!this.plugin.settings.externalStorageEnabled) {
-									new Notice(t("notice_keys_need_external"), 6000);
-									return;
-								}
-								if (!(await this.plugin.externalStorage.init())) {
-									new Notice(t("notice_storage_init_failed", this.plugin.externalStorage.lastError ?? "unknown error"), 7000);
-									return;
-								}
-							}
-
-							const oldApiKey       = this.plugin.settings.apiKey;
-							const oldClaudeApiKey = this.plugin.settings.claudeApiKey;
-							const oldLocalApiKey  = this.plugin.settings.localApiKey;
-							this.plugin.settings.apiKeysInSync = v;
-							this.plugin.settings.apiKey        = oldApiKey;
-							this.plugin.settings.claudeApiKey  = oldClaudeApiKey;
-							this.plugin.settings.localApiKey   = oldLocalApiKey;
-							await this.plugin.saveSettings();
-
-							if (v) {
-								// Switched to Sync → remove keys.json
-								const keysPath = this.plugin.externalStorage.resolve(FILE_API_KEYS);
-								await this.plugin.externalStorage.remove(keysPath);
-								new Notice(t("notice_keys_moved_sync"), 5000);
-							} else {
-								// Switched to local → keys saved via saveSettings, remove from data.json
-								const d = await this.plugin.loadData();
-								if (d) {
-									delete d.apiKey;
-									delete d.claudeApiKey;
-									delete d.localApiKey;
-									await this.plugin.saveData(d);
-								}
-								new Notice(t("notice_keys_moved_local"), 5000);
-							}
+							await this.setKeySync(v);
 						} catch (e) {
-							console.error("[AI-Vault] Failed to change API key sync setting:", e);
+							console.error("[AI-Vault] Failed to change API key sync setting:", (e as Error)?.message);
 							new Notice(t("notice_setting_change_failed", (e as Error)?.message ?? String(e)), 7000);
 						} finally {
 							this.rerender();
@@ -334,6 +338,55 @@ export class GPTSettingsTab extends PluginSettingTab {
 				el.setText(t("settings_keys_mobile_note"));
 			}),
 		];
+	}
+
+	/** Moves the keys between data.json (synced) and local storage (not synced). */
+	private async setKeySync(sync: boolean): Promise<void> {
+		const { plugin } = this;
+		const canUseSecrets = plugin.secretBackend !== null;
+
+		// Without SecretStorage, local-only keys need a working folder outside the
+		// vault. Try to initialize it here instead of permanently disabling the toggle.
+		if (!sync && !canUseSecrets && !plugin.externalStorage.isEnabled) {
+			if (!plugin.settings.externalStorageEnabled) {
+				new Notice(t("notice_keys_need_external"), 6000);
+				return;
+			}
+			if (!(await plugin.externalStorage.init())) {
+				new Notice(t("notice_storage_init_failed", plugin.externalStorage.lastError ?? "unknown error"), 7000);
+				return;
+			}
+		}
+
+		plugin.settings.apiKeysInSync = sync;
+
+		if (sync) {
+			// The keys in memory are written into data.json by saveSettings().
+			plugin.keysInSecretStorage = false;
+			await plugin.saveSettings();
+			if (plugin.externalStorage.isEnabled) {
+				await plugin.externalStorage.remove(plugin.externalStorage.resolve(FILE_API_KEYS));
+			}
+			new Notice(t("notice_keys_moved_sync"), 5000);
+			return;
+		}
+
+		if (await plugin.useSecretStorage() || plugin.keysInSecretStorage) {
+			await plugin.saveSettings();
+			new Notice(t("notice_keys_moved_secret"), 5000);
+			return;
+		}
+
+		// No SecretStorage: keys go to keys.json, then leave data.json.
+		await plugin.saveSettings();
+		const d = await plugin.loadData();
+		if (d) {
+			delete d.apiKey;
+			delete d.claudeApiKey;
+			delete d.localApiKey;
+			await plugin.saveData(d);
+		}
+		new Notice(t("notice_keys_moved_local"), 5000);
 	}
 
 	// ── Model ──────────────────────────────────────────────────────────────────
@@ -444,6 +497,16 @@ export class GPTSettingsTab extends PluginSettingTab {
 		const keysStoredLocal = !keysInSync && extEnabled;
 		const keysLocation    = keysStoredLocal ? t("settings_key_local") : t("settings_key_sync");
 
+		if (this.plugin.keysInSecretStorage && !keysInSync) {
+			if (provider === "openai") {
+				return [this.secretKeyRow(t("settings_openai_key_name"), t("settings_key_secret"), "apiKey")];
+			}
+			if (provider === "anthropic") {
+				return [this.secretKeyRow(t("settings_claude_key_name"), t("settings_key_secret"), "claudeApiKey")];
+			}
+			return [];
+		}
+
 		if (provider === "openai") {
 			return [{
 				name: t("settings_openai_key_name"),
@@ -545,7 +608,12 @@ export class GPTSettingsTab extends PluginSettingTab {
 			this.refreshBaseUrlWarning(false);
 		});
 
-		const apiKeyRow: SettingDefinitionRender = {
+		const useSecrets = this.plugin.keysInSecretStorage && !this.plugin.settings.apiKeysInSync;
+		const apiKeyRow: SettingDefinitionRender = useSecrets ? this.secretKeyRow(
+			t("settings_local_api_key_name"),
+			t("settings_local_api_key_desc") + " " + t("settings_key_secret"),
+			"localApiKey",
+		) : {
 			name: t("settings_local_api_key_name"),
 			desc: t("settings_local_api_key_desc"),
 			render: (setting: Setting) => {

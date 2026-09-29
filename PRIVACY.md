@@ -180,7 +180,7 @@ You can point this anywhere via **Settings → Storage → Storage path**.
 
 | File | Contents |
 |---|---|
-| `keys.json` | Your OpenAI, Anthropic and Local API keys |
+| `keys.json` | Your OpenAI, Anthropic and Local API keys — only on Obsidian older than 1.11.4; newer versions keep them in Obsidian's secret storage instead |
 | `history-index.json` | Conversation titles, timestamps, model, project link |
 | `history/session-*.json` | The full text of every saved conversation and, for each answer, the sources it used: the note name, its path in the vault, and the first 200 characters of the fragment that was sent |
 | `projects.json` | Project names, descriptions and custom system prompts |
@@ -211,16 +211,32 @@ trade-off you choose, not a default.
 - `data.json` in the plugin folder always holds your settings. It is inside the
   vault and therefore synced.
 - API keys have their own switch, **"Sync API keys via Obsidian Sync"**:
-  - **Off (default)** — keys live in `keys.json` outside the vault and are not
-    synced. On Linux and macOS the file is set to owner-only permissions (`0600`);
-    Windows has no equivalent and the call is a no-op there.
-  - **On** — keys are written into `data.json` inside the vault, which means they
-    travel through Obsidian Sync and land in every synced device and backup.
-- Keys are stored in plaintext JSON. They are **not** currently held in Obsidian's
-  `SecretStorage`. That API arrived in the Obsidian 1.11 line, and this plugin
-  still supports 1.7.2, so adopting it would drop support for existing installs.
-  See `.compliance/obsidian-policy-map.json` (rule `OBS-SEC-002`) for the decision
-  record.
+  - **Off (default), Obsidian 1.11.4 or newer** — keys are kept in Obsidian's
+    `SecretStorage`. `data.json` stores only the *name* of each secret. According
+    to Obsidian's documentation the values are held in local storage, keyed to
+    the vault, on that device; they are not part of the vault and are not
+    synced. The plugin writes no key file in this mode.
+  - **Off (default), older Obsidian** — keys live in `keys.json` outside the vault
+    and are not synced. On Linux and macOS the file is set to owner-only
+    permissions (`0600`); Windows has no equivalent and the call is a no-op
+    there. The file is plaintext JSON.
+  - **On** — keys are written into `data.json` inside the vault as plaintext,
+    which means they travel through Obsidian Sync and land in every synced
+    device and backup. SecretStorage is not used in this mode, because it would
+    not sync.
+- **Moving to SecretStorage is automatic and verified.** On the first start with
+  Obsidian 1.11.4 or newer, each key is written to SecretStorage and read back.
+  Only when every key reads back correctly are the copies in `keys.json` and
+  `data.json` deleted. If anything fails, nothing is deleted and the plugin keeps
+  using its key file.
+- Secrets in SecretStorage are shared by name: another plugin that knows a
+  secret's name can read it. That is how Obsidian designed the store. The plugin
+  names its secrets `ai-vault-openai-api-key`, `ai-vault-anthropic-api-key` and
+  `ai-vault-local-api-key`.
+- SecretStorage is not described by Obsidian as encrypted, and this plugin makes
+  no such claim. It keeps keys out of the vault, out of sync and out of the
+  plugin's own files; it does not protect them from someone with access to your
+  user account.
 
 ### Exported conversations
 
@@ -244,7 +260,7 @@ To delete your data:
 | A single conversation | Delete it in the History view |
 | A project | Delete it in the Projects view |
 | All history, projects and the RAG index | Delete the storage folder shown in **Settings → Storage** |
-| API keys | Clear the key fields in settings, then delete `keys.json` from the storage folder |
+| API keys | Remove the secrets in Obsidian's secret storage (the key field in settings opens it). On Obsidian older than 1.11.4: clear the key fields, then delete `keys.json` from the storage folder |
 | Settings | Delete `data.json` from the plugin folder inside your vault |
 | Everything | Uninstall the plugin, then delete both the plugin folder inside the vault and the external storage folder |
 

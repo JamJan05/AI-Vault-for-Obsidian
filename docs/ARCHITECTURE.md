@@ -89,6 +89,7 @@ manifest.json ──────▶  manifest.json
 │   ├── constants.ts            20  view types, file names, RAG tuning constants
 │   ├── utils.ts               255  debounce, ids, retry, hashing, tokenizer, BM25, cosine, chunking
 │   ├── security/
+│   │   ├── keyStore.ts       SecretStorage migration and lookup, verified by read-back
 │   │   ├── paths.ts           112  path containment for storage
 │   │   ├── redact.ts          113  secret redaction for errors and logs
 │   │   └── urlPolicy.ts       175  Local API Base URL policy

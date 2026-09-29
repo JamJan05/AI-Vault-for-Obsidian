@@ -19,6 +19,14 @@ export interface PluginSettings {
 	claudeApiKey:           string;
 	localApiKey:            string;
 	apiKeysInSync:          boolean;
+	/**
+	 * Names of the secrets in Obsidian's SecretStorage that hold the keys above.
+	 * When these are in use the key values themselves are never written to disk
+	 * by the plugin — see src/security/keyStore.ts.
+	 */
+	openaiSecretName:       string;
+	claudeSecretName:       string;
+	localSecretName:        string;
 
 	// Models
 	provider:               Provider;
@@ -99,6 +107,9 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	externalStorageEnabled:  true,
 	externalStoragePath:     "",
 	apiKeysInSync:           false,
+	openaiSecretName:        "",
+	claudeSecretName:        "",
+	localSecretName:         "",
 	maxContextMessages:      0,
 	language:                "en",
 };
