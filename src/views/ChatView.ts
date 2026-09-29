@@ -29,13 +29,14 @@ import { callLocalApi } from "../api/local";
 import { parseCanvasToText }   from "../rag/canvasParser";
 import { resolveNoteWithLinks } from "../rag/linkResolver";
 import { locateChunk } from "../rag/locate";
+import { sanitizeSources, toMessageSource } from "../rag/sources";
 import { FallbackModal } from "./FallbackModal";
 import { ConfirmModal } from "./ConfirmModal";
 import { normalizeLocalBaseUrl } from "../api/contracts";
 import { assessLocalBaseUrl } from "../security/urlPolicy";
 import { NotePickerModal } from "./NotePickerModal";
 import { describeOutgoing } from "./sendSummary";
-import type { ChatMessage } from "../types";
+import type { ChatMessage, MessageSource } from "../types";
 import type { RAGEngine }      from "../rag/RAGEngine";
 import type { HistoryManager } from "../history/HistoryManager";
 import type { ProjectManager } from "../history/ProjectManager";
@@ -73,14 +74,6 @@ interface QuizQuestion {
 }
 
 const MAX_SYSTEM_CHARS   = 120_000;
-
-/** A note that was put into the prompt, shown under the answer. */
-interface SourceRef {
-	label: string;
-	path:  string;
-	/** The fragment that was sent, when the source came from a search. */
-	chunk?: string;
-}
 
 interface ModelOption {
 	id:     string;
@@ -729,7 +722,11 @@ export class GPTChatView extends ItemView {
 		this.chatContainer.empty();
 
 		if (!this.messages.length) { this.renderWelcome(); return; }
-		for (const msg of this.messages) this.appendMessage(msg.role, msg.content);
+		for (const msg of this.messages) {
+			const bubble = this.appendMessage(msg.role, msg.content);
+			// Read back from disk, so validated before anything is drawn.
+			if (msg.role === "assistant") this.renderSources(bubble, sanitizeSources(msg.sources));
+		}
 
 		if (this.modelSelectorBtn && session.model) {
 			this.modelSelectorBtn.title = t("chat_model_session_tooltip", session.title, session.model);
@@ -830,22 +827,11 @@ export class GPTChatView extends ItemView {
 				bubble.createDiv({ cls: "gpt-msg-served-by", text: t("chat_served_by", result.servedBy) });
 			}
 
-			// RAG sources
-			if (ragSources.length) {
-				const srcEl = bubble.parentElement!.createEl("div", { cls: "gpt-rag-sources" });
-				srcEl.createEl("span", { cls: "gpt-rag-src-icon",  text: "🗄️" });
-				srcEl.createEl("span", { cls: "gpt-rag-src-label", text: t("rag_sources_label") });
-				for (const source of ragSources) {
-					const chip = srcEl.createEl("button", {
-						cls:  "gpt-rag-src-chip",
-						text: source.label,
-						attr: { type: "button", title: t(source.chunk ? "rag_source_open_at" : "rag_source_open") },
-					});
-					chip.onclick = () => void this.openSource(source);
-				}
-			}
+			this.renderSources(bubble, ragSources);
 
-			this.messages.push({ role: "assistant", content: reply });
+			const answer: ChatMessage = { role: "assistant", content: reply };
+			if (ragSources.length) answer.sources = ragSources;
+			this.messages.push(answer);
 
 			// Token stats
 			this.lastUsage = usage;
@@ -947,13 +933,31 @@ export class GPTChatView extends ItemView {
 
 	// ── System message builder ──────────────────────────────────────────────────
 
-	private lastRagSources: SourceRef[] = [];
+	private lastRagSources: MessageSource[] = [];
+
+	/** Draws the sources of an answer as buttons under its bubble. */
+	private renderSources(bubble: HTMLElement, sources: MessageSource[]): void {
+		const msgEl = bubble.parentElement;
+		if (!msgEl || !sources.length) return;
+
+		const srcEl = msgEl.createDiv({ cls: "gpt-rag-sources" });
+		srcEl.createSpan({ cls: "gpt-rag-src-icon",  text: "🗄️" });
+		srcEl.createSpan({ cls: "gpt-rag-src-label", text: t("rag_sources_label") });
+		for (const source of sources) {
+			const chip = srcEl.createEl("button", {
+				cls:  "gpt-rag-src-chip",
+				text: source.label,
+				attr: { type: "button", title: t(source.anchor ? "rag_source_open_at" : "rag_source_open") },
+			});
+			chip.onclick = () => void this.openSource(source);
+		}
+	}
 
 	/**
 	 * Opens the note behind a source. For a search result it goes to the fragment
 	 * the model was given and selects it. Everything happens on the device.
 	 */
-	private async openSource(source: SourceRef): Promise<void> {
+	private async openSource(source: MessageSource): Promise<void> {
 		const { vault, workspace } = this.plugin.app;
 		const file = vault.getAbstractFileByPath(source.path);
 		if (!(file instanceof TFile)) {
@@ -962,9 +966,14 @@ export class GPTChatView extends ItemView {
 		}
 
 		let range = null;
-		if (source.chunk && file.extension === "md") {
+		if (source.anchor && file.extension === "md") {
 			try {
-				range = locateChunk(await vault.cachedRead(file), source.chunk);
+				const content = await vault.cachedRead(file);
+				range = locateChunk(content, source.anchor);
+				// The anchor is only the beginning — extend to the whole fragment.
+				if (range && source.length) {
+					range.end = Math.min(content.length, Math.max(range.end, range.start + source.length));
+				}
 			} catch (e) {
 				console.warn("[AI-Vault] could not read source note:", (e as Error)?.message);
 			}
@@ -979,7 +988,7 @@ export class GPTChatView extends ItemView {
 			const to     = editor.offsetToPos(range.end);
 			editor.setSelection(from, to);
 			editor.scrollIntoView({ from, to }, true);
-		} else if (source.chunk && file.extension === "md") {
+		} else if (source.anchor && file.extension === "md") {
 			new Notice(t("rag_source_moved"));
 		}
 	}
@@ -1003,7 +1012,7 @@ export class GPTChatView extends ItemView {
 
 		if (this.learnMode) sys += t("quiz_instruction");
 
-		const ragSources: SourceRef[] = [];
+		const ragSources: MessageSource[] = [];
 
 		// Notes excluded from RAG. Manually attached notes are an explicit user choice and
 		// stay allowed; everything reached implicitly — wikilinks and RAG hits — is filtered.
@@ -1027,9 +1036,9 @@ export class GPTChatView extends ItemView {
 			if (allNotes.length) {
 				const ctx = allNotes.map(({ file, content }) => `### ${file.basename}\n${content.slice(0, 3000)}`);
 				sys += `\n\n---\n${t("rag_manual_ctx_header")}\n\n${ctx.join("\n\n---\n\n")}\n---`;
-				ragSources.push(...this.manualNotes.map(f => ({ label: f.basename, path: f.path })));
+				ragSources.push(...this.manualNotes.map(f => toMessageSource(f.basename, f.path)));
 				const linked = allNotes.filter(n => !this.manualNotes.some(f => f.path === n.file.path));
-				ragSources.push(...linked.map(n => ({ label: `↳ ${n.file.basename}`, path: n.file.path })));
+				ragSources.push(...linked.map(n => toMessageSource(`↳ ${n.file.basename}`, n.file.path)));
 			}
 		}
 
@@ -1043,7 +1052,7 @@ export class GPTChatView extends ItemView {
 			if (filtered.length) {
 				const ctx = filtered.map(r => `### ${r.basename}\n${r.chunk}`).join("\n\n---\n\n");
 				sys += `\n\n---\nVAULT CONTEXT (RAG):\n\n${ctx}\n---`;
-				ragSources.push(...filtered.map(r => ({ label: r.basename, path: r.path, chunk: r.chunk })));
+				ragSources.push(...filtered.map(r => toMessageSource(r.basename, r.path, r.chunk)));
 			}
 		}
 

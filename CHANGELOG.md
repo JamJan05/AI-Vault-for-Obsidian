@@ -9,6 +9,9 @@
 - **Sources open the passage that was used.** Clicking a source under an answer opens the note; for
   a note found by RAG it goes to the fragment the model was given and selects it. The lookup runs on
   your device.
+- **Sources are saved with the conversation**, so they are still there when you open it from the
+  history. Only the note's name, path and the first 200 characters of the fragment are stored, and
+  they are never sent to a provider.
 - Web sources cited by an OpenAI answer are listed under the message as links.
 - A clear message when a Claude model declines a request, instead of "empty response".
 

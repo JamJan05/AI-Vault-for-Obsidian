@@ -2,9 +2,22 @@
 
 export type MessageRole = "user" | "assistant" | "system";
 
+/** A note that was put into the prompt for an answer. Never sent to a provider. */
+export interface MessageSource {
+	label:   string;
+	/** Vault-relative path of the note. */
+	path:    string;
+	/** Beginning of the fragment that was used, to find the passage again. */
+	anchor?: string;
+	/** Length of the whole fragment, so the passage can be selected. */
+	length?: number;
+}
+
 export interface ChatMessage {
 	role:    MessageRole;
 	content: string;
+	/** Kept with an assistant message in the history; stripped from every request. */
+	sources?: MessageSource[];
 }
 
 // ─── History ──────────────────────────────────────────────────────────────────

@@ -154,6 +154,9 @@ available for the Local API.
 
 ### What is never sent
 
+- The sources saved with an answer are kept for you, not for the model. They are
+  removed from the conversation before it is sent to any provider.
+
 - The plugin sends nothing on its own schedule. Every request is caused by an
   action you took: sending a message, refreshing the model list, or indexing.
 - There is no crash reporting, no usage counter, no heartbeat, no install
@@ -179,7 +182,7 @@ You can point this anywhere via **Settings → Storage → Storage path**.
 |---|---|
 | `keys.json` | Your OpenAI, Anthropic and Local API keys |
 | `history-index.json` | Conversation titles, timestamps, model, project link |
-| `history/session-*.json` | The full text of every saved conversation |
+| `history/session-*.json` | The full text of every saved conversation and, for each answer, the sources it used: the note name, its path in the vault, and the first 200 characters of the fragment that was sent |
 | `projects.json` | Project names, descriptions and custom system prompts |
 | `rag-index.json` | Note fragments and their embedding vectors |
 

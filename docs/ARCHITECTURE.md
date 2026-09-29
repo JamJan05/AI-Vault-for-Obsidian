@@ -494,7 +494,10 @@ Notable mechanics:
 - **Sources** — each chip under an answer is a button. `openSource()` opens the note and, for a
   search result, uses `locateChunk()` (`src/rag/locate.ts`, pure and unit tested) to find the
   fragment in the note's current text, then scrolls to it and selects it. If the note changed too
-  much to find the fragment, the note is opened and a notice says so.
+  much to find the fragment, the note is opened and a notice says so. Sources are stored on the
+  assistant message (`ChatMessage.sources`) as a label, a path and a 200-character anchor
+  (`src/rag/sources.ts`), validated by `sanitizeSources()` when a session is loaded, and dropped by
+  the request builders, which copy `role` and `content` only.
 - **Regenerate** lives in the footer of the last message only (hidden elsewhere by CSS).
 - **Pickers** are appended to `doc.body` (not the panel) to escape Obsidian's CSS transforms, then
   positioned from `getBoundingClientRect()` via `setCssStyles`. A document-level `mousedown` handler
