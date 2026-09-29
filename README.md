@@ -143,17 +143,17 @@ This works well for long-running research, coding tasks, study topics, writing w
 
 Inside the AI-Vault chat view you can:
 
-- 🧠 switch reasoning mode,
-- 🔁 regenerate the last response,
-- ⏹️ stop generation,
-- 📋 copy messages and code blocks,
-- 📤 export a conversation to a note,
+- 👀 see what the next message will send, and to whom, before you send it,
+- 🤖 pick a model from any provider in one list,
+- 🧠 switch the thinking mode (Fast, Normal, Thinking),
+- 💬 switch the conversation mode (Chat, Learn, Code),
 - 📚 toggle RAG,
-- 🔄 re-index the vault,
 - 📎 attach notes manually,
 - 🌐 toggle web search,
-- 🎓 enable Learn mode,
-- 💻 enable Code mode.
+- 🔁 regenerate the last response,
+- ⏹️ stop generation,
+- 📋 copy messages,
+- 📤 export a conversation to a note and 🔄 re-index the vault from the "more" menu.
 
 ---
 

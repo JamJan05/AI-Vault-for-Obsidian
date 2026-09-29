@@ -456,16 +456,29 @@ and `stop_reason: "pause_turn"` is resumed up to three times. The extractor conc
 ### 5.6 View layer
 
 **`ChatView` (`gpt-chat-view`, 1 524 lines)** owns the entire chat experience. Its UI is assembled in
-`buildUI()` from seven regions: header (model picker covering every provider, RAG badge, history/projects
-buttons, new chat), thinking-mode bar, project bar, RAG status line, manual-context bar, message list,
-input area with the tool row.
+`buildUI()` from six regions: header (model picker covering every provider, history/projects buttons,
+a "more" menu with export and re-index, new chat), project bar, RAG status line, manual-context bar,
+message list, and the input area — tool row (RAG, notes, web search, conversation mode), the send
+summary, the textarea, and a row with the thinking-mode menu, token counter and Send.
 
-State it holds: `messages`, `webSearchActive`, `learnMode`, `codeMode`, `manualNotes`, `currentMode`,
-`abortController`, `lastUsage`, `lastRagSources`, plus picker bookkeeping
-(`currentPicker`, `currentPickerKind`, `pickerCloseHandler`).
+State it holds: `messages`, `webSearchActive`, `chatMode` (`chat` / `learn` / `code`, one at a time),
+`manualNotes`, `currentMode`, `abortController`, `lastUsage`, `lastRagSources`, plus picker
+bookkeeping (`currentPicker`, `pickerCloseHandler`).
 
 Notable mechanics:
 
+- **Send summary** — `updateSendSummary()` renders `describeOutgoing()` (`src/views/sendSummary.ts`,
+  pure and unit tested) above the input: the destination and everything the next message will carry.
+  A loopback Local API is shown as "this device", a remote one by hostname, and plain HTTP to a
+  remote host is flagged. When semantic search is on and the chat provider is not OpenAI, it also
+  says that the question goes to OpenAI.
+- **Menus** — the thinking mode, the conversation mode and the header actions use Obsidian's `Menu`.
+  The note picker is `NotePickerModal`, a regular Obsidian `Modal`.
+- **Failed exchanges** — when a request fails, the question is removed from `messages` and both
+  bubbles are marked `gpt-msg-failed`. Regenerate retries the failed question from the screen, the
+  next message removes the marked bubbles, and marked bubbles are never counted when bubbles are
+  matched to messages. An aborted request with no answer returns the question to the input.
+- **Regenerate** lives in the footer of the last message only (hidden elsewhere by CSS).
 - **Pickers** are appended to `doc.body` (not the panel) to escape Obsidian's CSS transforms, then
   positioned from `getBoundingClientRect()` via `setCssStyles`. A document-level `mousedown` handler
   closes them; it is registered on a `setTimeout(0)` so the opening click cannot immediately close it,

@@ -2,6 +2,7 @@ import {
 	Component,
 	ItemView,
 	MarkdownRenderer,
+	Menu,
 	Notice,
 	setIcon,
 	WorkspaceLeaf,
@@ -30,6 +31,8 @@ import { callLocalApi } from "../api/local";
 import { parseCanvasToText }   from "../rag/canvasParser";
 import { resolveNoteWithLinks } from "../rag/linkResolver";
 import { FallbackModal } from "./FallbackModal";
+import { NotePickerModal } from "./NotePickerModal";
+import { describeOutgoing } from "./sendSummary";
 import type { ChatMessage } from "../types";
 import type { RAGEngine }      from "../rag/RAGEngine";
 import type { HistoryManager } from "../history/HistoryManager";
@@ -77,6 +80,14 @@ interface ModelOption {
 	legacy: boolean;
 }
 
+type ChatMode = "chat" | "learn" | "code";
+
+const CHAT_MODE_ICONS: Record<ChatMode, string> = {
+	chat:  "message-circle",
+	learn: "book-open",
+	code:  "code",
+};
+
 interface ModelGroup {
 	provider: Provider;
 	title:    string;
@@ -89,8 +100,7 @@ export class GPTChatView extends ItemView {
 	// State
 	messages:        ChatMessage[] = [];
 	webSearchActive  = false;
-	learnMode        = false;
-	codeMode         = false;
+	chatMode:        ChatMode = "chat";
 	manualNotes:     TFile[] = [];
 	currentMode:     string | null = null;
 	abortController: AbortController | null = null;
@@ -110,18 +120,17 @@ export class GPTChatView extends ItemView {
 	private sendBtn!:          HTMLButtonElement;
 	private stopBtn:           HTMLButtonElement | null = null;
 	private ragStatusEl!:      HTMLElement;
-	private ragBadge!:         HTMLElement;
 	private ragToggleBtn!:     HTMLButtonElement;
 	private webSearchBtn!:     HTMLButtonElement;
-	private learnBtn!:         HTMLButtonElement;
-	private codeBtn!:          HTMLButtonElement;
+	private chatModeBtn!:      HTMLButtonElement;
+	private thinkingBtn!:      HTMLButtonElement;
+	private summaryEl!:        HTMLElement;
 	private modelSelectorBtn!: HTMLButtonElement;
 	private projectBar!:       HTMLElement;
 	private projectBarLabel!:  HTMLElement;
 	private manualBar!:        HTMLElement;
 	private manualBarList!:    HTMLElement;
 	private modeLabel!:        HTMLElement;
-	private modeButtons:       Record<string, HTMLButtonElement> = {};
 
 	constructor(leaf: WorkspaceLeaf, private readonly plugin: PluginWithDeps) {
 		super(leaf);
@@ -131,6 +140,8 @@ export class GPTChatView extends ItemView {
 
 	private get settings(): PluginSettings { return this.plugin.settings; }
 	private get rag():      RAGEngine      { return this.plugin.rag; }
+	private get learnMode(): boolean       { return this.chatMode === "learn"; }
+	private get codeMode():  boolean       { return this.chatMode === "code"; }
 
 	getViewType():    string { return CHAT_VIEW_TYPE; }
 	getDisplayText(): string { return "AI-Vault"; }
@@ -167,12 +178,13 @@ export class GPTChatView extends ItemView {
 
 	private async startIndexing(): Promise<void> {
 		if (this.rag.indexing) return;
-		this.showRagStatus("⏳ Indexing vault…", "indexing");
+		this.showRagStatus(t("rag_indexing_status"), "indexing");
 		await this.rag.buildIndex((done, total) => {
-			if (this.ragStatusEl) this.ragStatusEl.textContent = `⏳ Indexing… ${done}/${total}`;
+			if (this.ragStatusEl) this.ragStatusEl.textContent = t("rag_indexing_progress", done, total);
 		});
 		const s = this.rag.stats;
 		this.showRagStatus(t("rag_ready_full", s.files, s.embeddings), "ready");
+		this.updateSendSummary();
 		window.setTimeout(() => this.hideRagStatus(), 4000);
 	}
 
@@ -195,7 +207,6 @@ export class GPTChatView extends ItemView {
 		root.addClass("gpt-chat-root");
 
 		this.buildHeader(root);
-		this.buildModeBar(root);
 		this.buildProjectBar(root);
 		this.buildRagStatus(root);
 		this.buildManualBar(root);
@@ -210,16 +221,14 @@ export class GPTChatView extends ItemView {
 	}
 
 	private buildHeader(root: HTMLElement): void {
-		const header = root.createEl("div", { cls: "gpt-header" });
-		header.createEl("span", { cls: "gpt-header-icon", text: "✦" });
+		const header = root.createDiv({ cls: "gpt-header" });
+		header.createSpan({ cls: "gpt-header-icon", text: "✦" });
 
 		this.modelSelectorBtn = header.createEl("button", { cls: "gpt-model-selector" });
 		this.modelSelectorBtn.onclick = () => this.openModelPicker();
-
-		this.ragBadge = header.createEl("span", { cls: "gpt-rag-badge" });
-		this.updateRagBadge();
-
 		this.updateModelSelector();
+
+		header.createDiv({ cls: "gpt-header-spacer" });
 
 		const histBtn = header.createEl("button", { cls: "gpt-icon-btn", attr: { "aria-label": t("cmd_open_history") } });
 		this.setButtonIcon(histBtn, "history");
@@ -229,22 +238,26 @@ export class GPTChatView extends ItemView {
 		this.setButtonIcon(projBtn, "folder");
 		projBtn.onclick   = () => void this.plugin.activateProjectsView();
 
+		const moreBtn = header.createEl("button", { cls: "gpt-icon-btn", attr: { "aria-label": t("chat_more") } });
+		this.setButtonIcon(moreBtn, "more-horizontal");
+		moreBtn.onclick   = (e: MouseEvent) => this.openMoreMenu(e);
+
 		const clearBtn = header.createEl("button", { cls: "gpt-clear-btn", text: t("chat_new") });
 		clearBtn.onclick = () => this.plugin.newChat();
 	}
 
-	private buildModeBar(root: HTMLElement): void {
-		const bar = root.createEl("div", { cls: "gpt-mode-bar" });
-		for (const [key, m] of Object.entries(THINKING_MODES)) {
-			const btn = bar.createEl("button", {
-				cls:  "gpt-mode-btn",
-				text: m.label,
-				attr: { title: m.desc },
-			});
-			btn.onclick = () => this.setMode(key);
-			this.modeButtons[key] = btn;
-		}
-		this.setMode(this.settings.thinkingMode, true);
+	private openMoreMenu(event: MouseEvent): void {
+		const menu = new Menu();
+		menu.addItem(item => item
+			.setTitle(t("chat_export_tooltip"))
+			.setIcon("file-up")
+			.onClick(() => void this.exportToNote()));
+		menu.addItem(item => item
+			.setTitle(t("chat_title_index"))
+			.setIcon("refresh-cw")
+			.setDisabled(this.rag.indexing)
+			.onClick(() => void this.startIndexing()));
+		menu.showAtMouseEvent(event);
 	}
 
 	private buildProjectBar(root: HTMLElement): void {
@@ -272,8 +285,8 @@ export class GPTChatView extends ItemView {
 	}
 
 	private buildInputArea(root: HTMLElement): void {
-		const area    = root.createEl("div", { cls: "gpt-input-area" });
-		const toolRow = area.createEl("div", { cls: "gpt-tool-row" });
+		const area    = root.createDiv({ cls: "gpt-input-area" });
+		const toolRow = area.createDiv({ cls: "gpt-tool-row" });
 
 		// RAG toggle
 		this.ragToggleBtn = toolRow.createEl("button", {
@@ -282,11 +295,6 @@ export class GPTChatView extends ItemView {
 		});
 		this.setButtonIcon(this.ragToggleBtn, "database", t("chat_btn_rag"));
 		this.ragToggleBtn.onclick   = () => this.toggleRag();
-
-		// Re-index
-		const reindexBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_index") } });
-		this.setButtonIcon(reindexBtn, "refresh-cw", t("chat_btn_index"));
-		reindexBtn.onclick   = async () => { reindexBtn.disabled = true; await this.startIndexing(); reindexBtn.disabled = false; };
 
 		// Note picker
 		const pickBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_notes") } });
@@ -298,20 +306,18 @@ export class GPTChatView extends ItemView {
 		this.setButtonIcon(this.webSearchBtn, "globe", t("chat_btn_internet"));
 		this.webSearchBtn.onclick   = () => this.toggleWebSearch();
 
-		// Learn mode
-		this.learnBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_learn") } });
-		this.setButtonIcon(this.learnBtn, "book-open", t("chat_btn_learn"));
-		this.learnBtn.onclick   = () => this.toggleLearnMode();
+		// Chat mode — plain chat, learn or code; only one at a time
+		this.chatModeBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_mode") } });
+		this.chatModeBtn.onclick    = (e: MouseEvent) => this.openChatModeMenu(e);
+		this.updateChatModeButton();
 
-		// Code mode
-		this.codeBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_code") } });
-		this.setButtonIcon(this.codeBtn, "code", t("chat_btn_code"));
-		this.codeBtn.onclick   = () => this.toggleCodeMode();
+		// What the next message will send, and to whom
+		this.summaryEl = area.createDiv({ cls: "gpt-send-summary" });
 
 		// Textarea
 		this.inputEl = area.createEl("textarea", {
 			cls:  "gpt-input",
-			attr: { placeholder: t("chat_placeholder"), rows: "3" },
+			attr: { placeholder: this.getInputPlaceholder(), rows: "3" },
 		});
 		// registerDomEvent instead of addEventListener — lets Obsidian know this element handles the keyboard
 		// prevents Obsidian's global handler from intercepting Enter/shortcuts
@@ -320,20 +326,16 @@ export class GPTChatView extends ItemView {
 		});
 
 		// Button row
-		const btnRow = area.createEl("div", { cls: "gpt-btn-row" });
-		this.modeLabel = btnRow.createEl("span", { cls: "gpt-mode-label" });
-		this.updateModeLabel();
-
-		const regenBtn = btnRow.createEl("button", { cls: "gpt-action-btn", attr: { title: t("chat_regen_tooltip") } });
-		this.setButtonIcon(regenBtn, "refresh-cw");
-		regenBtn.onclick   = () => void this.regenerateLastMessage();
-
-		const exportBtn = btnRow.createEl("button", { cls: "gpt-action-btn", attr: { title: t("chat_export_tooltip") } });
-		this.setButtonIcon(exportBtn, "file-up");
-		exportBtn.onclick   = () => void this.exportToNote();
+		const btnRow = area.createDiv({ cls: "gpt-btn-row" });
+		this.thinkingBtn = btnRow.createEl("button", { cls: "gpt-thinking-btn", attr: { title: t("chat_title_thinking") } });
+		this.thinkingBtn.onclick = (e: MouseEvent) => this.openThinkingMenu(e);
+		this.modeLabel = btnRow.createSpan({ cls: "gpt-mode-label" });
+		this.setMode(this.settings.thinkingMode);
 
 		this.sendBtn = btnRow.createEl("button", { cls: "gpt-send-btn", text: t("chat_send") });
 		this.sendBtn.onclick = () => void this.sendMessage();
+
+		this.updateSendSummary();
 	}
 
 	// ── Note picker ─────────────────────────────────────────────────────────────
@@ -343,62 +345,12 @@ export class GPTChatView extends ItemView {
 		const files = this.plugin.app.vault.getFiles()
 			.filter((file: TFile) => file.extension === "md" || file.extension === "canvas")
 			.sort((a, b) => a.basename.localeCompare(b.basename));
-		const doc         = this.containerEl.ownerDocument;
 
-		const overlay = doc.createElement("div");
-		overlay.className = "gpt-modal-overlay";
-		const box = doc.createElement("div");
-		box.className = "gpt-modal-box";
-
-		box.createEl("p", { cls: "gpt-modal-title", text: t("chat_notes_title") });
-
-		const searchInput = box.createEl("input", {
-			cls:  "gpt-modal-input",
-			attr: { type: "text", placeholder: t("chat_notes_search") },
-		});
-
-		const list     = box.createEl("div", { cls: "gpt-modal-list" });
-		const selected = new Set(this.manualNotes.map(f => f.path));
-
-		const renderList = (filter = ""): void => {
-			list.empty();
-			const filtered = files.filter(f => f.basename.toLowerCase().includes(filter.toLowerCase()));
-			for (const f of filtered.slice(0, 50)) {
-				const row = list.createEl("label", { cls: "gpt-modal-row" });
-				const cb  = row.createEl("input", { cls: "gpt-modal-checkbox", attr: { type: "checkbox" } });
-				cb.checked        = selected.has(f.path);
-				cb.onchange = () => {
-					if (selected.has(f.path)) selected.delete(f.path);
-					else selected.add(f.path);
-				};
-				const icon = f.extension === "canvas" ? "🗂️ " : "";
-				row.createEl("span", { cls: "gpt-modal-row-label", text: icon + f.basename });
-			}
-			if (filtered.length > 50) {
-				list.createEl("div", {
-					cls:  "gpt-modal-more",
-					text: t("chat_notes_more", filtered.length - 50),
-				});
-			}
-		};
-		renderList();
-		searchInput.oninput = () => renderList(searchInput.value);
-
-		const btns   = box.createEl("div", { cls: "gpt-modal-btns" });
-		const cancel = btns.createEl("button", { cls: "gpt-modal-cancel", text: t("chat_notes_cancel") });
-		cancel.onclick = () => overlay.remove();
-
-		const ok = btns.createEl("button", { cls: "gpt-modal-ok", text: t("chat_notes_add") });
-		ok.onclick = () => {
-			this.manualNotes = files.filter(f => selected.has(f.path));
+		new NotePickerModal(this.plugin.app, files, this.manualNotes, picked => {
+			this.manualNotes = picked;
 			this.updateManualBar();
-			overlay.remove();
-			if (this.manualNotes.length) new Notice(t("chat_notes_added", this.manualNotes.length));
-		};
-
-		overlay.appendChild(box);
-		this.containerEl.appendChild(overlay);
-		window.setTimeout(() => searchInput.focus(), 50);
+			if (picked.length) new Notice(t("chat_notes_added", picked.length));
+		}).open();
 	}
 
 	updateManualBar(): void {
@@ -406,10 +358,29 @@ export class GPTChatView extends ItemView {
 		if (!this.manualNotes.length) {
 			this.manualBar.addClass("gpt-ctx-hidden");
 			this.manualBarList.textContent = "";
+			this.updateSendSummary();
 			return;
 		}
 		this.manualBar.removeClass("gpt-ctx-hidden");
 		this.manualBarList.textContent = "📎 " + this.manualNotes.map(f => f.basename).join(", ");
+		this.updateSendSummary();
+	}
+
+	/** Refreshes the line that says what the next message will send, and to whom. */
+	updateSendSummary(): void {
+		if (!this.summaryEl) return;
+		const summary = describeOutgoing({
+			provider:       this.settings.provider,
+			localBaseUrl:   this.settings.localBaseUrl ?? "",
+			ragActive:      this.settings.ragEnabled && this.rag.indexed,
+			semanticActive: this.rag.embeddingsAllowed,
+			attachedNotes:  this.manualNotes.length,
+			webSearch:      this.webSearchActive,
+			projectActive:  Boolean(this.plugin.activeProjectId),
+			historyLimit:   this.settings.maxContextMessages ?? 0,
+		});
+		this.summaryEl.textContent = summary.text;
+		this.summaryEl.classList.toggle("gpt-send-summary--warning", summary.warning);
 	}
 
 	// ── Controls ────────────────────────────────────────────────────────────────
@@ -418,21 +389,12 @@ export class GPTChatView extends ItemView {
 		this.settings.ragEnabled = !this.settings.ragEnabled;
 		void this.plugin.saveSettings();
 		this.ragToggleBtn.classList.toggle("gpt-rag-btn--active", this.settings.ragEnabled);
-		this.updateRagBadge();
+		this.updateSendSummary();
 		new Notice(this.settings.ragEnabled ? t("rag_on_notice") : t("rag_off_notice"));
 	}
 
-	updateRagBadge(): void {
-		if (!this.ragBadge) return;
-		this.ragBadge.textContent   = this.settings.ragEnabled ? "RAG" : "";
-		if (this.settings.ragEnabled) {
-			this.ragBadge.removeClass("gpt-ctx-hidden");
-		} else {
-			this.ragBadge.addClass("gpt-ctx-hidden");
-		}
-	}
-
 	updateProjectBar(): void {
+		this.updateSendSummary();
 		if (!this.projectBar) return;
 		const projId = this.plugin.activeProjectId;
 		if (!projId) {
@@ -451,18 +413,71 @@ export class GPTChatView extends ItemView {
 		this.projectBarLabel.textContent = t("projects_bar_label", proj.name, sessions.length) + promptBadge;
 	}
 
-	setMode(key: string, silent = false): void {
-		this.currentMode = key;
-		for (const [k, btn] of Object.entries(this.modeButtons)) {
-			btn.classList.toggle("gpt-mode-btn--active", k === key);
-		}
-		if (!silent) this.updateModeLabel();
+	setMode(key: string): void {
+		this.currentMode = THINKING_MODES[key] ? key : "normal";
+		if (!this.thinkingBtn) return;
+
+		const mode = THINKING_MODES[this.currentMode];
+		this.thinkingBtn.empty();
+		this.thinkingBtn.createSpan({ text: mode.label });
+		const arrow = this.thinkingBtn.createSpan({ cls: "gpt-ms-arrow" });
+		setIcon(arrow, "chevron-down");
 	}
 
-	private updateModeLabel(): void {
-		if (!this.modeLabel) return;
-		const m = THINKING_MODES[this.currentMode ?? ""];
-		this.modeLabel.textContent = m ? `${m.label} · ${m.desc}` : "";
+	private openThinkingMenu(event: MouseEvent): void {
+		const menu = new Menu();
+		for (const [key, mode] of Object.entries(THINKING_MODES)) {
+			menu.addItem(item => item
+				.setTitle(`${mode.label} — ${mode.desc}`)
+				.setChecked(key === this.currentMode)
+				.onClick(() => this.setMode(key)));
+		}
+		menu.showAtMouseEvent(event);
+	}
+
+	private getChatModeLabel(mode: ChatMode): string {
+		if (mode === "learn") return t("chat_btn_learn");
+		if (mode === "code")  return t("chat_btn_code");
+		return t("chat_btn_chat");
+	}
+
+	private getChatModeDesc(mode: ChatMode): string {
+		if (mode === "learn") return t("chat_title_learn");
+		if (mode === "code")  return t("chat_title_code");
+		return t("chat_title_chat");
+	}
+
+	private updateChatModeButton(): void {
+		if (!this.chatModeBtn) return;
+		this.setButtonIcon(this.chatModeBtn, CHAT_MODE_ICONS[this.chatMode], this.getChatModeLabel(this.chatMode));
+		this.chatModeBtn.classList.toggle("gpt-learn-btn--active", this.chatMode === "learn");
+		this.chatModeBtn.classList.toggle("gpt-code-btn--active", this.chatMode === "code");
+	}
+
+	private openChatModeMenu(event: MouseEvent): void {
+		const menu = new Menu();
+		for (const mode of ["chat", "learn", "code"] as const) {
+			menu.addItem(item => item
+				.setTitle(this.getChatModeDesc(mode))
+				.setIcon(CHAT_MODE_ICONS[mode])
+				.setChecked(mode === this.chatMode)
+				.onClick(() => this.setChatMode(mode)));
+		}
+		menu.showAtMouseEvent(event);
+	}
+
+	setChatMode(mode: ChatMode): void {
+		if (mode === this.chatMode) return;
+		this.chatMode = mode;
+		this.updateChatModeButton();
+		if (this.inputEl) this.inputEl.placeholder = this.getInputPlaceholder();
+		new Notice(t("chat_mode_changed", this.getChatModeLabel(mode)));
+	}
+
+	private getInputPlaceholder(): string {
+		if (this.chatMode === "learn") return t("chat_placeholder_learn");
+		if (this.chatMode === "code")  return t("chat_placeholder_code");
+		return this.getProviderPlaceholder(this.settings.provider);
 	}
 
 	private getCurrentActiveModel(): string {
@@ -558,6 +573,7 @@ export class GPTChatView extends ItemView {
 
 		this.webSearchActive = false;
 		this.webSearchBtn?.classList.remove("gpt-websearch-btn--active");
+		this.updateSendSummary();
 	}
 
 	toggleWebSearch(): void {
@@ -574,6 +590,7 @@ export class GPTChatView extends ItemView {
 		}
 		this.webSearchActive = !this.webSearchActive;
 		this.webSearchBtn.classList.toggle("gpt-websearch-btn--active", this.webSearchActive);
+		this.updateSendSummary();
 
 		if (this.webSearchActive && provider === "anthropic") {
 			new Notice(t("ws_claude_enabled", activeModel));
@@ -581,31 +598,6 @@ export class GPTChatView extends ItemView {
 			new Notice(this.webSearchActive
 				? t("ws_enabled", activeModel)
 				: t("ws_disabled"));
-		}
-	}
-
-	toggleLearnMode(): void {
-		this.learnMode = !this.learnMode;
-		this.learnBtn.classList.toggle("gpt-learn-btn--active", this.learnMode);
-		if (this.learnMode) {
-			new Notice(t("mode_learn_on"));
-			this.inputEl.placeholder = t("chat_placeholder_learn");
-		} else {
-			new Notice(t("mode_learn_off"));
-			this.inputEl.placeholder = this.getProviderPlaceholder(this.getEffectiveProvider());
-		}
-	}
-
-	toggleCodeMode(): void {
-		this.codeMode = !this.codeMode;
-		this.codeBtn.classList.toggle("gpt-code-btn--active", this.codeMode);
-		const provName = this.getProviderLabel(this.getEffectiveProvider());
-		if (this.codeMode) {
-			new Notice(t("mode_code_on", provName));
-			this.inputEl.placeholder = t("chat_placeholder_code");
-		} else {
-			new Notice(t("mode_code_off"));
-			this.inputEl.placeholder = this.getProviderPlaceholder(this.getEffectiveProvider());
 		}
 	}
 
@@ -627,9 +619,8 @@ export class GPTChatView extends ItemView {
 		setIcon(arrow, "chevron-down");
 		this.modelSelectorBtn.title = t("chat_model_tooltip", model);
 
-		if (this.inputEl && !this.codeMode && !this.learnMode) {
-			this.inputEl.placeholder = this.getProviderPlaceholder(provider);
-		}
+		if (this.inputEl) this.inputEl.placeholder = this.getInputPlaceholder();
+		this.updateSendSummary();
 	}
 
 	private closePicker(): void {
@@ -743,7 +734,7 @@ export class GPTChatView extends ItemView {
 		this.updateManualBar();
 		this.chatContainer.empty();
 		this.renderWelcome();
-		this.updateModeLabel();
+		if (this.modeLabel) { this.modeLabel.textContent = ""; this.modeLabel.title = ""; }
 		this.updateModelSelector();
 	}
 
@@ -762,8 +753,10 @@ export class GPTChatView extends ItemView {
 
 		if (!override) this.inputEl.value = "";
 		this.sendBtn.disabled = true;
+		// A failed exchange left on screen is superseded by this message.
+		this.chatContainer.querySelectorAll(".gpt-msg-failed").forEach(el => el.remove());
 		this.messages.push({ role: "user", content: userText });
-		this.appendMessage("user", userText);
+		const userMsgEl = this.appendMessage("user", userText).parentElement;
 
 		const bubble = this.appendMessage("assistant", "");
 		this.setLoading(bubble, true, webSearchEnabled);
@@ -874,11 +867,17 @@ export class GPTChatView extends ItemView {
 				this.messages.push({ role: "assistant", content: partial });
 				await this.plugin.autoSaveSession(this.messages);
 			} else if (isAbort) {
+				// Nothing was answered: take the question back out of the transcript
+				// and hand it back to the user instead of losing it.
 				this.messages.pop();
 				bubble.parentElement?.remove();
+				userMsgEl?.remove();
+				if (!this.inputEl.value.trim()) this.inputEl.value = userText;
 			} else if (err instanceof ModelAccessError && activeProvider === "openai") {
+				// The retry from the dialog sends — and draws — the question again.
 				this.messages.pop();
 				bubble.parentElement?.remove();
+				userMsgEl?.remove();
 				const failed   = error.message;
 				const failedModel  = err.model ?? activeModel;
 				const fallbackModel = getFallbackModel(failedModel);
@@ -896,7 +895,11 @@ export class GPTChatView extends ItemView {
 					},
 				}).open();
 			} else {
+				// The exchange is not part of the conversation. Both bubbles stay
+				// visible but are marked, so they are never counted as messages.
 				this.messages.pop();
+				userMsgEl?.addClass("gpt-msg-failed");
+				bubble.parentElement?.addClass("gpt-msg-failed");
 				if (contentEl) {
 					contentEl.empty();
 					contentEl.createEl("div", { cls: "gpt-msg-error-line", text: `❌ ${t("err_stream")}: ${error.message}` });
@@ -910,6 +913,7 @@ export class GPTChatView extends ItemView {
 			this.showStopBtn(false);
 			this.abortController  = null;
 			this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
+			this.updateSendSummary();
 		}
 	}
 
@@ -1032,7 +1036,17 @@ export class GPTChatView extends ItemView {
 				.catch(error => console.error("[AI-Vault] Copy failed:", error));
 		};
 
-		if (content) bubble.dataset.raw = content;
+		if (role === "assistant") {
+			// Styled to show on the last message only — see styles.css.
+			const regenBtn = footer.createEl("button", {
+				cls:  "gpt-copy-btn gpt-regen-btn",
+				attr: { title: t("chat_regen_tooltip"), "aria-label": t("chat_regen_tooltip") },
+			});
+			this.setButtonIcon(regenBtn, "refresh-cw");
+			regenBtn.onclick = () => void this.regenerateLastMessage();
+		}
+
+		if (role === "user" || content) bubble.dataset.raw = content;
 		this.chatContainer.scrollTop = this.chatContainer.scrollHeight;
 		return bubble;
 	}
@@ -1075,38 +1089,47 @@ export class GPTChatView extends ItemView {
 
 	private updateTokenCounter(tokens: number, usage: StreamUsage | null): void {
 		if (!this.modeLabel) return;
-		const m   = THINKING_MODES[this.currentMode ?? ""];
 		const fmt = (n: number): string => n > 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-		const parts: string[] = [m ? m.label : ""];
+		const parts: string[] = [];
 
 		if (usage) {
-			parts.push(`${fmt(usage.input + usage.output)} total`);
-			parts.push(`${fmt(usage.input)} in`);
-			parts.push(`${fmt(usage.output)} out`);
-			if (usage.reasoning > 0) parts.push(`${fmt(usage.reasoning)} reasoning`);
+			parts.push(t("tokens_total", fmt(usage.input + usage.output)));
+			parts.push(t("tokens_in", fmt(usage.input)));
+			parts.push(t("tokens_out", fmt(usage.output)));
+			if (usage.reasoning > 0) parts.push(t("tokens_reasoning", fmt(usage.reasoning)));
 		} else {
-			parts.push(`${fmt(tokens)} total`);
+			parts.push(t("tokens_total", `~${fmt(tokens)}`));
 		}
 
 		this.modeLabel.textContent = parts.join(" · ");
-
-		if (usage) {
-			this.modeLabel.title =
-				`Input: ${usage.input} tok\nOutput: ${usage.output} tok` +
-				(usage.reasoning > 0 ? `\nReasoning: ${usage.reasoning} tok` : "");
-		}
+		this.modeLabel.title = "";
 	}
 
 	async regenerateLastMessage(): Promise<void> {
-		if (this.messages.length < 2) return;
-		const rev = [...this.messages].reverse();
-		const lastUserIdx = rev.findIndex(m => m.role === "user");
-		if (lastUserIdx < 0) return;
-		const idx      = this.messages.length - 1 - lastUserIdx;
+		if (this.abortController) return;
+
+		// A failed exchange is not in this.messages — retry it from what is on screen.
+		const failed = Array.from(this.chatContainer.querySelectorAll<HTMLElement>(".gpt-msg-failed"));
+		const failedUser = failed.filter(el => el.hasClass("gpt-msg-user")).pop();
+		if (failedUser) {
+			const text = failedUser.querySelector<HTMLElement>(".gpt-bubble")?.dataset.raw ?? "";
+			for (const el of failed) el.remove();
+			if (text) await this.sendMessage(text);
+			return;
+		}
+
+		let idx = -1;
+		for (let i = this.messages.length - 1; i >= 0; i--) {
+			if (this.messages[i].role === "user") { idx = i; break; }
+		}
+		if (idx < 0) return;
+
 		const userText = this.messages[idx].content;
 		this.messages  = this.messages.slice(0, idx);
-		const allMsgs  = this.chatContainer.querySelectorAll(".gpt-msg");
-		for (let i = allMsgs.length - 1; i >= idx; i--) allMsgs[i].remove();
+		// Failed exchanges are on screen but not in this.messages, so they are
+		// left out when matching bubbles to messages.
+		const shown = this.chatContainer.querySelectorAll(".gpt-msg:not(.gpt-msg-failed)");
+		for (let i = shown.length - 1; i >= idx; i--) shown[i].remove();
 		await this.sendMessage(userText);
 	}
 

@@ -86,11 +86,10 @@ export class GPTSettingsTab extends PluginSettingTab {
 			...this.apiKeySyncRows(),
 			this.modelGroup(),
 			this.localApiGroup(),
-			this.thinkingGroup(),
-			this.maxTokensGroup(),
-			this.contextGroup(),
+			this.chatGroup(),
 			this.ragGroup(),
 			this.storageGroup(),
+			this.advancedGroup(),
 		];
 	}
 
@@ -670,28 +669,6 @@ export class GPTSettingsTab extends PluginSettingTab {
 
 	// ── Thinking mode and token limits ─────────────────────────────────────────
 
-	private thinkingGroup(): SettingDefinitionGroup {
-		return {
-			type: "group",
-			heading: "⚙️ " + t("settings_openai_title") + " — " + t("settings_thinking_name"),
-			items: [{
-				name: t("settings_thinking_name"),
-				render: (setting: Setting) => {
-					setting.addDropdown(d => d
-						.addOption("fast",   t("chat_mode_fast"))
-						.addOption("normal", t("chat_mode_normal"))
-						.addOption("think",  t("chat_mode_think"))
-						.setValue(this.plugin.settings.thinkingMode)
-						.onChange(async (v: string) => {
-							this.plugin.settings.thinkingMode = v as "fast" | "normal" | "think";
-							await this.plugin.saveSettings();
-						}),
-					);
-				},
-			}],
-		};
-	}
-
 	/** Numeric input shared by the three token limits. */
 	private tokenLimitRow(
 		name: string,
@@ -720,7 +697,24 @@ export class GPTSettingsTab extends PluginSettingTab {
 		};
 	}
 
-	private maxTokensGroup(): SettingDefinitionGroup {
+	private chatGroup(): SettingDefinitionGroup {
+		const thinkingRow: SettingDefinitionRender = {
+			name: t("settings_thinking_name"),
+			desc: t("settings_thinking_desc"),
+			render: (setting: Setting) => {
+				setting.addDropdown(d => d
+					.addOption("fast",   t("chat_mode_fast"))
+					.addOption("normal", t("chat_mode_normal"))
+					.addOption("think",  t("chat_mode_think"))
+					.setValue(this.plugin.settings.thinkingMode)
+					.onChange(async (v: string) => {
+						this.plugin.settings.thinkingMode = v as "fast" | "normal" | "think";
+						await this.plugin.saveSettings();
+					}),
+				);
+			},
+		};
+
 		const systemPromptRow: SettingDefinitionRender = {
 			name: t("settings_system_prompt_name"),
 			desc: t("settings_system_prompt_desc"),
@@ -749,7 +743,18 @@ export class GPTSettingsTab extends PluginSettingTab {
 
 		return {
 			type: "group",
-			heading: t("settings_max_tokens_title"),
+			heading: t("settings_chat_title"),
+			items: [thinkingRow, systemPromptRow],
+		};
+	}
+
+	// ── Advanced ───────────────────────────────────────────────────────────────
+
+	/** Limits most people never change, kept out of the way at the bottom. */
+	private advancedGroup(): SettingDefinitionGroup {
+		return {
+			type: "group",
+			heading: t("settings_advanced_title"),
 			items: [
 				this.tokenLimitRow(
 					t("settings_max_tokens_fast_name"),
@@ -769,36 +774,30 @@ export class GPTSettingsTab extends PluginSettingTab {
 					() => this.plugin.settings.maxTokensThink ?? 16000,
 					n => { this.plugin.settings.maxTokensThink = n; },
 				),
-				systemPromptRow,
+				this.contextLimitRow(),
 			],
 		};
 	}
 
-	// ── Conversation context ───────────────────────────────────────────────────
-
-	private contextGroup(): SettingDefinitionGroup {
+	private contextLimitRow(): SettingDefinitionRender {
 		return {
-			type: "group",
-			heading: "💬 " + t("settings_context_title"),
-			items: [{
-				name: t("settings_context_name"),
-				desc: t("settings_context_desc"),
-				render: (setting: Setting) => {
-					setting.addText(txt => {
-						txt.inputEl.type = "number";
-						txt.inputEl.min  = "0";
-						txt.inputEl.addClass("gpt-settings-input-compact");
-						txt.setValue(String(this.plugin.settings.maxContextMessages ?? 0))
-							.onChange(async (v: string) => {
-								const n = parseInt(v, 10);
-								if (!isNaN(n) && n >= 0) {
-									this.plugin.settings.maxContextMessages = n;
-									await this.plugin.saveSettings();
-								}
-							});
-					});
-				},
-			}],
+			name: t("settings_context_name"),
+			desc: t("settings_context_desc"),
+			render: (setting: Setting) => {
+				setting.addText(txt => {
+					txt.inputEl.type = "number";
+					txt.inputEl.min  = "0";
+					txt.inputEl.addClass("gpt-settings-input-compact");
+					txt.setValue(String(this.plugin.settings.maxContextMessages ?? 0))
+						.onChange(async (v: string) => {
+							const n = parseInt(v, 10);
+							if (!isNaN(n) && n >= 0) {
+								this.plugin.settings.maxContextMessages = n;
+								await this.plugin.saveSettings();
+							}
+						});
+				});
+			},
 		};
 	}
 

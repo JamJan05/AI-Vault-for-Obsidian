@@ -76,6 +76,10 @@ The request contains, in this order:
 
 The assembled system prompt is truncated at 120 000 characters.
 
+The chat view shows a one-line summary of this above the input before you send:
+the destination (the provider, "this device" for a loopback Local API, or the
+hostname of a remote one) and which of the items above the message will carry.
+
 ### When the RAG index is built
 
 **By default, building the index sends nothing.** The index is a keyword (BM25)

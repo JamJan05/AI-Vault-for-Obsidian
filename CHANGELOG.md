@@ -10,6 +10,13 @@
 - A clear message when a Claude model declines a request, instead of "empty response".
 
 ### Changed
+- **Simpler chat view.** The thinking mode is a menu next to Send instead of a bar of buttons. Learn
+  and Code are one "conversation mode" menu, so they can no longer be on at the same time.
+  Regenerate sits under the last answer, and export and re-index moved to a "more" menu in the header.
+  The RAG badge is gone; the RAG button already shows the state.
+- **Simpler settings.** The default thinking mode and the system prompt are grouped under "Chat";
+  token limits and the context limit moved to "Advanced" at the bottom.
+- The note picker is a standard Obsidian dialog: Escape closes it, and it searches the whole path.
 - **One model picker.** The chat header has a single picker that lists the models of every provider;
   choosing a model also selects its provider. The separate provider button is gone.
 - **Saved models are migrated.** GPT-4 Turbo, GPT-5, GPT-5 Mini, GPT-5 Nano, GPT-5 Search,
@@ -20,6 +27,9 @@
 - Requests the provider rejects (HTTP 4xx other than 408 and 429) are no longer retried.
 
 ### Privacy
+- **The chat says what it is about to send.** A line above the input names the destination and lists
+  what the next message carries: the conversation, attached notes, RAG fragments, project context and
+  web search. It warns when a Local API is remote and unencrypted.
 - **Semantic search is now opt-in.** Earlier versions sent the text of every indexed note to OpenAI
   for embeddings as soon as an OpenAI key was configured. The new **Semantic search** setting is off
   by default, for existing installs too, and turning it on shows what will be sent and asks for
@@ -34,6 +44,12 @@
   declined request may be answered by another Claude model, and the message then names that model.
   No new host or company receives data.
 - No new network hosts. See `PRIVACY.md`.
+
+### Fixed
+- Regenerate could remove the wrong messages after a failed request.
+- Stopping a request before any answer arrived left the question on screen but not in the
+  conversation. The question is now returned to the input.
+- Retrying on a fallback model showed the question twice.
 
 ### Removed
 - The "Auto-detect provider" setting, which never changed which provider was used.
