@@ -159,7 +159,9 @@ jobs:
           git add manifest.json package.json versions.json
           git add package-lock.json 2>/dev/null || true
           git diff --cached --quiet || git commit -m "chore: update version to ${{ github.event.release.tag_name }}"
-          git push origin main
+          # The lease repeats the check above at the moment of the push: it only
+          # succeeds while main on GitHub is still the commit that was built.
+          git push --force-with-lease="refs/heads/main:${BUILT_SHA}" origin HEAD:refs/heads/main
 
       - name: Upload release assets
         env:

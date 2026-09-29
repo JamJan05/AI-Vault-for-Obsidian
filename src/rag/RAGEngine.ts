@@ -70,8 +70,12 @@ interface PendingChunk {
 export class RAGEngine {
 	private index:       RAGEntry[] = [];
 	private fileHashes:  Record<string, string> = {};
-	/** Word statistics of the index; rebuilt on demand after the index changes. */
+	/** Word statistics of the searchable notes; rebuilt after the index or the ignore list changes. */
 	private corpusStats: CorpusStats | null = null;
+	/** The ignore list the statistics were built for. */
+	private corpusStatsFor: string | null = null;
+	/** A load in progress, shared by everyone who asks while it runs. */
+	private loading: Promise<boolean> | null = null;
 	private saveTimer:   number | null = null;
 
 	indexed  = false;
@@ -119,7 +123,18 @@ export class RAGEngine {
 
 	// ── Index — load / save ────────────────────────────────────────────────────
 
+	/**
+	 * Loads the index from disk once. The index in memory is the current one, so a
+	 * second call — the chat view opening while startup indexing is still running —
+	 * returns at once instead of replacing it with the older copy on disk.
+	 */
 	async loadIndex(): Promise<boolean> {
+		if (this.indexed || this.indexing) return true;
+		this.loading ??= this.readIndex().finally(() => { this.loading = null; });
+		return this.loading;
+	}
+
+	private async readIndex(): Promise<boolean> {
 		const data = await this.storage.readJson<RAGIndex | RAGEntry[] | null>(
 			this.indexPath,
 			null,
@@ -364,6 +379,10 @@ export class RAGEngine {
 						}
 					}
 				} catch (e) {
+					// No fragments and no hash: nothing stale is left to be found, and
+					// the note is read again the next time indexing runs.
+					this.index = this.index.filter(entry => entry.path !== file.path);
+					delete newHashes[file.path];
 					console.warn(LOG_PREFIX, "file failed:", file.path, (e as Error)?.message);
 				}
 
@@ -419,7 +438,13 @@ export class RAGEngine {
 			}
 		}
 
-		this.corpusStats ??= buildCorpusStats(this.index);
+		// Statistics cover exactly the notes that can be returned, so a note that
+		// was just added to the ignore list no longer influences the ranking.
+		const ignoreKey = this.plugin.settings.ragExcludedPaths ?? "";
+		if (!this.corpusStats || this.corpusStatsFor !== ignoreKey) {
+			this.corpusStats    = buildCorpusStats(candidates);
+			this.corpusStatsFor = ignoreKey;
+		}
 		for (const e of candidates) this.ensureEntryCache(e);
 
 		return rankEntries(candidates, qt, this.corpusStats, {

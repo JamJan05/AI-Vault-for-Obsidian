@@ -18,6 +18,10 @@ are no longer added to the prompt.
 - Words such as "summarize" and "notes" in a question are no longer searched for.
 - A rare word now counts for more than a common one when notes are ranked.
 - A question that names a note gets up to four fragments of that note instead of one.
+- Opening the chat while the index was being built at startup could replace the new index with the
+  older copy on disk.
+- A note that could not be read during indexing kept its old fragments. They are now removed, and
+  the note is read again the next time indexing runs.
 - The project dialog is built with Obsidian's element helpers instead of `document.createElement`.
 
 ### Release
@@ -26,8 +30,9 @@ are no longer added to the prompt.
   repository manifest at the tag still named the old version.
 - The release stops without pushing anything if `main` changes while it is being built, so the
   version commit and the tag can only ever sit on the code that was tested.
-- The tag is moved last, after the assets are uploaded, and only if the tag on GitHub still points
-  at the commit that was built.
+- The tag is moved last, after the assets are uploaded, and only if the tag on GitHub has not
+  changed since it was checked out. The version commit is pushed only while `main` on GitHub is
+  still the commit that was built.
 
 ## [1.5.0] - 2026-09-29
 
