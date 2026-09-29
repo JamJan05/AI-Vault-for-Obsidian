@@ -67,8 +67,8 @@ The request contains, in this order:
 3. **RAG chunks** — up to 5 fragments from your indexed notes that are related to
    your message: they share a word with it, their note is named after it, or,
    with semantic search on, their meaning is close to it. When nothing is
-   related, no fragment is sent, and the prompt states that the search found
-   nothing.
+   related, no fragment is sent. If you attached no notes either, the prompt
+   states that the search found nothing.
 4. **Project context** — short summaries of the other conversations in the active
    project, up to 4 000 characters in total.
 5. **Conversation history** — the previous messages in the current conversation.

@@ -263,6 +263,10 @@ export class RAGEngine {
 					!ignored.matches(file.path));
 			const currentPaths = new Set(files.map((f: TFile) => f.path));
 
+			// Drop fragments of notes that are gone or are now ignored. This does not
+			// rely on the hashes, which an outdated or legacy index does not have.
+			this.index = this.index.filter(e => currentPaths.has(e.path));
+
 			// Remove entries for files that no longer exist — and, because the list above
 			// is already filtered, for files that are now ignored.
 			const removedPaths = Object.keys(this.fileHashes).filter(p => !currentPaths.has(p));
