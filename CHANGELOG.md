@@ -1,26 +1,36 @@
 # Changelog
 
-## [Unreleased]
+## [1.6.0] - 2026-10-01
 
 ### Added
 - **Note editing (opt-in, off by default).** The model can search the vault, read Markdown notes
-  and canvases and change them: replace a passage in a note, add text at the end, create a note,
-  or add, change, remove and connect the cards of a canvas. It needs two
-  switches — "Let the model read and edit notes" in the settings, and the Edit button in the chat
-  view, which is off again in every new or reopened conversation. Each change is shown as a diff
-  and written only after you press Apply — or "Apply all in this answer", which also accepts the
-  remaining changes of the same answer; "Apply changes without asking" is a separate setting,
-  off by default. By default the model can change only notes you named in a message as `#Name`,
-  `#Folder/Name`, `#Name-with-spaces` or `#[[Name with spaces]]`. An optional setting extends a
-  mark to the notes the marked note links to. Changed notes are listed under the answer, and notes the model read are listed
-  as sources. Works with OpenAI and Claude models, not with the Local API.
+  and canvases, and change them: replace a passage in a note, add text at its end, create a note,
+  or add, change, remove and connect the cards of a canvas. It needs two switches — "Let the model
+  read and edit notes" in the settings, and the Edit button in the chat view, which is off again in
+  every new or reopened conversation. Works with OpenAI and Claude models, not with the Local API.
+- **You approve each change.** A change is shown as a diff — for a canvas, its cards and
+  connections before and after — and written only after you press Apply. "Apply all in this
+  answer" also accepts the remaining changes of the same answer. "Apply changes without asking"
+  is a separate setting, off by default.
+- **You name the notes that may be changed.** By default the model can change only notes and
+  canvases you marked in a message as `#Name`, `#Folder/Name`, `#Name-with-spaces` or
+  `#[[Name with spaces]]`. An optional setting extends a mark to the notes the marked note links
+  to.
+- Changed notes are listed under the answer, and notes the model read are listed as sources.
+
+### Changed
+- The README is shorter and corrected.
 
 ### Privacy
 - With note editing on, the text of every note the model chooses to read is sent to the selected
   provider. Hidden folders, Obsidian's configuration folder and ignored RAG paths cannot be read
   or changed, and there is no tool to delete, rename or move a file. See `PRIVACY.md`.
-- With note tools on, OpenAI models that normally use Chat Completions (GPT-4o, GPT-4o Mini) are
+- With note editing on, OpenAI models that normally use Chat Completions (GPT-4o, GPT-4o Mini) are
   called through the Responses API, with `store: false` like every other Responses request.
+
+### Security
+- `brace-expansion`, a development-only dependency that is not part of the plugin, is updated to
+  versions that fix GHSA-6j4f-fj2g-mc7p, GHSA-qhr7-859c-m2p7 and GHSA-q2hr-2g5m-vwhr.
 
 ## [1.5.1] - 2026-09-29
 
