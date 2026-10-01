@@ -141,12 +141,23 @@ describe("composeSystemPrompt — note tools", () => {
 	});
 
 	it("explains the tools and how changes are approved", () => {
-		assert.match(compose({ noteTools: "confirm" }), /NOTE TOOLS:.*approves or declines/s);
-		assert.match(compose({ noteTools: "auto" }), /NOTE TOOLS:.*written immediately/s);
+		assert.match(compose({ noteTools: { autoApply: false } }), /NOTE TOOLS:.*approves or declines/s);
+		assert.match(compose({ noteTools: { autoApply: true } }), /NOTE TOOLS:.*written immediately/s);
+	});
+
+	it("lists the notes the user marked, and says so when there are none", () => {
+		const marked = compose({ noteTools: { autoApply: false, writable: { paths: ["A/Plan.md"], create: ["new"] } } });
+		assert.match(marked, /Notes you may change now: A\/Plan\.md\./);
+		assert.match(marked, /Notes you may create now: new\./);
+
+		const none = compose({ noteTools: { autoApply: false, writable: { paths: [], create: [] } } });
+		assert.match(none, /Notes you may change now: none\./);
+
+		assert.equal(compose({ noteTools: { autoApply: false, writable: null } }).includes("marked"), false);
 	});
 
 	it("does not claim the model cannot read the vault while it can", () => {
-		const prompt = compose({ noteTools: "confirm", searchedWithoutMatch: true });
+		const prompt = compose({ noteTools: { autoApply: false }, searchedWithoutMatch: true });
 		assert.equal(prompt.includes("You cannot read the vault yourself"), false);
 	});
 });

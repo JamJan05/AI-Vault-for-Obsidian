@@ -38,6 +38,7 @@ import { composeSystemPrompt } from "../chat/systemPrompt";
 import { toMessageSource } from "../rag/sources";
 import { createNoteTools } from "../tools/noteTools";
 import { createNoteVault } from "../tools/vaultAdapter";
+import { mayWrite, parseNoteMarks, resolveWriteTargets } from "../tools/writeTargets";
 import { ChangeConfirmModal } from "./ChangeConfirmModal";
 import { ConfirmModal } from "./ConfirmModal";
 import { FallbackModal } from "./FallbackModal";
@@ -55,7 +56,8 @@ import type { PluginSettings, Provider } from "../settings";
 import type { StreamResult, StreamUsage } from "../api/streaming";
 import type { ModelOption } from "../chat/modelOptions";
 import type { ChatMode } from "../chat/systemPrompt";
-import type { NoteActivity, NoteToolSet, ProposedChange } from "../tools/noteTools";
+import type { NoteActivity, NoteToolSet, NoteToolsPromptOptions, ProposedChange } from "../tools/noteTools";
+import type { WriteTargets } from "../tools/writeTargets";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -115,6 +117,14 @@ export class GPTChatView extends ItemView {
 	noteToolsActive  = false;
 	/** Changes whenever another conversation is shown; ties a tool set to its own. */
 	private conversation = 0;
+	/**
+	 * Notes marked for writing (#Name) in messages typed into this conversation.
+	 * Collected only from the input box: text that reaches the chat from a note
+	 * selection or from a saved session never marks anything.
+	 */
+	private noteMarks: string[] = [];
+	/** Text put back into the input after a stopped answer that the user did not type. */
+	private untypedDraft: string | null = null;
 	chatMode:        ChatMode = "chat";
 	manualNotes:     TFile[] = [];
 	currentMode:     string | null = null;
@@ -394,6 +404,7 @@ export class GPTChatView extends ItemView {
 			historyLimit:   this.settings.maxContextMessages ?? 0,
 			noteTools:      this.noteToolsUsable,
 			autoApply:      this.settings.noteEditingAutoApply === true,
+			requireMark:    this.markRequired,
 		});
 		this.summaryEl.textContent = summary.text;
 		this.summaryEl.classList.toggle("gpt-send-summary--warning", summary.warning);
@@ -550,7 +561,11 @@ export class GPTChatView extends ItemView {
 		this.setNoteToolsActive(!this.noteToolsActive);
 
 		if (!this.noteToolsActive) new Notice(t("edit_off_notice"));
-		else new Notice(t(this.settings.noteEditingAutoApply ? "edit_on_auto_notice" : "edit_on_notice"), 6000);
+		else {
+			const notice = t(this.settings.noteEditingAutoApply ? "edit_on_auto_notice" : "edit_on_notice");
+			const hint   = this.markRequired ? "\n" + t("edit_mark_hint") : "";
+			new Notice(notice + hint, 8000);
+		}
 	}
 
 	toggleWebSearch(): void {
@@ -635,6 +650,7 @@ export class GPTChatView extends ItemView {
 		// Permission to change notes is given per conversation, never carried over —
 		// not to the next conversation, and not to an answer still running from this one.
 		this.conversation++;
+		this.noteMarks = [];
 		this.setNoteToolsActive(false);
 		this.chatContainer.empty();
 
@@ -658,6 +674,7 @@ export class GPTChatView extends ItemView {
 		this.manualNotes = [];
 		this.lastUsage   = null;
 		this.conversation++;
+		this.noteMarks = [];
 		this.setNoteToolsActive(false);
 		this.updateManualBar();
 		this.chatContainer.empty();
@@ -680,6 +697,14 @@ export class GPTChatView extends ItemView {
 		if (activeProvider === "local" && !this.settings.localBaseUrl.trim()) { new Notice(t("err_no_ollama_url")); return; }
 		if (this.sending) return;
 		this.sending = true;
+		// Only what was typed here counts as a mark, not text handed in by a command.
+		const typed = override === undefined && userText !== this.untypedDraft;
+		if (override === undefined) this.untypedDraft = null;
+		if (typed) {
+			for (const mark of parseNoteMarks(userText)) {
+				if (!this.noteMarks.includes(mark)) this.noteMarks.push(mark);
+			}
+		}
 
 		// Created before the first await, so closing the view cancels the message
 		// even while a confirmation is open or the context is still being collected.
@@ -688,7 +713,7 @@ export class GPTChatView extends ItemView {
 		try {
 			if (activeProvider === "local" && !(await this.confirmPlainHttpEndpoint())) return;
 			if (controller.signal.aborted) return;
-			await this.runExchange(userText, override === undefined, activeModel, activeProvider, webSearchEnabled, controller);
+			await this.runExchange(userText, override === undefined, typed, activeModel, activeProvider, webSearchEnabled, controller);
 		} finally {
 			if (this.abortController === controller) this.abortController = null;
 			this.sending = false;
@@ -698,6 +723,7 @@ export class GPTChatView extends ItemView {
 	private async runExchange(
 		userText:         string,
 		clearInput:       boolean,
+		typed:            boolean,
 		activeModel:      string,
 		activeProvider:   Provider,
 		webSearchEnabled: boolean,
@@ -714,10 +740,15 @@ export class GPTChatView extends ItemView {
 		const bubble = this.appendMessage("assistant", "");
 		this.setLoading(bubble, true, webSearchEnabled);
 
-		const tools = this.noteToolsUsable ? this.createNoteToolSet(bubble, controller.signal) : null;
+		const targets = this.noteToolsUsable ? this.resolveWriteTargets() : null;
+		const tools   = targets ? this.createNoteToolSet(bubble, controller.signal, targets) : null;
+		const toolsPrompt: NoteToolsPromptOptions | null = !targets ? null : {
+			autoApply: this.settings.noteEditingAutoApply === true,
+			writable:  this.markRequired ? { paths: [...targets.paths], create: [...targets.newNames] } : null,
+		};
 
 		try {
-			const prepared   = await this.buildSystemMessage(userText, tools !== null);
+			const prepared   = await this.buildSystemMessage(userText, toolsPrompt);
 			const systemMsg  = prepared.system;
 			const ragSources = prepared.sources;
 
@@ -831,7 +862,12 @@ export class GPTChatView extends ItemView {
 				this.messages.pop();
 				bubble.parentElement?.remove();
 				userMsgEl?.remove();
-				if (!this.inputEl.value.trim()) this.inputEl.value = userText;
+				if (!this.inputEl.value.trim()) {
+					this.inputEl.value = userText;
+					// Came from a command, a retry or a saved session: sending it again
+					// unchanged must not turn a #name inside it into a mark.
+					if (!typed) this.untypedDraft = userText;
+				}
 			} else if (err instanceof ModelAccessError && activeProvider === "openai") {
 				// The retry from the dialog sends — and draws — the question again.
 				this.messages.pop();
@@ -908,7 +944,27 @@ export class GPTChatView extends ItemView {
 	// ── Note tools ──────────────────────────────────────────────────────────────
 
 	/** The note tools for one exchange, wired to this view's confirmation dialog. */
-	private createNoteToolSet(bubble: HTMLElement, signal: AbortSignal): NoteToolSet {
+	/**
+	 * The notes this conversation's marks allow to be changed, or null when the
+	 * user has turned the marking requirement off.
+	 */
+	private resolveWriteTargets(): WriteTargets {
+		const notes = this.plugin.app.vault.getMarkdownFiles()
+			.map(file => file.path)
+			.filter(path => !this.rag.isIgnoredPath(path));
+		const targets = resolveWriteTargets(this.noteMarks, notes);
+		if (this.markRequired && targets.ambiguous.length) {
+			new Notice(t("edit_mark_ambiguous", targets.ambiguous.map(name => `#${name}`).join(", ")), 9000);
+		}
+		return targets;
+	}
+
+	/** Read live, so switching the rule on also binds an answer that is already running. */
+	private get markRequired(): boolean {
+		return this.settings.noteEditingRequireMark !== false;
+	}
+
+	private createNoteToolSet(bubble: HTMLElement, signal: AbortSignal, targets: WriteTargets): NoteToolSet {
 		const conversation = this.conversation;
 		const allowed = (): boolean =>
 			!signal.aborted && conversation === this.conversation && this.noteToolsUsable;
@@ -921,6 +977,13 @@ export class GPTChatView extends ItemView {
 			searchFragments: this.settings.ragEnabled && this.rag.indexed
 				? query => this.rag.search(query)
 				: undefined,
+			mayWrite:   (path, kind) => {
+				if (!this.markRequired) return true;
+				if (!mayWrite(targets, path, kind)) return false;
+				// A note created under a mark can be changed again in the same answer.
+				if (kind === "create" && !targets.paths.includes(path)) targets.paths.push(path);
+				return true;
+			},
 			confirm:    change => allowed() ? this.confirmChange(change, signal) : Promise.resolve(false),
 			onActivity: (activity, detail) => this.showToolActivity(bubble, activity, detail),
 		});
@@ -947,7 +1010,7 @@ export class GPTChatView extends ItemView {
 
 	// ── System message builder ──────────────────────────────────────────────────
 
-	private async buildSystemMessage(userText: string, noteTools = false): Promise<PreparedPrompt> {
+	private async buildSystemMessage(userText: string, noteTools: NoteToolsPromptOptions | null = null): Promise<PreparedPrompt> {
 		const projId  = this.plugin.activeProjectId;
 		const project = projId ? this.plugin.projects.getProject(projId) : null;
 
@@ -971,7 +1034,7 @@ export class GPTChatView extends ItemView {
 			retrieved:  context.retrieved,
 			searchedWithoutMatch: context.searchedWithoutMatch,
 			project:    projectContext ? { name: project?.name ?? "Project", context: projectContext } : null,
-			noteTools:  !noteTools ? null : this.settings.noteEditingAutoApply ? "auto" : "confirm",
+			noteTools,
 		});
 
 		return { system, sources: context.sources };

@@ -1054,8 +1054,11 @@ export class GPTSettingsTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.noteEditingEnabled === true)
 					.onChange(async (v: boolean) => {
 						this.plugin.settings.noteEditingEnabled = v;
-						// Writing without asking is a separate decision, made again each time.
-						if (!v) this.plugin.settings.noteEditingAutoApply = false;
+						// Switching off puts both safeguards back, so switching on again starts safe.
+						if (!v) {
+							this.plugin.settings.noteEditingAutoApply = false;
+							this.plugin.settings.noteEditingRequireMark = true;
+						}
 						await this.plugin.saveSettings();
 						this.plugin.getChatView()?.refreshNoteTools();
 						this.rerender();
@@ -1080,10 +1083,26 @@ export class GPTSettingsTab extends PluginSettingTab {
 			},
 		};
 
+		const requireMarkRow: SettingDefinitionRender = {
+			name: t("settings_edit_mark_name"),
+			desc: t("settings_edit_mark_desc"),
+			visible: () => this.plugin.settings.noteEditingEnabled === true,
+			render: (setting: Setting) => {
+				setting.addToggle(tog => tog
+					.setValue(this.plugin.settings.noteEditingRequireMark !== false)
+					.onChange(async (v: boolean) => {
+						this.plugin.settings.noteEditingRequireMark = v;
+						await this.plugin.saveSettings();
+						this.plugin.getChatView()?.refreshNoteTools();
+					}),
+				);
+			},
+		};
+
 		return {
 			type: "group",
 			heading: t("settings_edit_title"),
-			items: [enableRow, autoApplyRow],
+			items: [enableRow, requireMarkRow, autoApplyRow],
 		};
 	}
 

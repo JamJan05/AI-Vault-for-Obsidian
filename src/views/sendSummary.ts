@@ -26,6 +26,8 @@ export interface SendSummaryInput {
 	noteTools?:    boolean;
 	/** Changes are written without asking. Only meaningful with `noteTools`. */
 	autoApply?:    boolean;
+	/** Only notes marked with #name in a message can be changed. */
+	requireMark?:  boolean;
 }
 
 export interface SendSummary {
@@ -76,6 +78,7 @@ export function describeOutgoing(input: SendSummaryInput): SendSummary {
 	const autoApply = noteTools && Boolean(input.autoApply);
 	if (noteTools) {
 		text += " " + t(autoApply ? "send_summary_tools_auto" : "send_summary_tools_confirm", destination.name);
+		if (input.requireMark) text += " " + t("send_summary_tools_marked");
 	}
 
 	return { text, warning: destination.warning || autoApply };

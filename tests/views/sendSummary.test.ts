@@ -167,3 +167,11 @@ describe("describeOutgoing — note tools", () => {
 		assert.equal(result.warning, false);
 	});
 });
+
+describe("describeOutgoing — marked notes", () => {
+	it("says that only marked notes can be changed, when that is required", () => {
+		assert.match(summary({ noteTools: true, requireMark: true }).text, /Only notes you mark with #name/);
+		assert.equal(summary({ noteTools: true, requireMark: false }).text.includes("#name"), false);
+		assert.equal(summary({ noteTools: false, requireMark: true }).text.includes("#name"), false);
+	});
+});

@@ -153,6 +153,15 @@ folders, not Obsidian's configuration folder (so not `data.json`, where settings
 live), not paths matching your ignored RAG paths. There is no tool to delete,
 rename or move a file, and none to run a command or open a URL.
 
+**Which notes can be changed.** By default only notes you marked in a message
+typed into the conversation — `#Name`, `#Folder/Name` or `#[[Name with spaces]]`.
+The list is built from what you type in the chat box, never from note text, web
+pages, model replies, text sent by a command, or a conversation reopened from the
+history. A change to any other note is refused before it reaches the confirmation
+dialog. The setting "Only change notes marked with #name" turns this off; it is
+on by default and is switched back on whenever the master switch is switched off.
+Marks do not limit what the model can read.
+
 **What is written.** Each change is shown to you as a diff and is written only
 after you press Apply. The setting "Apply changes without asking" removes that
 step; it is off by default, and switching the master switch off switches it off
@@ -388,7 +397,9 @@ model could make it read notes you did not ask about — their text then reaches
 provider, and with web search on the model could also put it into a search query —
 or propose a change you did not ask for. The confirmation dialog is the safeguard
 against unwanted changes: read the diff before you press Apply, and leave "Apply
-changes without asking" off. Consider keeping web search off in conversations
+changes without asking" off. Marking limits where a change can land: with "Only
+change notes marked with #name" on, a misled model still cannot change a note you
+did not name. Consider keeping web search off in conversations
 where note editing is on.
 
 ---

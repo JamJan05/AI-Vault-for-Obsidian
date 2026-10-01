@@ -66,6 +66,11 @@ export interface PluginSettings {
 	noteEditingEnabled:     boolean;
 	/** Write the model's changes without showing them for approval first. */
 	noteEditingAutoApply:   boolean;
+	/**
+	 * Only notes the user marked in a message (`#Name`) may be changed — see
+	 * src/tools/writeTargets.ts. On by default.
+	 */
+	noteEditingRequireMark: boolean;
 
 	// External storage
 	externalStorageEnabled: boolean;
@@ -115,6 +120,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	ragExcludedPaths:        "",
 	noteEditingEnabled:      false,
 	noteEditingAutoApply:    false,
+	noteEditingRequireMark:  true,
 	externalStorageEnabled:  true,
 	externalStoragePath:     "",
 	apiKeysInSync:           false,

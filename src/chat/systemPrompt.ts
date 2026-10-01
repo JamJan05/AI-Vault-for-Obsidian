@@ -7,6 +7,7 @@
 
 import { t } from "../i18n";
 import { noteToolsPrompt } from "../tools/noteTools";
+import type { NoteToolsPromptOptions } from "../tools/noteTools";
 
 export type ChatMode = "chat" | "learn" | "code";
 
@@ -32,7 +33,7 @@ export interface SystemPromptParts {
 	searchedWithoutMatch?: boolean;
 	project:    { name: string; context: string } | null;
 	/** Set while the model is offered the note tools; says how changes are approved. */
-	noteTools?: "confirm" | "auto" | null;
+	noteTools?: NoteToolsPromptOptions | null;
 }
 
 const SEPARATOR = "\n\n---\n\n";
@@ -55,7 +56,7 @@ function section(header: string, body: string): string {
 export function composeSystemPrompt(parts: SystemPromptParts): string {
 	let prompt = parts.chatMode === "code" ? codeModePrompt() : parts.basePrompt;
 	if (parts.chatMode === "learn") prompt += t("quiz_instruction");
-	if (parts.noteTools) prompt += noteToolsPrompt(parts.noteTools === "auto");
+	if (parts.noteTools) prompt += noteToolsPrompt(parts.noteTools);
 
 	if (parts.attached.length) {
 		const body = parts.attached

@@ -175,6 +175,8 @@ While it is on, the model can:
 
 It cannot delete, rename or move notes, cannot touch anything that is not a `.md` file, and cannot reach hidden folders, Obsidian's configuration folder or your [ignored RAG paths](#-ignored-rag-paths).
 
+**Only notes you mark can be changed.** Name the note in your message with a hash: `#Plan`, `#Projects/Plan`, or `#[[Plan B]]` when the name has spaces — for example *"#Plan add a section about deadlines"*. A mark stays valid for the rest of the conversation. A name that matches no note lets the model create a note with that name; a name shared by several notes allows none of them until you add the folder (a note in the vault root that shares its name with a note in a folder cannot be marked on its own). Marks count only when you type them in the chat box, so text inside a note or on a web page cannot mark anything. Reading is not limited by marks. The setting **Only change notes marked with #name** (on by default) turns this rule off.
+
 **Every change is shown to you first** — the note's path and a diff — and is written only when you press **Apply**. Changed notes are listed under the answer. The second setting, **Apply changes without asking**, skips that dialog; it is off by default and the line above the input warns you while it is on. Changes are made through Obsidian's own Vault API, so Obsidian's file recovery can restore an earlier version of a note.
 
 Notes the model reads are sent to the provider, like any other context; they are listed as sources under the answer. Note editing works with OpenAI and Claude models, not with the Local API.
