@@ -58,6 +58,15 @@ export interface PluginSettings {
 	/** One ignore pattern per line — see src/rag/ignorePaths.ts for the semantics. */
 	ragExcludedPaths:       string;
 
+	// Note tools
+	/**
+	 * Master switch for the note tools. While it is off the chat view offers no
+	 * way to let a model read or change notes — see src/tools/noteTools.ts.
+	 */
+	noteEditingEnabled:     boolean;
+	/** Write the model's changes without showing them for approval first. */
+	noteEditingAutoApply:   boolean;
+
 	// External storage
 	externalStorageEnabled: boolean;
 	externalStoragePath:    string;
@@ -104,6 +113,8 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	ragEmbeddingsEnabled:    false,
 	ragSearchMode:           "hybrid",
 	ragExcludedPaths:        "",
+	noteEditingEnabled:      false,
+	noteEditingAutoApply:    false,
 	externalStorageEnabled:  true,
 	externalStoragePath:     "",
 	apiKeysInSync:           false,

@@ -18,6 +18,8 @@ export interface ChatMessage {
 	content: string;
 	/** Kept with an assistant message in the history; stripped from every request. */
 	sources?: MessageSource[];
+	/** Notes the model changed while answering. Kept in the history; never sent. */
+	changes?: MessageSource[];
 }
 
 // ─── History ──────────────────────────────────────────────────────────────────

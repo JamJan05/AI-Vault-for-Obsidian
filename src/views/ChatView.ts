@@ -35,6 +35,10 @@ import {
 } from "../chat/modelOptions";
 import { parseQuiz } from "../chat/quiz";
 import { composeSystemPrompt } from "../chat/systemPrompt";
+import { toMessageSource } from "../rag/sources";
+import { createNoteTools } from "../tools/noteTools";
+import { createNoteVault } from "../tools/vaultAdapter";
+import { ChangeConfirmModal } from "./ChangeConfirmModal";
 import { ConfirmModal } from "./ConfirmModal";
 import { FallbackModal } from "./FallbackModal";
 import { ModelPicker } from "./ModelPicker";
@@ -42,7 +46,7 @@ import { NotePickerModal } from "./NotePickerModal";
 import { renderQuiz } from "./QuizRenderer";
 import { attachCopyButton, renderMarkdown, setButtonIcon } from "./messageRenderer";
 import { describeOutgoing } from "./sendSummary";
-import { renderSources } from "./sourceLinks";
+import { renderChanges, renderSources } from "./sourceLinks";
 import type { ChatMessage, MessageSource } from "../types";
 import type { RAGEngine }      from "../rag/RAGEngine";
 import type { HistoryManager } from "../history/HistoryManager";
@@ -51,6 +55,7 @@ import type { PluginSettings, Provider } from "../settings";
 import type { StreamResult, StreamUsage } from "../api/streaming";
 import type { ModelOption } from "../chat/modelOptions";
 import type { ChatMode } from "../chat/systemPrompt";
+import type { NoteActivity, NoteToolSet, ProposedChange } from "../tools/noteTools";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -84,12 +89,32 @@ interface PreparedPrompt {
 	sources: MessageSource[];
 }
 
+/** A note's name without its folders and extension, as shown on a chip. */
+function noteLabel(path: string): string {
+	return path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/i, "");
+}
+
+/** The notes an exchange changed, one entry per note. */
+function changedNotes(tools: NoteToolSet | null): MessageSource[] {
+	const changes: MessageSource[] = [];
+	for (const change of tools?.log.changed ?? []) {
+		if (changes.some(existing => existing.path === change.path)) continue;
+		const label = change.kind === "create" ? `+ ${noteLabel(change.path)}` : noteLabel(change.path);
+		changes.push(toMessageSource(label, change.path));
+	}
+	return changes;
+}
+
 // ─── GPTChatView ───────────────────────────────────────────────────────────────
 
 export class GPTChatView extends ItemView {
 	// State
 	messages:        ChatMessage[] = [];
 	webSearchActive  = false;
+	/** The model may use the note tools in this conversation. Never saved. */
+	noteToolsActive  = false;
+	/** Changes whenever another conversation is shown; ties a tool set to its own. */
+	private conversation = 0;
 	chatMode:        ChatMode = "chat";
 	manualNotes:     TFile[] = [];
 	currentMode:     string | null = null;
@@ -112,6 +137,7 @@ export class GPTChatView extends ItemView {
 	private ragStatusEl!:      HTMLElement;
 	private ragToggleBtn!:     HTMLButtonElement;
 	private webSearchBtn!:     HTMLButtonElement;
+	private noteToolsBtn!:     HTMLButtonElement;
 	private chatModeBtn!:      HTMLButtonElement;
 	private thinkingBtn!:      HTMLButtonElement;
 	private summaryEl!:        HTMLElement;
@@ -288,6 +314,12 @@ export class GPTChatView extends ItemView {
 		this.setButtonIcon(this.webSearchBtn, "globe", t("chat_btn_internet"));
 		this.webSearchBtn.onclick   = () => this.toggleWebSearch();
 
+		// Note tools — shown only while the master switch in the settings is on
+		this.noteToolsBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_edit") } });
+		this.setButtonIcon(this.noteToolsBtn, "pencil", t("chat_btn_edit"));
+		this.noteToolsBtn.onclick   = () => this.toggleNoteTools();
+		this.refreshNoteTools();
+
 		// Chat mode — plain chat, learn or code; only one at a time
 		this.chatModeBtn = toolRow.createEl("button", { cls: "gpt-tool-btn", attr: { title: t("chat_title_mode") } });
 		this.chatModeBtn.onclick    = (e: MouseEvent) => this.openChatModeMenu(e);
@@ -360,6 +392,8 @@ export class GPTChatView extends ItemView {
 			webSearch:      this.webSearchActive,
 			projectActive:  Boolean(this.plugin.activeProjectId),
 			historyLimit:   this.settings.maxContextMessages ?? 0,
+			noteTools:      this.noteToolsUsable,
+			autoApply:      this.settings.noteEditingAutoApply === true,
 		});
 		this.summaryEl.textContent = summary.text;
 		this.summaryEl.classList.toggle("gpt-send-summary--warning", summary.warning);
@@ -485,6 +519,40 @@ export class GPTChatView extends ItemView {
 		this.updateSendSummary();
 	}
 
+	/** True when the next message will offer the note tools to the model. */
+	private get noteToolsUsable(): boolean {
+		return this.noteToolsActive
+			&& this.settings.noteEditingEnabled === true
+			&& this.getEffectiveProvider() !== "local";
+	}
+
+	private setNoteToolsActive(active: boolean): void {
+		this.noteToolsActive = active;
+		this.noteToolsBtn?.classList.toggle("gpt-edit-btn--active", active);
+		this.updateSendSummary();
+	}
+
+	/** Brings the switch in line with the settings; called when they change. */
+	refreshNoteTools(): void {
+		if (!this.noteToolsBtn) return;
+		const allowed = this.settings.noteEditingEnabled === true;
+		this.noteToolsBtn.classList.toggle("gpt-ctx-hidden", !allowed);
+		if (!allowed || this.getEffectiveProvider() === "local") this.setNoteToolsActive(false);
+		else this.updateSendSummary();
+	}
+
+	toggleNoteTools(): void {
+		if (!this.settings.noteEditingEnabled) { this.refreshNoteTools(); return; }
+		if (!this.noteToolsActive && this.getEffectiveProvider() === "local") {
+			new Notice(t("edit_local_unsupported"), 7000);
+			return;
+		}
+		this.setNoteToolsActive(!this.noteToolsActive);
+
+		if (!this.noteToolsActive) new Notice(t("edit_off_notice"));
+		else new Notice(t(this.settings.noteEditingAutoApply ? "edit_on_auto_notice" : "edit_on_notice"), 6000);
+	}
+
 	toggleWebSearch(): void {
 		const activeModel = this.getCurrentActiveModel();
 		const provider = this.getEffectiveProvider();
@@ -535,6 +603,7 @@ export class GPTChatView extends ItemView {
 	private async selectModel(provider: Provider, model: ModelOption): Promise<void> {
 		applyModelChoice(this.settings, provider, model.id);
 		this.disableUnsupportedWebSearch(provider, model.id);
+		if (provider === "local") this.setNoteToolsActive(false);
 		this.updateModelSelector();
 		try {
 			await this.plugin.saveSettings();
@@ -563,13 +632,20 @@ export class GPTChatView extends ItemView {
 	loadSession(session: { title: string; messages: ChatMessage[]; model?: string }): void {
 		this.messages  = [...session.messages];
 		this.lastUsage = null;
+		// Permission to change notes is given per conversation, never carried over —
+		// not to the next conversation, and not to an answer still running from this one.
+		this.conversation++;
+		this.setNoteToolsActive(false);
 		this.chatContainer.empty();
 
 		if (!this.messages.length) { this.renderWelcome(); return; }
 		for (const msg of this.messages) {
 			const bubble = this.appendMessage(msg.role, msg.content);
 			// Read back from disk, so validated before anything is drawn.
-			if (msg.role === "assistant") renderSources(this.plugin.app, bubble, sanitizeSources(msg.sources));
+			if (msg.role === "assistant") {
+				renderSources(this.plugin.app, bubble, sanitizeSources(msg.sources));
+				renderChanges(this.plugin.app, bubble, sanitizeSources(msg.changes));
+			}
 		}
 
 		if (this.modelSelectorBtn && session.model) {
@@ -581,6 +657,8 @@ export class GPTChatView extends ItemView {
 		this.messages    = [];
 		this.manualNotes = [];
 		this.lastUsage   = null;
+		this.conversation++;
+		this.setNoteToolsActive(false);
 		this.updateManualBar();
 		this.chatContainer.empty();
 		this.renderWelcome();
@@ -636,8 +714,10 @@ export class GPTChatView extends ItemView {
 		const bubble = this.appendMessage("assistant", "");
 		this.setLoading(bubble, true, webSearchEnabled);
 
+		const tools = this.noteToolsUsable ? this.createNoteToolSet(bubble, controller.signal) : null;
+
 		try {
-			const prepared   = await this.buildSystemMessage(userText);
+			const prepared   = await this.buildSystemMessage(userText, tools !== null);
 			const systemMsg  = prepared.system;
 			const ragSources = prepared.sources;
 
@@ -669,6 +749,7 @@ export class GPTChatView extends ItemView {
 					activeMode,
 					webSearchEnabled, onChunk, controller.signal,
 					this.getMaxTokensForMode(activeMode),
+					tools,
 				);
 			} else if (activeProvider === "local") {
 				const text = await callLocalApi(this.settings, msgs, {
@@ -685,6 +766,7 @@ export class GPTChatView extends ItemView {
 					activeMode,
 					webSearchEnabled, onChunk, controller.signal,
 					this.getMaxTokensForMode(activeMode),
+					tools,
 				);
 			}
 
@@ -699,10 +781,19 @@ export class GPTChatView extends ItemView {
 				bubble.createDiv({ cls: "gpt-msg-served-by", text: t("chat_served_by", result.servedBy) });
 			}
 
-			renderSources(this.plugin.app, bubble, ragSources);
+			// Notes the model read with a tool were sent to the provider too, so they are sources.
+			const sources = [...ragSources];
+			for (const path of tools?.log.read ?? []) {
+				if (!sources.some(source => source.path === path)) sources.push(toMessageSource(noteLabel(path), path));
+			}
+			const changes = changedNotes(tools);
+
+			renderSources(this.plugin.app, bubble, sources);
+			renderChanges(this.plugin.app, bubble, changes);
 
 			const answer: ChatMessage = { role: "assistant", content: reply };
-			if (ragSources.length) answer.sources = ragSources;
+			if (sources.length) answer.sources = sources;
+			if (changes.length) answer.changes = changes;
 			this.messages.push(answer);
 
 			// Token stats
@@ -727,6 +818,12 @@ export class GPTChatView extends ItemView {
 			const error     = err as Error & { name?: string };
 			const isAbort   = error.name === "AbortError";
 			const contentEl = bubble.querySelector<HTMLElement>(".gpt-msg-content");
+
+			// The answer is lost, the changes are not: say which notes were already written.
+			const written = changedNotes(tools);
+			if (written.length) {
+				new Notice(t("edit_changes_kept_notice", written.map(change => change.path).join(", ")), 12000);
+			}
 
 			if (isAbort) {
 				// Nothing was answered: take the question back out of the transcript
@@ -808,9 +905,49 @@ export class GPTChatView extends ItemView {
 		});
 	}
 
+	// ── Note tools ──────────────────────────────────────────────────────────────
+
+	/** The note tools for one exchange, wired to this view's confirmation dialog. */
+	private createNoteToolSet(bubble: HTMLElement, signal: AbortSignal): NoteToolSet {
+		const conversation = this.conversation;
+		const allowed = (): boolean =>
+			!signal.aborted && conversation === this.conversation && this.noteToolsUsable;
+
+		return createNoteTools({
+			vault:     createNoteVault(this.plugin.app),
+			// Live, not a snapshot: either switch going off, or Stop, ends tool use at once.
+			isAllowed: allowed,
+			isIgnored: path => this.rag.isIgnoredPath(path),
+			searchFragments: this.settings.ragEnabled && this.rag.indexed
+				? query => this.rag.search(query)
+				: undefined,
+			confirm:    change => allowed() ? this.confirmChange(change, signal) : Promise.resolve(false),
+			onActivity: (activity, detail) => this.showToolActivity(bubble, activity, detail),
+		});
+	}
+
+	private confirmChange(change: ProposedChange, signal: AbortSignal): Promise<boolean> {
+		if (this.settings.noteEditingAutoApply) return Promise.resolve(true);
+
+		return new Promise<boolean>(resolve => {
+			new ChangeConfirmModal(this.plugin.app, change, signal, resolve).open();
+		});
+	}
+
+	private showToolActivity(bubble: HTMLElement, activity: NoteActivity, detail: string): void {
+		if (!bubble.hasClass("gpt-loading")) return;
+		bubble.querySelector(".gpt-tool-activity")?.remove();
+		const key = activity === "search" ? "tools_activity_search"
+			: activity === "read" ? "tools_activity_read"
+			: "tools_activity_write";
+		const el = bubble.createDiv({ cls: "gpt-websearch-indicator gpt-tool-activity" });
+		setIcon(el, activity === "search" ? "search" : activity === "read" ? "file-text" : "pencil");
+		el.createSpan({ text: t(key, detail.slice(0, 80)) });
+	}
+
 	// ── System message builder ──────────────────────────────────────────────────
 
-	private async buildSystemMessage(userText: string): Promise<PreparedPrompt> {
+	private async buildSystemMessage(userText: string, noteTools = false): Promise<PreparedPrompt> {
 		const projId  = this.plugin.activeProjectId;
 		const project = projId ? this.plugin.projects.getProject(projId) : null;
 
@@ -834,6 +971,7 @@ export class GPTChatView extends ItemView {
 			retrieved:  context.retrieved,
 			searchedWithoutMatch: context.searchedWithoutMatch,
 			project:    projectContext ? { name: project?.name ?? "Project", context: projectContext } : null,
+			noteTools:  !noteTools ? null : this.settings.noteEditingAutoApply ? "auto" : "confirm",
 		});
 
 		return { system, sources: context.sources };
@@ -884,7 +1022,7 @@ export class GPTChatView extends ItemView {
 
 	private setLoading(bubble: HTMLElement, on: boolean, webSearch = false): void {
 		bubble.querySelector(".gpt-dots")?.remove();
-		bubble.querySelector(".gpt-websearch-indicator")?.remove();
+		bubble.querySelectorAll(".gpt-websearch-indicator").forEach(el => el.remove());
 		if (on) {
 			bubble.addClass("gpt-loading");
 			const dots = bubble.createDiv({ cls: "gpt-dots" });

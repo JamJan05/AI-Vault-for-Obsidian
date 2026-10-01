@@ -124,6 +124,46 @@ including existing installs, and a notice says so once.
 `.md` and `.canvas` files are indexed. Canvas files are converted to readable text
 (nodes and edges) before indexing.
 
+### When you turn on note editing
+
+Note editing is off by default. It needs the master switch in the settings and,
+for each conversation, the Edit button in the chat view. While both are on, the
+request also carries the definitions of five tools, and the model can ask the
+plugin to run them:
+
+- `search_notes` — the paths of notes whose name or folder matches the model's
+  query, and, when the RAG index is built, up to 8 matching fragments of up to
+  1 500 characters each. With semantic search on, the query is also sent to
+  OpenAI for embedding, like any RAG question.
+- `read_note` — the text of one Markdown note, up to 40 000 characters.
+- `edit_note`, `append_to_note`, `create_note` — change a note or create one.
+
+**What this sends.** Whatever a tool returns goes to the selected provider in the
+next request of the same exchange: note paths, fragments and the text of every
+note the model chose to read. The model decides which notes to read, so this can
+be more than RAG would have attached. Every note read this way is listed under
+the answer as a source. The tool calls and their results are not saved in the
+conversation history and are not sent again with later messages; the answer is.
+
+**What stays out of reach.** Only `.md` files inside the vault, as Obsidian
+shows it: a folder you linked into the vault (a symlink or junction) is part of
+the vault, so exclude it with the ignored RAG paths if the model should not reach
+it. Not hidden
+folders, not Obsidian's configuration folder (so not `data.json`, where settings
+live), not paths matching your ignored RAG paths. There is no tool to delete,
+rename or move a file, and none to run a command or open a URL.
+
+**What is written.** Each change is shown to you as a diff and is written only
+after you press Apply. The setting "Apply changes without asking" removes that
+step; it is off by default, and switching the master switch off switches it off
+too. Changes are written with Obsidian's Vault API, and only if the note still
+has the text you were shown. Switching either switch off, or pressing Stop, ends
+tool use at once: nothing more is read, and a change that was not yet written is
+not written, even if its dialog is still open. At most 12 rounds of tool calls are answered per
+message.
+
+Note editing is not available for the Local API.
+
 ### When you enable web search
 
 Web search runs **on the provider's side**, not in Obsidian:
@@ -333,12 +373,23 @@ What the plugin does about it:
 
 - Model output is **rendered, never executed**. There is no `eval`, no
   `Function` constructor, no shell, and no `innerHTML`.
-- A reply cannot make the plugin read a file, write a file, or send a request.
+- A reply cannot make the plugin read a file, write a file, or send a request —
+  **unless you have turned on note editing** for the conversation. Then the model
+  can read Markdown notes and propose changes to them, within the limits described
+  under "When you turn on note editing".
 - JSON in a reply (quizzes) is parsed defensively and never trusted structurally.
 
 What it cannot do: stop a model from being *persuaded* by text you fed it. Be
 careful about indexing notes from untrusted sources, and use ignored RAG paths for
 anything you do not want reaching a prompt.
+
+With note editing on, this risk is larger. A note or a web page that misleads the
+model could make it read notes you did not ask about — their text then reaches the
+provider, and with web search on the model could also put it into a search query —
+or propose a change you did not ask for. The confirmation dialog is the safeguard
+against unwanted changes: read the diff before you press Apply, and leave "Apply
+changes without asking" off. Consider keeping web search off in conversations
+where note editing is on.
 
 ---
 

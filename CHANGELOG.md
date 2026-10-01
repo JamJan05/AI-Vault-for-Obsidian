@@ -1,5 +1,23 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Note editing (opt-in, off by default).** The model can search the vault, read Markdown notes
+  and change them: replace a passage, add text at the end, or create a note. It needs two
+  switches — "Let the model read and edit notes" in the settings, and the Edit button in the chat
+  view, which is off again in every new or reopened conversation. Each change is shown as a diff
+  and written only after you press Apply; "Apply changes without asking" is a separate setting,
+  off by default. Changed notes are listed under the answer, and notes the model read are listed
+  as sources. Works with OpenAI and Claude models, not with the Local API.
+
+### Privacy
+- With note editing on, the text of every note the model chooses to read is sent to the selected
+  provider. Hidden folders, Obsidian's configuration folder and ignored RAG paths cannot be read
+  or changed, and there is no tool to delete, rename or move a file. See `PRIVACY.md`.
+- With note tools on, OpenAI models that normally use Chat Completions (GPT-4o, GPT-4o Mini) are
+  called through the Responses API, with `store: false` like every other Responses request.
+
 ## [1.5.1] - 2026-09-29
 
 A maintenance release. It sends less than 1.5.0: note fragments that are unrelated to the question

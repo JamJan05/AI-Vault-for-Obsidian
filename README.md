@@ -13,6 +13,7 @@ AI-Vault turns your Obsidian workspace into an AI assistant that can use your no
 - 📚 **Vault RAG** - search relevant Markdown and Canvas content from your vault.
 - 📎 **Manual note context** - attach specific notes or canvases to a conversation.
 - 🗂️ **Projects** - group related chats with custom prompts and shared project context.
+- ✏️ **Note editing (opt-in)** - let the model read notes and propose changes that you approve one by one.
 - 🕘 **Conversation history** - automatically save and reopen previous chats.
 - ⚡ **Cancelable responses** - stop an in-progress conversation from the chat view.
 - 🧠 **Thinking modes** - choose Fast, Normal, or Think mode.
@@ -150,11 +151,33 @@ Inside the AI-Vault chat view you can:
 - 📚 toggle RAG,
 - 📎 attach notes manually,
 - 🌐 toggle web search,
+- ✏️ let the model read and edit notes in the current conversation (only when enabled in the settings),
 - 🔁 regenerate the last response,
 - ⏹️ stop generation,
 - 📋 copy messages and code blocks,
 - 🔎 click a source under an answer to open the note at the fragment that was used,
 - 📤 export a conversation to a note and 🔄 re-index the vault from the "more" menu.
+
+---
+
+## ✏️ Note Editing
+
+Off by default. By itself the model cannot read a file or change one — it only sees what the plugin puts into the prompt. Note editing gives it a small set of tools, and only when you switch it on in two places:
+
+1. **Settings → AI-Vault → Note editing → Let the model read and edit notes** — the master switch. While it is off, the chat view has no Edit button at all.
+2. **The Edit button in the chat view** — turns the tools on for the current conversation. Every new or reopened conversation starts with it off.
+
+While it is on, the model can:
+
+- 🔎 search your vault by note name, and through the RAG index when it is built,
+- 📖 read a Markdown note,
+- ✏️ replace a passage in a note, add text at the end of a note, or create a new note.
+
+It cannot delete, rename or move notes, cannot touch anything that is not a `.md` file, and cannot reach hidden folders, Obsidian's configuration folder or your [ignored RAG paths](#-ignored-rag-paths).
+
+**Every change is shown to you first** — the note's path and a diff — and is written only when you press **Apply**. Changed notes are listed under the answer. The second setting, **Apply changes without asking**, skips that dialog; it is off by default and the line above the input warns you while it is on. Changes are made through Obsidian's own Vault API, so Obsidian's file recovery can restore an earlier version of a note.
+
+Notes the model reads are sent to the provider, like any other context; they are listed as sources under the answer. Note editing works with OpenAI and Claude models, not with the Local API.
 
 ---
 

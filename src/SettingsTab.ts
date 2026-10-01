@@ -39,6 +39,7 @@ interface PluginWithDeps {
 	saveData(data: Record<string, unknown>): Promise<void>;
 	getHistoryView():  GPTHistoryView | null;
 	getProjectsView(): GPTProjectsView | null;
+	getChatView(): { refreshNoteTools(): void } | null;
 }
 
 function isProvider(value: string): value is Provider {
@@ -97,6 +98,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 			this.localApiGroup(),
 			this.chatGroup(),
 			this.ragGroup(),
+			this.noteEditingGroup(),
 			this.storageGroup(),
 			this.advancedGroup(),
 		];
@@ -1038,6 +1040,50 @@ export class GPTSettingsTab extends PluginSettingTab {
 				enableRow, autoIndexRow, semanticRow, ignoredPathsRow,
 				statusRow, reindexRow, clearEmbeddingsRow,
 			],
+		};
+	}
+
+	// ── Note editing ───────────────────────────────────────────────────────────
+
+	private noteEditingGroup(): SettingDefinitionGroup {
+		const enableRow: SettingDefinitionRender = {
+			name: t("settings_edit_enable_name"),
+			desc: t("settings_edit_enable_desc"),
+			render: (setting: Setting) => {
+				setting.addToggle(tog => tog
+					.setValue(this.plugin.settings.noteEditingEnabled === true)
+					.onChange(async (v: boolean) => {
+						this.plugin.settings.noteEditingEnabled = v;
+						// Writing without asking is a separate decision, made again each time.
+						if (!v) this.plugin.settings.noteEditingAutoApply = false;
+						await this.plugin.saveSettings();
+						this.plugin.getChatView()?.refreshNoteTools();
+						this.rerender();
+					}),
+				);
+			},
+		};
+
+		const autoApplyRow: SettingDefinitionRender = {
+			name: t("settings_edit_auto_name"),
+			desc: t("settings_edit_auto_desc"),
+			visible: () => this.plugin.settings.noteEditingEnabled === true,
+			render: (setting: Setting) => {
+				setting.addToggle(tog => tog
+					.setValue(this.plugin.settings.noteEditingAutoApply === true)
+					.onChange(async (v: boolean) => {
+						this.plugin.settings.noteEditingAutoApply = v;
+						await this.plugin.saveSettings();
+						this.plugin.getChatView()?.refreshNoteTools();
+					}),
+				);
+			},
+		};
+
+		return {
+			type: "group",
+			heading: t("settings_edit_title"),
+			items: [enableRow, autoApplyRow],
 		};
 	}
 

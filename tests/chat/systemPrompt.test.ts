@@ -133,3 +133,20 @@ describe("composeSystemPrompt", () => {
 		assert.equal(compose({ retrieved: [{ title: "N", text: "short" }] }).includes("truncated"), false);
 	});
 });
+
+describe("composeSystemPrompt — note tools", () => {
+	it("says nothing about tools unless they are offered", () => {
+		assert.equal(compose({}).includes("NOTE TOOLS"), false);
+		assert.equal(compose({ noteTools: null }).includes("NOTE TOOLS"), false);
+	});
+
+	it("explains the tools and how changes are approved", () => {
+		assert.match(compose({ noteTools: "confirm" }), /NOTE TOOLS:.*approves or declines/s);
+		assert.match(compose({ noteTools: "auto" }), /NOTE TOOLS:.*written immediately/s);
+	});
+
+	it("does not claim the model cannot read the vault while it can", () => {
+		const prompt = compose({ noteTools: "confirm", searchedWithoutMatch: true });
+		assert.equal(prompt.includes("You cannot read the vault yourself"), false);
+	});
+});
