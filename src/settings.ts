@@ -58,6 +58,22 @@ export interface PluginSettings {
 	/** One ignore pattern per line — see src/rag/ignorePaths.ts for the semantics. */
 	ragExcludedPaths:       string;
 
+	// Note tools
+	/**
+	 * Master switch for the note tools. While it is off the chat view offers no
+	 * way to let a model read or change notes — see src/tools/noteTools.ts.
+	 */
+	noteEditingEnabled:     boolean;
+	/** Write the model's changes without showing them for approval first. */
+	noteEditingAutoApply:   boolean;
+	/**
+	 * Only notes the user marked in a message (`#Name`) may be changed — see
+	 * src/tools/writeTargets.ts. On by default.
+	 */
+	noteEditingRequireMark: boolean;
+	/** A mark also covers the notes that the marked note links to, one step away. */
+	noteEditingFollowLinks: boolean;
+
 	// External storage
 	externalStorageEnabled: boolean;
 	externalStoragePath:    string;
@@ -104,6 +120,10 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	ragEmbeddingsEnabled:    false,
 	ragSearchMode:           "hybrid",
 	ragExcludedPaths:        "",
+	noteEditingEnabled:      false,
+	noteEditingAutoApply:    false,
+	noteEditingRequireMark:  true,
+	noteEditingFollowLinks:  false,
 	externalStorageEnabled:  true,
 	externalStoragePath:     "",
 	apiKeysInSync:           false,

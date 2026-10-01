@@ -15,7 +15,8 @@
           "manually attached note excerpts",
           "RAG chunks",
           "project context",
-          "note text submitted for embedding"
+          "note text submitted for embedding",
+          "note paths, fragments and note text returned by the note tools (only while note editing is on: noteEditingEnabled plus the per-conversation switch, both off by default)"
         ],
         "requiresUserCredential": true
       },
@@ -29,7 +30,8 @@
           "conversation history",
           "manually attached note excerpts",
           "RAG chunks",
-          "project context"
+          "project context",
+          "note paths, fragments and note text returned by the note tools (only while note editing is on: noteEditingEnabled plus the per-conversation switch, both off by default)"
         ],
         "requiresUserCredential": true
       }

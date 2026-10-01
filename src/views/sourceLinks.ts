@@ -48,12 +48,28 @@ export async function openSource(app: App, source: MessageSource): Promise<void>
 
 /** Draws the sources of an answer as buttons under its bubble. */
 export function renderSources(app: App, bubble: HTMLElement, sources: MessageSource[]): void {
+	renderNoteChips(app, bubble, sources, "gpt-rag-sources", "🗄️", t("rag_sources_label"));
+}
+
+/** Draws the notes an answer changed as buttons under its bubble. */
+export function renderChanges(app: App, bubble: HTMLElement, changes: MessageSource[]): void {
+	renderNoteChips(app, bubble, changes, "gpt-rag-sources gpt-note-changes", "✏️", t("edit_changes_label"));
+}
+
+function renderNoteChips(
+	app:     App,
+	bubble:  HTMLElement,
+	sources: MessageSource[],
+	cls:     string,
+	icon:    string,
+	label:   string,
+): void {
 	const msgEl = bubble.parentElement;
 	if (!msgEl || !sources.length) return;
 
-	const srcEl = msgEl.createDiv({ cls: "gpt-rag-sources" });
-	srcEl.createSpan({ cls: "gpt-rag-src-icon",  text: "🗄️" });
-	srcEl.createSpan({ cls: "gpt-rag-src-label", text: t("rag_sources_label") });
+	const srcEl = msgEl.createDiv({ cls });
+	srcEl.createSpan({ cls: "gpt-rag-src-icon",  text: icon });
+	srcEl.createSpan({ cls: "gpt-rag-src-label", text: label });
 
 	for (const source of sources) {
 		const chip = srcEl.createEl("button", {

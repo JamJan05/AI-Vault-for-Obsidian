@@ -124,6 +124,74 @@ including existing installs, and a notice says so once.
 `.md` and `.canvas` files are indexed. Canvas files are converted to readable text
 (nodes and edges) before indexing.
 
+### When you turn on note editing
+
+Note editing is off by default. It needs the master switch in the settings and,
+for each conversation, the Edit button in the chat view. While both are on, the
+request also carries the definitions of seven tools, and the model can ask the
+plugin to run them:
+
+- `search_notes` — the paths of notes whose name or folder matches the model's
+  query, and, when the RAG index is built, up to 8 matching fragments of up to
+  1 500 characters each. With semantic search on, the query is also sent to
+  OpenAI for embedding, like any RAG question.
+- `read_note` — the text of one Markdown note, up to 40 000 characters.
+- `read_canvas` — the cards of one canvas as text (their ids, text, linked files
+  and URLs) and its connections, up to 40 000 characters.
+- `edit_note`, `append_to_note`, `create_note` — change a note or create one.
+- `edit_canvas` — add text cards, change the text of text cards, remove cards and
+  add connections in a canvas, or create a canvas.
+
+**What this sends.** Whatever a tool returns goes to the selected provider in the
+next request of the same exchange: note paths, fragments and the text of every
+note the model chose to read. The model decides which notes to read, so this can
+be more than RAG would have attached. Every note read this way is listed under
+the answer as a source. The tool calls and their results are not saved in the
+conversation history and are not sent again with later messages; the answer is.
+
+**What stays out of reach.** Only `.md` and `.canvas` files inside the vault, as Obsidian
+shows it: a folder you linked into the vault (a symlink or junction) is part of
+the vault, so exclude it with the ignored RAG paths if the model should not reach
+it. Not hidden
+folders, not Obsidian's configuration folder (so not `data.json`, where settings
+live), not paths matching your ignored RAG paths. There is no tool to delete,
+rename or move a file, and none to run a command or open a URL.
+
+**Which notes can be changed.** By default only notes you marked in a message
+typed into the conversation — `#Name` or `#Folder/Name`, with spaces written as
+hyphens (`#My-note`) or in brackets (`#[[My note]]`), optionally with `.md` or
+`.canvas`. A hyphen in a mark matches a space or a hyphen in the name; when that
+fits more than one file, none of them can be changed.
+The list is built from what you type in the chat box, never from note text, web
+pages, model replies, text sent by a command, or a conversation reopened from the
+history. A change to any other note is refused before it reaches the confirmation
+dialog. The setting "Only change notes marked with #name" turns this off; it is
+on by default and is switched back on whenever the master switch is switched off.
+With "A mark also covers linked notes" on (off by default), the notes and canvases
+a marked note links to can be changed too: one step away, at most 60, never an
+ignored or hidden path. The plugin reads those links from the vault itself. Note
+that this makes the content of a marked note part of the decision: a link added
+to it widens what the next message may change.
+Marks do not limit what the model can read.
+
+**What is written.** Each change is shown to you as a diff and is written only
+after you press Apply. For a canvas the dialog shows its cards and connections
+as text, before and after; positions, sizes and colours are not shown. The
+button "Apply all in this answer" accepts the change shown and every later change
+of the same answer without showing them; they are still limited to the notes you
+marked, and are listed under the answer. The next message asks again. A canvas
+is never rewritten as free text: the plugin applies the requested card changes
+to the parsed file and keeps everything else, and a file that is not a valid
+canvas is refused, not overwritten. The setting "Apply changes without asking" removes that
+step; it is off by default, and switching the master switch off switches it off
+too. Changes are written with Obsidian's Vault API, and only if the note still
+has the text you were shown. Switching either switch off, or pressing Stop, ends
+tool use at once: nothing more is read, and a change that was not yet written is
+not written, even if its dialog is still open. At most 12 rounds of tool calls are answered per
+message.
+
+Note editing is not available for the Local API.
+
 ### When you enable web search
 
 Web search runs **on the provider's side**, not in Obsidian:
@@ -333,12 +401,25 @@ What the plugin does about it:
 
 - Model output is **rendered, never executed**. There is no `eval`, no
   `Function` constructor, no shell, and no `innerHTML`.
-- A reply cannot make the plugin read a file, write a file, or send a request.
+- A reply cannot make the plugin read a file, write a file, or send a request —
+  **unless you have turned on note editing** for the conversation. Then the model
+  can read Markdown notes and propose changes to them, within the limits described
+  under "When you turn on note editing".
 - JSON in a reply (quizzes) is parsed defensively and never trusted structurally.
 
 What it cannot do: stop a model from being *persuaded* by text you fed it. Be
 careful about indexing notes from untrusted sources, and use ignored RAG paths for
 anything you do not want reaching a prompt.
+
+With note editing on, this risk is larger. A note or a web page that misleads the
+model could make it read notes you did not ask about — their text then reaches the
+provider, and with web search on the model could also put it into a search query —
+or propose a change you did not ask for. The confirmation dialog is the safeguard
+against unwanted changes: read the diff before you press Apply, and leave "Apply
+changes without asking" off. Marking limits where a change can land: with "Only
+change notes marked with #name" on, a misled model still cannot change a note you
+did not name. Consider keeping web search off in conversations
+where note editing is on.
 
 ---
 

@@ -22,6 +22,14 @@ export interface SendSummaryInput {
 	projectActive: boolean;
 	/** 0 means the whole conversation. */
 	historyLimit:  number;
+	/** The model may read and change notes with tools during this message. */
+	noteTools?:    boolean;
+	/** Changes are written without asking. Only meaningful with `noteTools`. */
+	autoApply?:    boolean;
+	/** Only notes marked with #name in a message can be changed. */
+	requireMark?:  boolean;
+	/** A mark also covers the notes the marked note links to. */
+	followLinks?:  boolean;
 }
 
 export interface SendSummary {
@@ -67,5 +75,15 @@ export function describeOutgoing(input: SendSummaryInput): SendSummary {
 		text += " " + t("send_summary_embedding");
 	}
 
-	return { text, warning: destination.warning };
+	// Local models are not offered the tools, whatever the switch says.
+	const noteTools = Boolean(input.noteTools) && input.provider !== "local";
+	const autoApply = noteTools && Boolean(input.autoApply);
+	if (noteTools) {
+		text += " " + t(autoApply ? "send_summary_tools_auto" : "send_summary_tools_confirm", destination.name);
+		if (input.requireMark) {
+			text += " " + t(input.followLinks ? "send_summary_tools_marked_links" : "send_summary_tools_marked");
+		}
+	}
+
+	return { text, warning: destination.warning || autoApply };
 }

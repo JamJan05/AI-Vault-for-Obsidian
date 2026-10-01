@@ -140,3 +140,46 @@ describe("describeOutgoing — language", () => {
 		assert.match(text, /trafia też do OpenAI/);
 	});
 });
+
+describe("describeOutgoing — note tools", () => {
+	it("says nothing while the tools are off", () => {
+		assert.equal(summary({}).text.includes("read your notes"), false);
+		assert.equal(summary({ noteTools: false, autoApply: true }).text.includes("read your notes"), false);
+		assert.equal(summary({ noteTools: false, autoApply: true }).warning, false);
+	});
+
+	it("says that notes can be read, where they go, and that changes are approved", () => {
+		const result = summary({ provider: "anthropic", noteTools: true });
+		assert.match(result.text, /can read your notes — what it reads goes to Anthropic/);
+		assert.match(result.text, /you approve one by one/);
+		assert.equal(result.warning, false);
+	});
+
+	it("warns when changes are written without asking", () => {
+		const result = summary({ provider: "openai", noteTools: true, autoApply: true });
+		assert.match(result.text, /CHANGE THEM WITHOUT ASKING/);
+		assert.equal(result.warning, true);
+	});
+
+	it("says nothing for a local model, which is not offered the tools", () => {
+		const result = summary({ provider: "local", noteTools: true, autoApply: true });
+		assert.equal(result.text.includes("read your notes"), false);
+		assert.equal(result.warning, false);
+	});
+});
+
+describe("describeOutgoing — marked notes", () => {
+	it("says that only marked notes can be changed, when that is required", () => {
+		assert.match(summary({ noteTools: true, requireMark: true }).text, /Only notes you mark with #name/);
+		assert.equal(summary({ noteTools: true, requireMark: false }).text.includes("#name"), false);
+		assert.equal(summary({ noteTools: false, requireMark: true }).text.includes("#name"), false);
+	});
+});
+
+describe("describeOutgoing — linked notes", () => {
+	it("says that linked notes can be changed too, only when that is on", () => {
+		assert.match(summary({ noteTools: true, requireMark: true, followLinks: true }).text, /and the notes they link to/);
+		assert.equal(summary({ noteTools: true, requireMark: true }).text.includes("link to"), false);
+		assert.equal(summary({ noteTools: true, requireMark: false, followLinks: true }).text.includes("link to"), false);
+	});
+});

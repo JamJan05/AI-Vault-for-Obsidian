@@ -6,6 +6,8 @@
  */
 
 import { t } from "../i18n";
+import { noteToolsPrompt } from "../tools/noteTools";
+import type { NoteToolsPromptOptions } from "../tools/noteTools";
 
 export type ChatMode = "chat" | "learn" | "code";
 
@@ -30,6 +32,8 @@ export interface SystemPromptParts {
 	/** The vault was searched for this question and nothing related was found. */
 	searchedWithoutMatch?: boolean;
 	project:    { name: string; context: string } | null;
+	/** Set while the model is offered the note tools; says how changes are approved. */
+	noteTools?: NoteToolsPromptOptions | null;
 }
 
 const SEPARATOR = "\n\n---\n\n";
@@ -52,6 +56,7 @@ function section(header: string, body: string): string {
 export function composeSystemPrompt(parts: SystemPromptParts): string {
 	let prompt = parts.chatMode === "code" ? codeModePrompt() : parts.basePrompt;
 	if (parts.chatMode === "learn") prompt += t("quiz_instruction");
+	if (parts.noteTools) prompt += noteToolsPrompt(parts.noteTools);
 
 	if (parts.attached.length) {
 		const body = parts.attached
@@ -68,7 +73,8 @@ export function composeSystemPrompt(parts: SystemPromptParts): string {
 	}
 
 	// Say so plainly, so the model can explain it instead of claiming it sees nothing.
-	if (parts.searchedWithoutMatch && !parts.retrieved.length && !parts.attached.length) {
+	// With the note tools the model can look for itself, so the note would be wrong.
+	if (parts.searchedWithoutMatch && !parts.retrieved.length && !parts.attached.length && !parts.noteTools) {
 		prompt += `\n\n---\n${t("rag_no_match_note")}\n---`;
 	}
 

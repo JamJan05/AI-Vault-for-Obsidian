@@ -492,6 +492,19 @@ and `stop_reason: "pause_turn"` is resumed up to three times. The extractor conc
 - `callLocalApi` posts to `/chat/completions` or `/api/chat` and extracts content with
   shape-validating helpers. 401/403 produce a dedicated authentication message.
 
+### 5.5a Note tools (`src/tools/`)
+
+Opt-in tools that let a model read and change Markdown notes. `noteTools.ts` holds the tool
+definitions and the code that runs a call; it reaches the vault only through the `NoteVault`
+interface (`vaultAdapter.ts` implements it with Obsidian's Vault API), so it is unit tested against
+an in-memory vault. `canvas.ts` parses a `.canvas` file and applies card changes to it, `writeTargets.ts` resolves the
+`#name` marks that decide which files may be written. `notePaths.ts` validates every path a model names, `diff.ts` builds the diff
+shown in `ChangeConfirmModal`. The provider side is in `src/api/`: `requests.ts` adds the
+definitions to a request and builds the follow-up body with the results, `contracts.ts` reads the
+calls from a reply, `toolLoop.ts` runs them one after another and caps the rounds. `ChatView`
+creates a tool set per exchange, only while `noteEditingEnabled` and the conversation's Edit switch
+are both on, and passes it to `callOpenAI` / `callClaude`.
+
 ### 5.6 View layer
 
 **`ChatView` (`gpt-chat-view`)** owns the chat panel: layout, controls, the send flow and sessions.

@@ -1,0 +1,218 @@
+/**
+ * Which notes may be written is decided by the marks the user types. A mark that
+ * resolved to the wrong note, or text that counted as a mark when it should not,
+ * would let a change land where the user never pointed.
+ */
+
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import {
+	MAX_LINKED_TARGETS,
+	addLinkedTargets,
+	mayWrite,
+	parseNoteMarks,
+	resolveWriteTargets,
+} from "../../src/tools/writeTargets";
+
+describe("parseNoteMarks", () => {
+	it("reads #name, #folder/name and #[[name with spaces]]", () => {
+		assert.deepEqual(parseNoteMarks("popraw #Plan i #Projekty/Lista oraz #[[Plan B]]"), ["plan", "projekty/lista", "plan b"]);
+	});
+
+	it("reads a mark at the very start and after a newline", () => {
+		assert.deepEqual(parseNoteMarks("#Plan dopisz\n#Lista"), ["plan", "lista"]);
+	});
+
+	it("drops trailing punctuation and keeps an extension", () => {
+		assert.deepEqual(parseNoteMarks("zmień #Plan, potem #Lista.md. A #Mapa.canvas!"), ["plan", "lista.md", "mapa.canvas"]);
+	});
+
+	it("takes only the note from a wikilink with a heading or an alias", () => {
+		assert.deepEqual(parseNoteMarks("#[[Plan#Cele]] #[[Lista|moja lista]]"), ["plan", "lista"]);
+	});
+
+	it("does not repeat a mark", () => {
+		assert.deepEqual(parseNoteMarks("#Plan #plan #PLAN"), ["plan"]);
+	});
+
+	it("ignores headings, anchors inside words and URLs", () => {
+		for (const text of [
+			"# Heading", "## Heading", "C# is a language", "see https://example.com/page#section",
+			"issue#12", "a#b", "#", "# ", "#[[]]", "[[Plan]] without a hash",
+		]) {
+			assert.deepEqual(parseNoteMarks(text), [], text);
+		}
+	});
+
+	it("survives odd input", () => {
+		assert.deepEqual(parseNoteMarks(""), []);
+		assert.deepEqual(parseNoteMarks(undefined as unknown as string), []);
+	});
+});
+
+describe("resolveWriteTargets", () => {
+	const notes = ["Plan.md", "Projekty/Lista.md", "A/Dziennik.md", "B/Dziennik.md", "Plan B.md"];
+	const resolve = (text: string): ReturnType<typeof resolveWriteTargets> =>
+		resolveWriteTargets(parseNoteMarks(text), notes);
+
+	it("resolves a bare name wherever the note is, case-insensitively", () => {
+		assert.deepEqual(resolve("#plan #LISTA").paths, ["Plan.md", "Projekty/Lista.md"]);
+	});
+
+	it("resolves a path exactly", () => {
+		assert.deepEqual(resolve("#Projekty/Lista").paths, ["Projekty/Lista.md"]);
+		assert.deepEqual(resolve("#A/Dziennik").paths, ["A/Dziennik.md"]);
+	});
+
+	it("allows none of several notes with the same name until a folder is given", () => {
+		const targets = resolve("#Dziennik");
+		assert.deepEqual(targets.paths, []);
+		assert.deepEqual(targets.ambiguous, ["dziennik"]);
+		assert.deepEqual(targets.newNames, []);
+	});
+
+	it("does not let a note in the vault root win over one of the same name in a folder", () => {
+		const targets = resolveWriteTargets(["plan"], ["Plan.md", "Projekty/Plan.md"]);
+		assert.deepEqual(targets.paths, []);
+		assert.deepEqual(targets.ambiguous, ["plan"]);
+		assert.deepEqual(resolveWriteTargets(["projekty/plan"], ["Plan.md", "Projekty/Plan.md"]).paths, ["Projekty/Plan.md"]);
+	});
+
+	it("reads a hyphen as a space, so a name with spaces needs no brackets", () => {
+		const files = ["Omówienie darksouls.md", "Gry/Lista do ogrania.md", "a-b.md"];
+		assert.deepEqual(resolveWriteTargets(parseNoteMarks("#omówienie-darksouls"), files).paths, ["Omówienie darksouls.md"]);
+		assert.deepEqual(resolveWriteTargets(parseNoteMarks("#Gry/lista-do-ogrania"), files).paths, ["Gry/Lista do ogrania.md"]);
+		assert.deepEqual(resolveWriteTargets(parseNoteMarks("#[[Omówienie darksouls]]"), files).paths, ["Omówienie darksouls.md"]);
+		assert.deepEqual(resolveWriteTargets(parseNoteMarks("#a-b"), files).paths, ["a-b.md"]);
+	});
+
+	it("allows neither of two notes that differ only by hyphen and space", () => {
+		const targets = resolveWriteTargets(["moja-notatka"], ["Moja notatka.md", "Moja-notatka.md"]);
+		assert.deepEqual(targets.paths, []);
+		assert.deepEqual(targets.ambiguous, ["moja-notatka"]);
+	});
+
+	it("tells a note from a canvas of the same name by the extension", () => {
+		const files = ["Plan.md", "Plan.canvas", "Mapa.canvas"];
+		assert.deepEqual(resolveWriteTargets(["plan"], files).ambiguous, ["plan"]);
+		assert.deepEqual(resolveWriteTargets(["plan.md"], files).paths, ["Plan.md"]);
+		assert.deepEqual(resolveWriteTargets(["plan.canvas"], files).paths, ["Plan.canvas"]);
+		assert.deepEqual(resolveWriteTargets(["mapa"], files).paths, ["Mapa.canvas"]);
+		assert.deepEqual(resolveWriteTargets(["mapa.md"], files).newNames, ["mapa.md"]);
+	});
+
+	it("treats a name that matches no note as a note that may be created", () => {
+		const targets = resolve("#Nowa #Projekty/Nowa");
+		assert.deepEqual(targets.paths, []);
+		assert.deepEqual(targets.newNames, ["nowa", "projekty/nowa"]);
+	});
+
+	it("does not match part of a name or a wrong folder", () => {
+		assert.deepEqual(resolve("#Pla #Lis #X/Plan").paths, []);
+	});
+
+	it("allows nothing without marks", () => {
+		assert.deepEqual(resolveWriteTargets([], notes), { paths: [], newNames: [], ambiguous: [], linked: [] });
+	});
+});
+
+describe("mayWrite", () => {
+	const notes   = ["Plan.md", "Projekty/Lista.md", "Inne/Plan B.md"];
+	const targets = resolveWriteTargets(parseNoteMarks("#Plan #Nowa #Projekty/Raport #[[Plan B]]"), notes);
+
+	it("allows changing exactly the marked notes", () => {
+		assert.equal(mayWrite(targets, "Plan.md", "edit"), true);
+		assert.equal(mayWrite(targets, "Plan.md", "append"), true);
+		assert.equal(mayWrite(targets, "Inne/Plan B.md", "edit"), true);
+		assert.equal(mayWrite(targets, "Projekty/Lista.md", "edit"), false);
+		assert.equal(mayWrite(targets, "plan.md", "edit"), false);
+	});
+
+	it("allows creating a named note in any folder, and a path-marked note only at that path", () => {
+		assert.equal(mayWrite(targets, "Nowa.md", "create"), true);
+		assert.equal(mayWrite(targets, "Dowolny/Folder/Nowa.md", "create"), true);
+		assert.equal(mayWrite(targets, "Projekty/Raport.md", "create"), true);
+		assert.equal(mayWrite(targets, "Raport.md", "create"), false);
+		assert.equal(mayWrite(targets, "Inne/Raport.md", "create"), false);
+		assert.equal(mayWrite(targets, "Sneaky.md", "create"), false);
+	});
+
+	it("lets a new name be a note or a canvas, unless the mark says which", () => {
+		const open = resolveWriteTargets(parseNoteMarks("#Nowa-mapa #Tylko.canvas"), notes);
+		assert.equal(mayWrite(open, "Nowa mapa.md", "create"), true);
+		assert.equal(mayWrite(open, "Nowa mapa.canvas", "create"), true);
+		assert.equal(mayWrite(open, "Nowa-mapa.canvas", "create"), true);
+		assert.equal(mayWrite(open, "Tylko.canvas", "create"), true);
+		assert.equal(mayWrite(open, "Tylko.md", "create"), false);
+	});
+
+	it("does not let a mark for an existing note create another note of that name", () => {
+		assert.equal(mayWrite(targets, "Elsewhere/Plan.md", "create"), false);
+	});
+
+	it("allows nothing with no targets", () => {
+		const none = resolveWriteTargets([], notes);
+		assert.equal(mayWrite(none, "Plan.md", "edit"), false);
+		assert.equal(mayWrite(none, "Nowa.md", "create"), false);
+	});
+});
+
+describe("addLinkedTargets", () => {
+	const notes = ["Biologia.md", "Komórka.md", "DNA.md", "Mitoza.md", "Private/Sekret.md", "Inna.md", "Mapa.canvas"];
+	const links: Record<string, string[]> = {
+		"Biologia.md": ["Komórka.md", "DNA.md", "Private/Sekret.md", "Mapa.canvas", "img/zdjecie.png", "Biologia.md"],
+		"Komórka.md":  ["Mitoza.md"],
+		"Inna.md":     ["Mitoza.md"],
+	};
+	const usable = (path: string): boolean => !path.startsWith("Private/") && /\.(md|canvas)$/.test(path);
+
+	function targetsFor(text: string): ReturnType<typeof resolveWriteTargets> {
+		const targets = resolveWriteTargets(parseNoteMarks(text), notes);
+		addLinkedTargets(targets, path => links[path] ?? [], usable);
+		return targets;
+	}
+
+	it("adds the notes and canvases a marked note links to, one step and no further", () => {
+		const targets = targetsFor("popraw notatki w #biologia");
+		assert.deepEqual(targets.paths, ["Biologia.md"]);
+		assert.deepEqual(targets.linked, ["Komórka.md", "DNA.md", "Mapa.canvas"]);
+		assert.equal(targets.linked.includes("Mitoza.md"), false, "a link of a link is not followed");
+	});
+
+	it("leaves out excluded files, files that are not notes, and the note itself", () => {
+		const { linked } = targetsFor("#biologia");
+		assert.equal(linked.includes("Private/Sekret.md"), false);
+		assert.equal(linked.includes("img/zdjecie.png"), false);
+		assert.equal(linked.includes("Biologia.md"), false);
+	});
+
+	it("follows links only from notes the user marked", () => {
+		assert.deepEqual(targetsFor("#dna").linked, []);
+		assert.deepEqual(targetsFor("nothing marked").linked, []);
+	});
+
+	it("lets linked notes be changed only while that is switched on", () => {
+		const targets = targetsFor("#biologia");
+		assert.equal(mayWrite(targets, "Komórka.md", "edit"), false);
+		assert.equal(mayWrite(targets, "Komórka.md", "edit", false), false);
+		assert.equal(mayWrite(targets, "Komórka.md", "edit", true), true);
+		assert.equal(mayWrite(targets, "Mapa.canvas", "edit", true), true);
+		assert.equal(mayWrite(targets, "Biologia.md", "edit", false), true);
+		assert.equal(mayWrite(targets, "Mitoza.md", "edit", true), false);
+		assert.equal(mayWrite(targets, "Inna.md", "append", true), false);
+	});
+
+	it("does not let a link allow creating anything", () => {
+		const targets = targetsFor("#biologia");
+		assert.equal(mayWrite(targets, "Komórka.md", "create", true), false);
+		assert.equal(mayWrite(targets, "Nowa.md", "create", true), false);
+	});
+
+	it("stops at the limit", () => {
+		const many    = Array.from({ length: MAX_LINKED_TARGETS + 25 }, (_, i) => `N${i}.md`);
+		const targets = resolveWriteTargets(["hub"], ["Hub.md", ...many]);
+		addLinkedTargets(targets, () => many, () => true);
+		assert.equal(targets.linked.length, MAX_LINKED_TARGETS);
+	});
+});
