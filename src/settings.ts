@@ -71,6 +71,8 @@ export interface PluginSettings {
 	 * src/tools/writeTargets.ts. On by default.
 	 */
 	noteEditingRequireMark: boolean;
+	/** A mark also covers the notes that the marked note links to, one step away. */
+	noteEditingFollowLinks: boolean;
 
 	// External storage
 	externalStorageEnabled: boolean;
@@ -121,6 +123,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
 	noteEditingEnabled:      false,
 	noteEditingAutoApply:    false,
 	noteEditingRequireMark:  true,
+	noteEditingFollowLinks:  false,
 	externalStorageEnabled:  true,
 	externalStoragePath:     "",
 	apiKeysInSync:           false,

@@ -7,7 +7,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { mayWrite, parseNoteMarks, resolveWriteTargets } from "../../src/tools/writeTargets";
+import {
+	MAX_LINKED_TARGETS,
+	addLinkedTargets,
+	mayWrite,
+	parseNoteMarks,
+	resolveWriteTargets,
+} from "../../src/tools/writeTargets";
 
 describe("parseNoteMarks", () => {
 	it("reads #name, #folder/name and #[[name with spaces]]", () => {
@@ -107,7 +113,7 @@ describe("resolveWriteTargets", () => {
 	});
 
 	it("allows nothing without marks", () => {
-		assert.deepEqual(resolveWriteTargets([], notes), { paths: [], newNames: [], ambiguous: [] });
+		assert.deepEqual(resolveWriteTargets([], notes), { paths: [], newNames: [], ambiguous: [], linked: [] });
 	});
 });
 
@@ -149,5 +155,64 @@ describe("mayWrite", () => {
 		const none = resolveWriteTargets([], notes);
 		assert.equal(mayWrite(none, "Plan.md", "edit"), false);
 		assert.equal(mayWrite(none, "Nowa.md", "create"), false);
+	});
+});
+
+describe("addLinkedTargets", () => {
+	const notes = ["Biologia.md", "Komórka.md", "DNA.md", "Mitoza.md", "Private/Sekret.md", "Inna.md", "Mapa.canvas"];
+	const links: Record<string, string[]> = {
+		"Biologia.md": ["Komórka.md", "DNA.md", "Private/Sekret.md", "Mapa.canvas", "img/zdjecie.png", "Biologia.md"],
+		"Komórka.md":  ["Mitoza.md"],
+		"Inna.md":     ["Mitoza.md"],
+	};
+	const usable = (path: string): boolean => !path.startsWith("Private/") && /\.(md|canvas)$/.test(path);
+
+	function targetsFor(text: string): ReturnType<typeof resolveWriteTargets> {
+		const targets = resolveWriteTargets(parseNoteMarks(text), notes);
+		addLinkedTargets(targets, path => links[path] ?? [], usable);
+		return targets;
+	}
+
+	it("adds the notes and canvases a marked note links to, one step and no further", () => {
+		const targets = targetsFor("popraw notatki w #biologia");
+		assert.deepEqual(targets.paths, ["Biologia.md"]);
+		assert.deepEqual(targets.linked, ["Komórka.md", "DNA.md", "Mapa.canvas"]);
+		assert.equal(targets.linked.includes("Mitoza.md"), false, "a link of a link is not followed");
+	});
+
+	it("leaves out excluded files, files that are not notes, and the note itself", () => {
+		const { linked } = targetsFor("#biologia");
+		assert.equal(linked.includes("Private/Sekret.md"), false);
+		assert.equal(linked.includes("img/zdjecie.png"), false);
+		assert.equal(linked.includes("Biologia.md"), false);
+	});
+
+	it("follows links only from notes the user marked", () => {
+		assert.deepEqual(targetsFor("#dna").linked, []);
+		assert.deepEqual(targetsFor("nothing marked").linked, []);
+	});
+
+	it("lets linked notes be changed only while that is switched on", () => {
+		const targets = targetsFor("#biologia");
+		assert.equal(mayWrite(targets, "Komórka.md", "edit"), false);
+		assert.equal(mayWrite(targets, "Komórka.md", "edit", false), false);
+		assert.equal(mayWrite(targets, "Komórka.md", "edit", true), true);
+		assert.equal(mayWrite(targets, "Mapa.canvas", "edit", true), true);
+		assert.equal(mayWrite(targets, "Biologia.md", "edit", false), true);
+		assert.equal(mayWrite(targets, "Mitoza.md", "edit", true), false);
+		assert.equal(mayWrite(targets, "Inna.md", "append", true), false);
+	});
+
+	it("does not let a link allow creating anything", () => {
+		const targets = targetsFor("#biologia");
+		assert.equal(mayWrite(targets, "Komórka.md", "create", true), false);
+		assert.equal(mayWrite(targets, "Nowa.md", "create", true), false);
+	});
+
+	it("stops at the limit", () => {
+		const many    = Array.from({ length: MAX_LINKED_TARGETS + 25 }, (_, i) => `N${i}.md`);
+		const targets = resolveWriteTargets(["hub"], ["Hub.md", ...many]);
+		addLinkedTargets(targets, () => many, () => true);
+		assert.equal(targets.linked.length, MAX_LINKED_TARGETS);
 	});
 });

@@ -28,6 +28,8 @@ export interface SendSummaryInput {
 	autoApply?:    boolean;
 	/** Only notes marked with #name in a message can be changed. */
 	requireMark?:  boolean;
+	/** A mark also covers the notes the marked note links to. */
+	followLinks?:  boolean;
 }
 
 export interface SendSummary {
@@ -78,7 +80,9 @@ export function describeOutgoing(input: SendSummaryInput): SendSummary {
 	const autoApply = noteTools && Boolean(input.autoApply);
 	if (noteTools) {
 		text += " " + t(autoApply ? "send_summary_tools_auto" : "send_summary_tools_confirm", destination.name);
-		if (input.requireMark) text += " " + t("send_summary_tools_marked");
+		if (input.requireMark) {
+			text += " " + t(input.followLinks ? "send_summary_tools_marked_links" : "send_summary_tools_marked");
+		}
 	}
 
 	return { text, warning: destination.warning || autoApply };

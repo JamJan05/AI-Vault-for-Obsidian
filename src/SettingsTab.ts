@@ -1058,6 +1058,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 						if (!v) {
 							this.plugin.settings.noteEditingAutoApply = false;
 							this.plugin.settings.noteEditingRequireMark = true;
+							this.plugin.settings.noteEditingFollowLinks = false;
 						}
 						await this.plugin.saveSettings();
 						this.plugin.getChatView()?.refreshNoteTools();
@@ -1094,6 +1095,24 @@ export class GPTSettingsTab extends PluginSettingTab {
 						this.plugin.settings.noteEditingRequireMark = v;
 						await this.plugin.saveSettings();
 						this.plugin.getChatView()?.refreshNoteTools();
+						this.rerender();
+					}),
+				);
+			},
+		};
+
+		const followLinksRow: SettingDefinitionRender = {
+			name: t("settings_edit_links_name"),
+			desc: t("settings_edit_links_desc"),
+			visible: () => this.plugin.settings.noteEditingEnabled === true
+				&& this.plugin.settings.noteEditingRequireMark !== false,
+			render: (setting: Setting) => {
+				setting.addToggle(tog => tog
+					.setValue(this.plugin.settings.noteEditingFollowLinks === true)
+					.onChange(async (v: boolean) => {
+						this.plugin.settings.noteEditingFollowLinks = v;
+						await this.plugin.saveSettings();
+						this.plugin.getChatView()?.refreshNoteTools();
 					}),
 				);
 			},
@@ -1102,7 +1121,7 @@ export class GPTSettingsTab extends PluginSettingTab {
 		return {
 			type: "group",
 			heading: t("settings_edit_title"),
-			items: [enableRow, requireMarkRow, autoApplyRow],
+			items: [enableRow, requireMarkRow, followLinksRow, autoApplyRow],
 		};
 	}
 

@@ -20,7 +20,15 @@ export interface WriteTargets {
 	newNames:  string[];
 	/** Marks that match several files. None of them may be changed until the mark is more exact. */
 	ambiguous: string[];
+	/**
+	 * Files that a marked note links to. They may be changed only while the user
+	 * has the "linked notes" setting on — see addLinkedTargets.
+	 */
+	linked:    string[];
 }
+
+/** Linked files added to one set of targets, at most. */
+export const MAX_LINKED_TARGETS = 60;
 
 /** `#[[Name]]`, or `#name` up to the next space. Must start the text or follow whitespace. */
 const MARK = /(?:^|\s)#(?:\[\[([^\]\n]+)\]\]|([^\s#[\]]+))/g;
@@ -86,7 +94,7 @@ function matches(mark: Key, path: Key): boolean {
  * @param paths vault-relative paths of the notes and canvases that may be used at all
  */
 export function resolveWriteTargets(marks: string[], paths: string[]): WriteTargets {
-	const targets: WriteTargets = { paths: [], newNames: [], ambiguous: [] };
+	const targets: WriteTargets = { paths: [], newNames: [], ambiguous: [], linked: [] };
 	const files = paths.map(path => ({ path, key: toKey(path) }));
 
 	for (const mark of new Set(marks)) {
@@ -104,9 +112,34 @@ export function resolveWriteTargets(marks: string[], paths: string[]): WriteTarg
 	return targets;
 }
 
-/** True when the user's marks allow this change. */
-export function mayWrite(targets: WriteTargets, path: string, kind: NoteChangeKind): boolean {
-	if (kind !== "create") return targets.paths.includes(path);
+/**
+ * Adds the files that the marked notes link to, one step away and no further.
+ * The links are read from the vault by the plugin; a model cannot name them.
+ * @param linksOf vault-relative paths a note links to
+ * @param usable  false for a file the tools may not touch (excluded, hidden, not a note)
+ */
+export function addLinkedTargets(
+	targets: WriteTargets,
+	linksOf: (path: string) => string[],
+	usable:  (path: string) => boolean,
+): void {
+	for (const marked of targets.paths) {
+		for (const path of linksOf(marked)) {
+			if (targets.linked.length >= MAX_LINKED_TARGETS) return;
+			if (targets.paths.includes(path) || targets.linked.includes(path) || !usable(path)) continue;
+			targets.linked.push(path);
+		}
+	}
+}
+
+/**
+ * True when the user's marks allow this change.
+ * @param withLinked also allow the files the marked notes link to
+ */
+export function mayWrite(targets: WriteTargets, path: string, kind: NoteChangeKind, withLinked = false): boolean {
+	if (kind !== "create") {
+		return targets.paths.includes(path) || (withLinked && targets.linked.includes(path));
+	}
 
 	const key = toKey(path);
 	return targets.newNames.some(name => matches(toKey(name), key));

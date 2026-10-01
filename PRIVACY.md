@@ -167,6 +167,11 @@ pages, model replies, text sent by a command, or a conversation reopened from th
 history. A change to any other note is refused before it reaches the confirmation
 dialog. The setting "Only change notes marked with #name" turns this off; it is
 on by default and is switched back on whenever the master switch is switched off.
+With "A mark also covers linked notes" on (off by default), the notes and canvases
+a marked note links to can be changed too: one step away, at most 60, never an
+ignored or hidden path. The plugin reads those links from the vault itself. Note
+that this makes the content of a marked note part of the decision: a link added
+to it widens what the next message may change.
 Marks do not limit what the model can read.
 
 **What is written.** Each change is shown to you as a diff and is written only

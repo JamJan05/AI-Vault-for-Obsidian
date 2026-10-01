@@ -10,7 +10,8 @@
   view, which is off again in every new or reopened conversation. Each change is shown as a diff
   and written only after you press Apply; "Apply changes without asking" is a separate setting,
   off by default. By default the model can change only notes you named in a message as `#Name`,
-  `#Folder/Name`, `#Name-with-spaces` or `#[[Name with spaces]]`. Changed notes are listed under the answer, and notes the model read are listed
+  `#Folder/Name`, `#Name-with-spaces` or `#[[Name with spaces]]`. An optional setting extends a
+  mark to the notes the marked note links to. Changed notes are listed under the answer, and notes the model read are listed
   as sources. Works with OpenAI and Claude models, not with the Local API.
 
 ### Privacy

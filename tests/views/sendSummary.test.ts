@@ -175,3 +175,11 @@ describe("describeOutgoing — marked notes", () => {
 		assert.equal(summary({ noteTools: false, requireMark: true }).text.includes("#name"), false);
 	});
 });
+
+describe("describeOutgoing — linked notes", () => {
+	it("says that linked notes can be changed too, only when that is on", () => {
+		assert.match(summary({ noteTools: true, requireMark: true, followLinks: true }).text, /and the notes they link to/);
+		assert.equal(summary({ noteTools: true, requireMark: true }).text.includes("link to"), false);
+		assert.equal(summary({ noteTools: true, requireMark: false, followLinks: true }).text.includes("link to"), false);
+	});
+});

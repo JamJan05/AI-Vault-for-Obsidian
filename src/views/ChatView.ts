@@ -38,7 +38,8 @@ import { composeSystemPrompt } from "../chat/systemPrompt";
 import { toMessageSource } from "../rag/sources";
 import { createNoteTools } from "../tools/noteTools";
 import { createNoteVault } from "../tools/vaultAdapter";
-import { mayWrite, parseNoteMarks, resolveWriteTargets } from "../tools/writeTargets";
+import { resolveNotePath } from "../tools/notePaths";
+import { addLinkedTargets, mayWrite, parseNoteMarks, resolveWriteTargets } from "../tools/writeTargets";
 import { ChangeConfirmModal } from "./ChangeConfirmModal";
 import { ConfirmModal } from "./ConfirmModal";
 import { FallbackModal } from "./FallbackModal";
@@ -405,6 +406,7 @@ export class GPTChatView extends ItemView {
 			noteTools:      this.noteToolsUsable,
 			autoApply:      this.settings.noteEditingAutoApply === true,
 			requireMark:    this.markRequired,
+			followLinks:    this.followLinks,
 		});
 		this.summaryEl.textContent = summary.text;
 		this.summaryEl.classList.toggle("gpt-send-summary--warning", summary.warning);
@@ -744,7 +746,10 @@ export class GPTChatView extends ItemView {
 		const tools   = targets ? this.createNoteToolSet(bubble, controller.signal, targets) : null;
 		const toolsPrompt: NoteToolsPromptOptions | null = !targets ? null : {
 			autoApply: this.settings.noteEditingAutoApply === true,
-			writable:  this.markRequired ? { paths: [...targets.paths], create: [...targets.newNames] } : null,
+			writable:  this.markRequired ? {
+				paths:  [...targets.paths, ...(this.followLinks ? targets.linked : [])],
+				create: [...targets.newNames],
+			} : null,
 		};
 
 		try {
@@ -952,6 +957,16 @@ export class GPTChatView extends ItemView {
 		const notes = createNoteVault(this.plugin.app).listNotes()
 			.filter(path => !this.rag.isIgnoredPath(path));
 		const targets = resolveWriteTargets(this.noteMarks, notes);
+
+		// Collected whatever the setting says now; whether they count is decided live, at write time.
+		const { metadataCache, vault } = this.plugin.app;
+		addLinkedTargets(
+			targets,
+			path => Object.keys(metadataCache.resolvedLinks[path] ?? {}),
+			path => !this.rag.isIgnoredPath(path)
+				&& (resolveNotePath(path, vault.configDir).ok || resolveNotePath(path, vault.configDir, ".canvas").ok),
+		);
+
 		if (this.markRequired && targets.ambiguous.length) {
 			new Notice(t("edit_mark_ambiguous", targets.ambiguous.map(name => `#${name}`).join(", ")), 9000);
 		}
@@ -961,6 +976,10 @@ export class GPTChatView extends ItemView {
 	/** Read live, so switching the rule on also binds an answer that is already running. */
 	private get markRequired(): boolean {
 		return this.settings.noteEditingRequireMark !== false;
+	}
+
+	private get followLinks(): boolean {
+		return this.settings.noteEditingFollowLinks === true;
 	}
 
 	private createNoteToolSet(bubble: HTMLElement, signal: AbortSignal, targets: WriteTargets): NoteToolSet {
@@ -978,7 +997,7 @@ export class GPTChatView extends ItemView {
 				: undefined,
 			mayWrite:   (path, kind) => {
 				if (!this.markRequired) return true;
-				if (!mayWrite(targets, path, kind)) return false;
+				if (!mayWrite(targets, path, kind, this.followLinks)) return false;
 				// A note created under a mark can be changed again in the same answer.
 				if (kind === "create" && !targets.paths.includes(path)) targets.paths.push(path);
 				return true;
