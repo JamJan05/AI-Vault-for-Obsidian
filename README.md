@@ -1,198 +1,137 @@
 # ✨ AI-Vault for Obsidian
 
-Chat with **OpenAI GPT**, **Anthropic Claude**, and **local models** directly inside Obsidian, with vault-aware context, conversation history, projects, smart modes, and local-first storage.
-
-AI-Vault turns your Obsidian workspace into an AI assistant that can use your notes, canvases, selected files, and project history as context while keeping plugin data on your own machine.
+Chat with **OpenAI GPT**, **Anthropic Claude** and **local models** inside Obsidian. AI-Vault can use your notes and canvases as context, and — only if you switch it on — change them with your approval. History, projects and the search index stay on your machine.
 
 ---
 
 ## 🚀 Highlights
 
-- 🤖 **Multi-provider chat** - switch between OpenAI, Anthropic, and local models from the chat view.
-- 🖥️ **Local models** - run models offline through LM Studio, Ollama, and other OpenAI-compatible servers.
-- 📚 **Vault RAG** - search relevant Markdown and Canvas content from your vault.
-- 📎 **Manual note context** - attach specific notes or canvases to a conversation.
-- 🗂️ **Projects** - group related chats with custom prompts and shared project context.
-- ✏️ **Note editing (opt-in)** - let the model read notes and propose changes that you approve one by one.
-- 🕘 **Conversation history** - automatically save and reopen previous chats.
-- ⚡ **Cancelable responses** - stop an in-progress conversation from the chat view.
-- 🧠 **Thinking modes** - choose Fast, Normal, or Think mode.
-- 🎓 **Learn mode** - generate study-friendly answers and interactive quiz-style responses.
-- 💻 **Code mode** - get programming-focused answers with code formatting.
-- 🌐 **Web search** - use supported OpenAI and Claude web-search capabilities.
-- 🌍 **Bilingual UI** - fully localized English and Polish interface.
-- 🔐 **Local-first storage** - history, projects, keys, and RAG index can stay outside your vault.
+- 🤖 **One chat, three providers** — OpenAI, Anthropic, or a local server (LM Studio, Ollama and other OpenAI-compatible servers), picked from one list.
+- 📚 **Vault context** — RAG finds the relevant fragments of your notes and canvases; you can also attach notes by hand. Sources are listed under each answer and open the note at the fragment that was used.
+- ✏️ **Note editing (opt-in)** — the model can read notes and canvases and propose changes, which you approve as a diff.
+- 🗂️ **Projects and history** — conversations are saved automatically; a project groups chats and gives them their own system prompt.
+- 🧠 **Modes** — Fast, Normal or Think; Chat, Learn (with quizzes) or Code.
+- 🌐 **Web search** — run by OpenAI or Anthropic on their side.
+- 👀 **No surprises** — a line above the input says what the next message will send, and to whom.
+- 🌍 **English and Polish** interface.
 
 ---
 
 ## 🧩 Requirements
 
-- 🖥️ Obsidian desktop **1.7.2 or newer**
-- 🔑 OpenAI API key and/or Anthropic API key — **or** a local model server (LM Studio, Ollama, …)
-- 📡 Internet access for cloud model calls, embeddings, and web search (local models can run offline)
-
-> AI-Vault is desktop-only because optional storage outside the vault requires desktop file-system APIs.
+- Obsidian desktop **1.7.2 or newer** (desktop only: storage outside the vault needs desktop file-system APIs).
+- An OpenAI and/or Anthropic **API key**, or a local model server.
+- Internet access for cloud models and web search. Local models work offline.
 
 ---
 
-## 🤖 Supported Models
+## 📦 Installation and setup
 
-### OpenAI
+**Manual:** download `main.js`, `manifest.json` and `styles.css` from the [Releases page](https://github.com/JamJan05/AI-Vault-for-Obsidian/releases) into `<your-vault>/.obsidian/plugins/ai-vault/`, reload Obsidian and enable **AI-Vault** in **Settings → Community plugins**.
 
-- GPT-6 Sol (default)
-- GPT-6 Astra
-- GPT-6 Luna
-- GPT-5.6 Terra
-- GPT-4o and GPT-4o Mini (older models)
+**Community Plugins** (once listed): **Settings → Community plugins → Browse**, search for **AI-Vault**, install and enable.
 
-### Anthropic
-
-- Claude Sonnet 5.5 (default)
-- Claude Opus 5.5
-- Claude Haiku 4.5
-
-Models offered by earlier versions (GPT-5, GPT-5 Mini, GPT-5 Nano, GPT-5 Search, GPT-4 Turbo, Claude Opus 4.5, Claude Sonnet 4.5) are replaced in your settings with their closest current equivalent the first time the plugin loads, and a notice tells you which model was chosen. Any other model id can still be typed in by hand.
-
-### Local API
-
-Any model served by an OpenAI-compatible or Ollama endpoint, including:
-
-- LM Studio
-- Ollama
-- LocalAI
-- llama.cpp server
-- vLLM
-- Other OpenAI-compatible local servers
+Then open **Settings → AI-Vault**, add an API key or configure a Local API server, choose a model, and open the chat from the ribbon icon or the command palette.
 
 ---
 
-## 🖥️ Local Models
+## 🤖 Models
 
-Use **Provider → Local API** to chat with models running on your own machine. AI-Vault supports two endpoint types and can fetch the available model list from your server.
+| Provider | Models |
+| --- | --- |
+| OpenAI | GPT-6 Sol (default), GPT-6 Astra, GPT-6 Luna, GPT-5.6 Terra, GPT-4o and GPT-4o Mini (older) |
+| Anthropic | Claude Sonnet 5.5 (default), Claude Opus 5.5, Claude Haiku 4.5 |
+| Local API | any model served by an OpenAI-compatible or Ollama endpoint — LM Studio, Ollama, LocalAI, llama.cpp server, vLLM |
 
-### LM Studio (and other OpenAI-compatible servers)
+Any other model id can be typed in by hand. Models offered by earlier versions are replaced in your settings with their closest current equivalent, and a notice says which one was chosen.
 
-1. Start the local server in LM Studio and load a model.
-2. In **Settings → AI-Vault**, set **Local API Type** to **OpenAI-compatible**.
-3. Set **Base URL** to `http://localhost:1234/v1`.
-4. Click **Refresh models** and select a model from the list.
+### 🖥️ Local models
 
-### Ollama
+In **Settings → AI-Vault**, choose **Provider → Local API**, then:
 
-1. Start Ollama with `ollama serve`.
-2. Pull a model, for example `ollama pull llama3`.
-3. In **Settings → AI-Vault**, set **Local API Type** to **Ollama**.
-4. Set **Base URL** to `http://localhost:11434` (no `/v1` — AI-Vault uses Ollama's native endpoints).
-5. Click **Refresh models** and select a model from the list.
+- **LM Studio / OpenAI-compatible:** type **OpenAI-compatible**, Base URL `http://localhost:1234/v1`.
+- **Ollama:** type **Ollama**, Base URL `http://localhost:11434` (no `/v1`).
 
-> Web search is not available for Local API models. Local API requests are sent only to the Base URL you configure. If your Base URL points to a cloud service or third-party gateway, your chat messages and Local API key are sent to that endpoint. Leave **Local API key** empty for local Ollama or LM Studio.
+Click **Refresh models** and pick one. Leave **Local API key** empty for a server on your own machine.
+
+> Requests go only to the Base URL you configure. If it points to a cloud service or a gateway, your messages and Local API key are sent there. Web search and note editing are not available for Local API models.
 
 ---
 
-## 📚 Vault Context
+## 📚 Vault context
 
-AI-Vault can add your notes to the model context in two ways:
+- 🔎 **RAG** searches the indexed `.md` and `.canvas` files and adds the related fragments to your question. The search is a keyword search that runs on your machine. When nothing is related, nothing is added.
+- 📎 **Attached notes** — the paperclip adds notes or canvases you pick, with the notes they link to.
 
-- 🔎 **Automatic RAG** searches indexed `.md` and `.canvas` files for relevant chunks.
-- 📎 **Manual context** lets you pick specific notes or canvases for the conversation.
+Canvases are turned into readable text (cards and connections), not sent as raw JSON.
 
-Canvas files are parsed into readable text using their nodes and edges, so the model can understand the flow of a canvas instead of receiving raw JSON.
-
-The RAG engine uses keyword search, which runs entirely on your machine. **Semantic search** (embeddings created by OpenAI) is optional and off by default — see [What RAG sends](#-what-rag-sends).
-
-Building the enabled vault-wide RAG index enumerates Markdown and Canvas files. File contents are read incrementally for indexing; ordinary wikilink resolution uses Obsidian's metadata cache and does not scan the vault.
+**Semantic search** is optional and off by default — see [What RAG sends](#-what-rag-sends).
 
 ### 🚫 Ignored RAG paths
 
-**Settings → AI-Vault → RAG → Ignored RAG paths** takes one pattern per line and keeps matching notes out of RAG entirely — they are not indexed, not sent to the embeddings model, not used as context and not listed as sources:
+**Settings → AI-Vault → RAG → Ignored RAG paths** takes one pattern per line. Matching notes are not indexed, not sent for embeddings, not used as context, not reachable by note editing, and not followed through a `[[wikilink]]` from an attached note.
 
 ```text
 Assets/**
-Unsorted/**
 Templates/**
 *.canvas
 # lines starting with a hash are comments
 ```
 
-- Patterns are matched case-insensitively against vault-relative paths.
-- A pattern without `/` matches that file name at any depth, and a top-level folder of that name; a pattern containing `/` is anchored at the vault root.
-- `*` matches within one path segment, `**` crosses segments. A pattern without wildcards also covers everything below it, so `Assets` behaves like `Assets/**`.
-- Ignored notes are also skipped when they would be reached through a `[[wikilink]]` from an attached note.
-- Notes you attach manually with the paperclip are **still sent** — that is an explicit choice, not automatic retrieval.
-- Changing the list takes effect immediately for search and removes stored chunks of newly ignored notes; re-index to fully rebuild.
+- Matching is case-insensitive, against vault-relative paths.
+- A pattern without `/` matches that file name at any depth and a top-level folder of that name; a pattern with `/` is anchored at the vault root.
+- `*` stays within one path segment, `**` crosses segments. `Assets` behaves like `Assets/**`.
+- Notes you attach with the paperclip are **still sent** — that is your explicit choice.
 
-This only affects AI-Vault's RAG. It does not hide anything inside Obsidian.
+---
+
+## ✏️ Note editing
+
+Off by default. Without it the model cannot read or change a file; it only sees what the plugin puts into the prompt. It takes two switches:
+
+1. **Settings → AI-Vault → Note editing → Let the model read and edit notes** — the master switch. While it is off, the chat view has no Edit button.
+2. **The Edit button in the chat view** — for the current conversation only. Every new or reopened conversation starts with it off.
+
+While both are on, the model can:
+
+- 🔎 search the vault and 📖 read Markdown notes and canvases,
+- ✏️ replace a passage in a note, add text at its end, or create a note,
+- 🗺️ add, change, remove and connect the cards of a canvas, or create a canvas (only the text of text cards can be changed; new cards are placed below the existing ones).
+
+It cannot delete, rename or move files, touch anything but `.md` and `.canvas` files, or reach hidden folders, Obsidian's configuration folder or your ignored RAG paths.
+
+**You name the notes it may change.** Mark a note or canvas in your message with a hash — *"#Plan add a section about deadlines"*:
+
+| You type | It means |
+| --- | --- |
+| `#Plan` | the note or canvas called Plan, in any folder |
+| `#Projects/Plan` | exactly that path |
+| `#Plan-B` or `#[[Plan B]]` | a name with spaces |
+| `#Plan.md`, `#Plan.canvas` | when a note and a canvas share a name |
+
+A mark lasts for the rest of the conversation. A name that matches no file lets the model create one with that name; a name that matches several files allows none of them until you add the folder or the extension. Only marks you type in the chat box count — text in a note, on a web page or in a reply cannot mark anything. Marks limit writing, not reading.
+
+**You approve each change.** A dialog shows the file and a diff — for a canvas, its cards and connections before and after — and nothing is written until you press **Apply**. **Apply all in this answer** also accepts the remaining changes of the same answer. Changed notes are listed under the answer. Stop, or switching Edit off, ends it at once.
+
+Three settings relax these rules; decide deliberately:
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Only change notes marked with #name | on | off: the model may propose changes to any note |
+| A mark also covers linked notes | off | on: a mark also covers the notes that note links to — one step, at most 60. Meant for a hub note: *"fix the notes in #biology"* |
+| Apply changes without asking | off | on: changes are written with no dialog. The line above the input warns you while it is on |
+
+Notes the model reads are sent to the provider and listed as sources. Changes go through Obsidian's Vault API, so file recovery can restore an earlier version. Works with OpenAI and Claude models.
 
 ---
 
 ## 🗂️ Projects
 
-Projects let you keep related conversations together.
-
-Each project can have:
-
-- 📝 its own custom system prompt,
-- 💬 linked conversations,
-- 🧠 context from other chats in the same project,
-- 🎨 a project color for easier scanning.
-
-This works well for long-running research, coding tasks, study topics, writing work, or client-specific threads.
+A project keeps related conversations together. It can have its own system prompt and a colour, and its chats share context: short summaries of the other conversations in the project are added to the prompt.
 
 ---
 
-## 💬 Chat Tools
-
-Inside the AI-Vault chat view you can:
-
-- 👀 see what the next message will send, and to whom, before you send it,
-- 🤖 pick a model from any provider in one list,
-- 🧠 switch the thinking mode (Fast, Normal, Thinking),
-- 💬 switch the conversation mode (Chat, Learn, Code),
-- 📚 toggle RAG,
-- 📎 attach notes manually,
-- 🌐 toggle web search,
-- ✏️ let the model read and edit notes in the current conversation (only when enabled in the settings),
-- 🔁 regenerate the last response,
-- ⏹️ stop generation,
-- 📋 copy messages and code blocks,
-- 🔎 click a source under an answer to open the note at the fragment that was used,
-- 📤 export a conversation to a note and 🔄 re-index the vault from the "more" menu.
-
----
-
-## ✏️ Note Editing
-
-Off by default. By itself the model cannot read a file or change one — it only sees what the plugin puts into the prompt. Note editing gives it a small set of tools, and only when you switch it on in two places:
-
-1. **Settings → AI-Vault → Note editing → Let the model read and edit notes** — the master switch. While it is off, the chat view has no Edit button at all.
-2. **The Edit button in the chat view** — turns the tools on for the current conversation. Every new or reopened conversation starts with it off.
-
-While it is on, the model can:
-
-- 🔎 search your vault by note name, and through the RAG index when it is built,
-- 📖 read a Markdown note or a canvas,
-- ✏️ replace a passage in a note, add text at the end of a note, or create a new note,
-- 🗺️ change a canvas: add text cards, change the text of text cards, remove cards and connect cards with arrows — or create a new canvas. New cards are placed below the existing ones for you to arrange.
-
-It cannot delete, rename or move files, cannot touch anything that is not a `.md` or `.canvas` file, and cannot reach hidden folders, Obsidian's configuration folder or your [ignored RAG paths](#-ignored-rag-paths).
-
-**Only notes you mark can be changed.** Name the note or canvas in your message with a hash: `#Plan` or `#Projects/Plan` — for example *"#Plan add a section about deadlines"*. Write a name with spaces with hyphens (`#Plan-B` for "Plan B") or in brackets (`#[[Plan B]]`). When a note and a canvas share a name, add the extension: `#Plan.md`, `#Plan.canvas`. A mark stays valid for the rest of the conversation. A name that matches no note lets the model create a note with that name; a name shared by several notes allows none of them until you add the folder (a note in the vault root that shares its name with a note in a folder cannot be marked on its own). Marks count only when you type them in the chat box, so text inside a note or on a web page cannot mark anything. Reading is not limited by marks. The setting **Only change notes marked with #name** (on by default) turns this rule off.
-
-**Linked notes.** With the setting **A mark also covers linked notes** (off by default), marking a note also lets the model change the notes and canvases that note links to — one step away, not further, and at most 60 of them. This is meant for a hub note: *"fix the notes in #biology"* covers `biology` and every note it links to.
-
-**Every change is shown to you first** — the file's path and a diff; for a canvas, the list of its cards and connections before and after — and is written only when you press **Apply**. **Apply all in this answer** accepts that change and the ones still to come while the model writes the same answer, without further dialogs; the next message asks again. Changed notes are listed under the answer. The second setting, **Apply changes without asking**, skips that dialog; it is off by default and the line above the input warns you while it is on. Changes are made through Obsidian's own Vault API, so Obsidian's file recovery can restore an earlier version of a note.
-
-Notes the model reads are sent to the provider, like any other context; they are listed as sources under the answer. Note editing works with OpenAI and Claude models, not with the Local API.
-
----
-
-## 🌍 Language
-
-The entire interface is fully localized in **English** and **Polish**. Switch it any time in **Settings → AI-Vault → Language / Język**; the change applies across settings, chat, projects, history, quizzes, and notices.
-
----
-
-## 🔐 Privacy And Storage
+## 🔐 Privacy and storage
 
 > **Full detail:** [`PRIVACY.md`](PRIVACY.md) documents exactly what is sent, to whom, when, where it is stored and how to delete it. This section is the summary.
 
@@ -208,176 +147,71 @@ AI-Vault contacts three kinds of endpoint and nothing else:
 
 Every request is caused by something you did — sending a message, refreshing the model list, or indexing. The plugin has **no backend of its own**, sends **no telemetry, analytics or crash reports**, and has no install, device or vault identifier.
 
+A request carries your message, the conversation, attached notes, related RAG fragments, project context and, with note editing on, whatever the model reads through its tools.
+
 ### 🔑 Accounts, API keys and costs
 
-- OpenAI and Anthropic each require **your own account and API key**.
-- Those providers **bill you for usage**, including the embedding requests semantic search makes if you turn it on. AI-Vault itself is free and never charges anything.
-- A local model server needs no account and costs nothing beyond your own hardware.
-- Web search is billed by the provider that performs it.
+- OpenAI and Anthropic each require **your own account and API key**, and **bill you for usage** — including web search and, if you turn it on, the embedding requests of semantic search.
+- AI-Vault itself is free. A local model server needs no account.
 
 ### 📚 What RAG sends
 
-By default, **nothing**: the RAG index is a keyword index that is built and searched on your machine.
+By default, **nothing**: the index is built and searched on your machine.
 
-**Semantic search is opt-in** (**Settings → RAG → Semantic search**, off by default). If you turn it on and confirm the dialog, the text of **every indexed note** is sent to OpenAI's embeddings endpoint — not only the notes you are asking about — and so is every question you ask with RAG on, even when you chat with Claude or a local model. An OpenAI key alone never enables this.
-
-To control it: leave **Semantic search** off, use **Ignored RAG paths**, or turn off **Auto-index**. **Delete stored embeddings** removes the vectors from your machine.
+**Semantic search is opt-in** (**Settings → RAG → Semantic search**). If you turn it on and confirm the dialog, the text of **every indexed note** is sent to OpenAI's embeddings endpoint — not only the notes you ask about — and so is every question you ask with RAG on, even when you chat with Claude or a local model. An OpenAI key alone never enables this. **Delete stored embeddings** removes the vectors from your machine.
 
 ### 💾 Storage
 
-By default, AI-Vault stores plugin data outside your vault in a local folder next to the vault directory:
+Conversation history, projects and the RAG index are stored outside your vault by default, in a folder next to it, which keeps them out of Obsidian Sync:
 
 ```text
 <parent-of-vault>/<vault-name>-gpt-data/
 ```
 
-This keeps data out of Obsidian Sync by default.
+The location is configurable, and the data can be kept in the plugin folder inside the vault instead if you want it synced.
 
-Storage location is configurable. API keys have their own **Obsidian Sync / local** choice. Conversation history, projects, and the RAG index use the external-storage setting and can instead be kept in the plugin folder inside the vault for Obsidian Sync.
+API keys are kept in Obsidian's secret storage on Obsidian 1.11.4 and newer. On older versions they are in a file in the folder above, or in the plugin's `data.json` if you choose to sync them.
 
-Stored locally:
-
-- 🔑 API keys
-- 🕘 conversation history
-- 🗂️ projects
-- 📚 RAG index
-
-Data is sent to model providers only when it is part of a request, for example:
-
-- your chat message,
-- selected notes,
-- relevant RAG chunks,
-- project context,
-- web-search requests.
-
-AI-Vault does not use its own backend server. Requests go directly from Obsidian to the configured OpenAI or Anthropic API, or to the Local API Base URL you set. Local API can be a local server such as Ollama or LM Studio, or a user-configured authenticated Ollama/OpenAI-compatible gateway such as Ollama Cloud, LiteLLM, LocalAI, or vLLM.
-
-Desktop Node.js `fs` and `path` access is limited to the optional external storage directory. Clipboard access is write-only and runs only when you press a message or code copy button. The plugin never reads clipboard contents.
-
----
-
-## 📦 Installation
-
-### Manual Installation
-
-1. Download the latest release from the [Releases page](https://github.com/JamJan05/AI-Vault-for-Obsidian/releases).
-2. Copy the plugin files into:
-
-```text
-<your-vault>/.obsidian/plugins/ai-vault/
-```
-
-Required files:
-
-```text
-main.js
-manifest.json
-styles.css
-```
-
-3. Reload Obsidian.
-4. Open **Settings -> Community plugins**.
-5. Enable **AI-Vault**.
-
-### Community Plugins
-
-Once available in the Obsidian Community Plugins directory:
-
-1. Open **Settings -> Community plugins**.
-2. Turn off **Restricted mode** if needed.
-3. Click **Browse**.
-4. Search for **AI-Vault**.
-5. Install and enable the plugin.
-
----
-
-## ⚙️ Setup
-
-1. Open **Settings -> AI-Vault**.
-2. Choose the interface language.
-3. Add your OpenAI API key and/or Anthropic API key, or configure a **Local API** server.
-4. Choose your default provider and model.
-5. Configure RAG, token limits, storage, and system prompt settings.
-6. Open AI-Vault from the ribbon icon or command palette.
-
----
-
-## 🛠️ Development
-
-Install dependencies:
-
-```bash
-npm install
-```
-
-Run a development build:
-
-```bash
-npm run dev
-```
-
-Run typecheck:
-
-```bash
-npm run typecheck
-```
-
-Run the Obsidian and TypeScript lint rules:
-
-```bash
-npm run lint
-```
-
-Create a production build:
-
-```bash
-npm run build
-```
-
-The production plugin files are:
-
-```text
-main.js
-manifest.json
-styles.css
-```
+Node.js `fs` and `path` are used only for that storage folder. The clipboard is write-only: the plugin writes to it when you press a copy button and never reads it.
 
 ---
 
 ## 🛡️ Security
 
-Found a security problem? **Do not open a public issue.** Report it privately — see [`SECURITY.md`](SECURITY.md) for the process, and for what must never appear in a report (API keys, private note content, unredacted logs).
+Found a security problem? **Do not open a public issue.** Report it privately — see [`SECURITY.md`](SECURITY.md).
 
-Release assets carry a signed build provenance attestation and the build is reproducible from source:
+Release assets carry a signed build provenance attestation, and the build is reproducible from source:
 
 ```bash
 gh attestation verify main.js -R JamJan05/AI-Vault-for-Obsidian
 ```
 
-What the automated security and privacy checks verify — and what they deliberately do not — is documented in [`docs/SECURITY-PRIVACY-CHECKS.md`](docs/SECURITY-PRIVACY-CHECKS.md).
+What the automated checks verify, and what they do not, is in [`docs/SECURITY-PRIVACY-CHECKS.md`](docs/SECURITY-PRIVACY-CHECKS.md).
 
 ---
 
-## 🐛 Reporting Issues
+## 🛠️ Development
 
-Found a bug or have a feature request? Open an issue on [GitHub Issues](https://github.com/JamJan05/AI-Vault-for-Obsidian/issues).
+```bash
+npm ci              # install dependencies
+npm run dev         # development build, watching for changes
+npm run build       # typecheck and production build
+npm test            # unit tests
+npm run lint        # Obsidian and TypeScript lint rules
+npm run compliance  # security and privacy checks
+```
+
+The plugin is three files: `main.js`, `manifest.json` and `styles.css`. The code is described in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+---
+
+## 🐛 Issues and contributing
+
+Bugs and feature requests go to [GitHub Issues](https://github.com/JamJan05/AI-Vault-for-Obsidian/issues). Please include your Obsidian version, operating system, AI-Vault version, the provider and model, steps to reproduce, and any console errors.
 
 > ⚠️ Never paste an API key, private note content or an unredacted console log into a public issue.
 
-Please include:
-
-- 🧱 Obsidian version
-- 💻 operating system
-- 🔖 AI-Vault version
-- 🤖 selected provider and model
-- 🧭 steps to reproduce
-- 🧾 relevant console errors, if available
-
----
-
-## 🤝 Contributing
-
-Pull requests are welcome. For larger changes, please open an issue first to discuss the proposed direction.
+Pull requests are welcome. For larger changes, open an issue first to discuss the direction.
 
 ---
 
