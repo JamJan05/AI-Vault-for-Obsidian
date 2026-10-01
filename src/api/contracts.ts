@@ -7,6 +7,7 @@
  */
 
 import type { LocalApiType } from "../settings";
+import type { ToolCall } from "../tools/types";
 
 // ─── Response shapes (validated with type guards) ───────────────────────────────
 
@@ -205,4 +206,47 @@ export function extractAnthropicText(event: Record<string, unknown>): string | n
 		) fragments.push(block.text);
 	}
 	return fragments.join("") || null;
+}
+
+// ─── Tool calls ─────────────────────────────────────────────────────────────────
+
+/**
+ * Anthropic Messages: the `tool_use` blocks the plugin has to answer. Server
+ * tools (`server_tool_use`, such as web search) are run by Anthropic and skipped.
+ */
+export function readAnthropicToolCalls(response: Record<string, unknown>): ToolCall[] {
+	if (!isUnknownArray(response.content)) return [];
+	const calls: ToolCall[] = [];
+	for (const block of response.content) {
+		if (!isRecord(block) || block.type !== "tool_use") continue;
+		if (typeof block.id !== "string" || !block.id || typeof block.name !== "string") continue;
+		calls.push({ id: block.id, name: block.name, input: block.input });
+	}
+	return calls;
+}
+
+/** Responses API: the raw `output` items, needed to answer function calls. */
+export function readOpenAIOutput(response: Record<string, unknown>): unknown[] {
+	return isUnknownArray(response.output) ? response.output : [];
+}
+
+/**
+ * Responses API: the `function_call` items. Arguments arrive as a JSON string;
+ * when it does not parse, `input` is undefined and the tool reports the error.
+ */
+export function readOpenAIToolCalls(response: Record<string, unknown>): ToolCall[] {
+	const calls: ToolCall[] = [];
+	for (const item of readOpenAIOutput(response)) {
+		if (!isRecord(item) || item.type !== "function_call") continue;
+		if (typeof item.call_id !== "string" || !item.call_id || typeof item.name !== "string") continue;
+
+		let input: unknown;
+		try {
+			input = typeof item.arguments === "string" ? JSON.parse(item.arguments) : undefined;
+		} catch {
+			input = undefined;
+		}
+		calls.push({ id: item.call_id, name: item.name, input });
+	}
+	return calls;
 }

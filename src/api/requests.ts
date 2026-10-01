@@ -14,6 +14,7 @@ import {
 } from "../models";
 import type { Effort } from "../models";
 import type { ChatMessage } from "../types";
+import type { ToolDefinition, ToolResult } from "../tools/types";
 
 export const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 export const OPENAI_CHAT_URL      = "https://api.openai.com/v1/chat/completions";
@@ -29,6 +30,8 @@ export interface RequestOptions {
 	mode:       string;
 	webSearch?: boolean;
 	maxTokens?: number;
+	/** Functions the model may ask the plugin to run. Omitted or empty: none. */
+	tools?:     readonly ToolDefinition[];
 }
 
 export interface OpenAIRequest {
@@ -81,7 +84,8 @@ function splitSystem(messages: ChatMessage[]): { system: string | null; turns: C
  * Picks the endpoint and builds the body for an OpenAI model.
  * - Reasoning models always use the Responses API.
  * - Classic models use Chat Completions, except with web search, which only the
- *   Responses API offers as a tool.
+ *   Responses API offers as a tool, and with note tools, so that one code path
+ *   handles tool calls for every model.
  */
 export function buildOpenAIRequest(options: RequestOptions): OpenAIRequest {
 	const profile   = resolveOpenAIProfile(options.model);
@@ -89,8 +93,9 @@ export function buildOpenAIRequest(options: RequestOptions): OpenAIRequest {
 	const tokens    = resolveTokens(options.mode, options.maxTokens);
 	const webSearch = Boolean(options.webSearch) && profile.webSearch;
 	const { system, turns } = splitSystem(options.messages);
+	const tools     = options.tools ?? [];
 
-	if (profile.effortByMode === null && !webSearch) {
+	if (profile.effortByMode === null && !webSearch && !tools.length) {
 		const chatMessages: { role: string; content: string }[] = [];
 		if (system) chatMessages.push({ role: "system", content: system });
 		chatMessages.push(...turns.map(m => ({ role: m.role, content: m.content })));
@@ -127,9 +132,49 @@ export function buildOpenAIRequest(options: RequestOptions): OpenAIRequest {
 	};
 	if (system) body.instructions = system;
 	if (effort) body.reasoning = { effort };
-	if (webSearch) body.tools = [{ type: "web_search" }];
+
+	const requestTools: unknown[] = [];
+	if (webSearch) requestTools.push({ type: "web_search" });
+	for (const tool of tools) {
+		requestTools.push({
+			type:        "function",
+			name:        tool.name,
+			description: tool.description,
+			parameters:  tool.parameters,
+			strict:      true,
+		});
+	}
+	if (requestTools.length) body.tools = requestTools;
+
+	// Nothing is stored on OpenAI's side, so the reasoning that led to a tool call
+	// has to travel back with the tool results. It comes encrypted, on request.
+	if (tools.length && profile.effortByMode !== null) body.include = ["reasoning.encrypted_content"];
 
 	return { endpoint: "responses", url: OPENAI_RESPONSES_URL, body };
+}
+
+/**
+ * Body for answering the function calls of a Responses API reply: the same
+ * request with the reply's output items and one result per call appended.
+ */
+export function buildOpenAIToolResults(
+	body:    Record<string, unknown>,
+	output:  unknown[],
+	results: ToolResult[],
+): Record<string, unknown> {
+	const input = Array.isArray(body.input) ? (body.input as unknown[]) : [];
+	return {
+		...body,
+		input: [
+			...input,
+			...output,
+			...results.map(result => ({
+				type:    "function_call_output",
+				call_id: result.id,
+				output:  result.content,
+			})),
+		],
+	};
 }
 
 // ─── Anthropic ────────────────────────────────────────────────────────────────
@@ -162,10 +207,16 @@ export function buildAnthropicRequest(options: RequestOptions): AnthropicRequest
 		body.max_tokens = tokens;
 	}
 
+	const requestTools: unknown[] = (options.tools ?? []).map(tool => ({
+		name:         tool.name,
+		description:  tool.description,
+		input_schema: tool.parameters,
+	}));
 	if (options.webSearch && profile.webSearchTool) {
 		// Server tool: Anthropic runs the searches on its side, within the same request.
-		body.tools = [{ type: profile.webSearchTool, name: "web_search" }];
+		requestTools.push({ type: profile.webSearchTool, name: "web_search" });
 	}
+	if (requestTools.length) body.tools = requestTools;
 
 	const betas: string[] = [];
 	if (profile.refusalFallback) {
@@ -190,5 +241,34 @@ export function buildAnthropicContinuation(
 	return {
 		...body,
 		messages: [...messages, { role: "assistant", content: assistantContent }],
+	};
+}
+
+/**
+ * Body for answering the tool calls of an Anthropic reply (`stop_reason: "tool_use"`):
+ * the same request with the assistant content — thinking blocks included, unchanged —
+ * and one result per call appended.
+ */
+export function buildAnthropicToolResults(
+	body:             Record<string, unknown>,
+	assistantContent: unknown[],
+	results:          ToolResult[],
+): Record<string, unknown> {
+	const messages = Array.isArray(body.messages) ? (body.messages as unknown[]) : [];
+	return {
+		...body,
+		messages: [
+			...messages,
+			{ role: "assistant", content: assistantContent },
+			{
+				role:    "user",
+				content: results.map(result => ({
+					type:        "tool_result",
+					tool_use_id: result.id,
+					content:     result.content,
+					...(result.isError ? { is_error: true } : {}),
+				})),
+			},
+		],
 	};
 }
