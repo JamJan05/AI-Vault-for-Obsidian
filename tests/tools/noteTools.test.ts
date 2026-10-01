@@ -39,7 +39,7 @@ function harness(options: HarnessOptions = {}): Harness {
 
 	const vault: NoteVault = {
 		configDir: ".obsidian",
-		listNotes: () => [...files.keys()].filter(path => path.endsWith(".md")),
+		listNotes: () => [...files.keys()].filter(path => path.endsWith(".md") || path.endsWith(".canvas")),
 		read:      async path => files.get(path) ?? null,
 		exists:    path => files.has(path),
 		replace:   async (path, expected, next, guard) => {
@@ -59,6 +59,7 @@ function harness(options: HarnessOptions = {}): Harness {
 		isAllowed: options.allowed ?? (() => true),
 		isIgnored: options.ignored ?? (() => false),
 		mayWrite:  options.mayWrite,
+		newCanvasId: (() => { let n = 0; return () => `id${++n}`; })(),
 		searchFragments: options.fragments ? async () => options.fragments ?? [] : undefined,
 		confirm: async change => {
 			proposed.push(change);
@@ -78,7 +79,9 @@ function harness(options: HarnessOptions = {}): Harness {
 describe("tool definitions", () => {
 	it("offer no way to delete, rename, move or run anything", () => {
 		const names = NOTE_TOOL_DEFINITIONS.map(tool => tool.name).sort();
-		assert.deepEqual(names, ["append_to_note", "create_note", "edit_note", "read_note", "search_notes"]);
+		assert.deepEqual(names, [
+			"append_to_note", "create_note", "edit_canvas", "edit_note", "read_canvas", "read_note", "search_notes",
+		]);
 	});
 
 	it("are valid strict schemas: every property required, nothing extra allowed", () => {
@@ -87,6 +90,13 @@ describe("tool definitions", () => {
 			assert.equal(tool.parameters.additionalProperties, false);
 			assert.deepEqual([...tool.parameters.required].sort(), Object.keys(tool.parameters.properties).sort());
 			assert.ok(tool.description.length > 20, tool.name);
+
+			// Strict mode needs the same of every object nested in a list.
+			for (const parameter of Object.values(tool.parameters.properties)) {
+				if (parameter.type !== "array" || parameter.items.type !== "object") continue;
+				assert.equal(parameter.items.additionalProperties, false);
+				assert.deepEqual([...parameter.items.required].sort(), Object.keys(parameter.items.properties).sort());
+			}
 		}
 	});
 
@@ -438,5 +448,144 @@ describe("create_note", () => {
 		}
 		assert.equal(h.files.size, 0);
 		assert.equal(h.proposed.length, 0);
+	});
+});
+
+describe("canvas tools", () => {
+	const CANVAS = JSON.stringify({
+		nodes: [
+			{ id: "a", type: "text", text: "Start", x: 0, y: 0, width: 200, height: 80, color: "3" },
+			{ id: "b", type: "file", file: "Plan.md", x: 300, y: 0, width: 200, height: 80 },
+		],
+		edges: [{ id: "e1", fromNode: "a", toNode: "b", label: "leads to" }],
+	});
+	const parse = (h: Harness, path: string): { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> } =>
+		JSON.parse(h.files.get(path) ?? "{}");
+
+	it("reads a canvas as cards with ids and connections, and records it as read", async () => {
+		const h = harness({ files: { "Map.canvas": CANVAS } });
+		const result = await h.run("read_canvas", { path: "Map.canvas" });
+		assert.equal(result.isError, false);
+		assert.match(result.content, /- \[a\] text card:\n {4}Start/);
+		assert.match(result.content, /- \[b\] file card: Plan\.md/);
+		assert.match(result.content, /- a -> b: "leads to"/);
+		assert.deepEqual(h.tools.log.read, ["Map.canvas"]);
+	});
+
+	it("keeps notes and canvases to their own tools", async () => {
+		const h = harness({ files: { "Map.canvas": CANVAS, "A.md": "text" } });
+		assert.match((await h.run("read_note", { path: "Map.canvas" })).content, /use read_canvas/);
+		assert.equal((await h.run("edit_note", { path: "Map.canvas", old_text: "Start", new_text: "x" })).isError, true);
+		assert.equal((await h.run("read_canvas", { path: "A.md" })).isError, true);
+		assert.equal((await h.run("edit_canvas", { path: "A.md", add_cards: [{ id: "n", text: "x" }] })).isError, true);
+		assert.equal(h.files.get("Map.canvas"), CANVAS);
+		assert.equal(h.files.get("A.md"), "text");
+	});
+
+	it("applies all changes after one confirmation and leaves everything else as it was", async () => {
+		const h = harness({ files: { "Map.canvas": CANVAS } });
+		const result = await h.run("edit_canvas", {
+			path: "Map.canvas",
+			add_cards:       [{ id: "new1", text: "Next step" }],
+			update_cards:    [{ id: "a", text: "Begin" }],
+			remove_cards:    [],
+			add_connections: [{ from: "a", to: "new1", label: "" }],
+		});
+		assert.equal(result.isError, false);
+		assert.equal(h.proposed.length, 1);
+
+		const canvas = parse(h, "Map.canvas");
+		assert.equal(canvas.nodes.length, 3);
+		assert.deepEqual(canvas.nodes[0], { id: "a", type: "text", text: "Begin", x: 0, y: 0, width: 200, height: 80, color: "3" });
+		assert.deepEqual(canvas.nodes[1], { id: "b", type: "file", file: "Plan.md", x: 300, y: 0, width: 200, height: 80 });
+		assert.equal(canvas.nodes[2].text, "Next step");
+		assert.equal(canvas.nodes[2].id, "id1");
+		assert.deepEqual(canvas.edges[0], { id: "e1", fromNode: "a", toNode: "b", label: "leads to" });
+		assert.equal(canvas.edges[1].fromNode, "a");
+		assert.equal(canvas.edges[1].toNode, "id1");
+	});
+
+	it("shows the user the cards before and after, not raw JSON", async () => {
+		const h = harness({ files: { "Map.canvas": CANVAS } });
+		await h.run("edit_canvas", { path: "Map.canvas", update_cards: [{ id: "a", text: "Begin" }] });
+		const preview = h.proposed[0].preview;
+		assert.ok(preview);
+		assert.match(preview.before, /Start/);
+		assert.match(preview.after, /Begin/);
+		assert.equal(preview.after.includes("{"), false);
+		assert.equal(h.proposed[0].before, CANVAS);
+	});
+
+	it("removes a card together with its connections", async () => {
+		const h = harness({ files: { "Map.canvas": CANVAS } });
+		await h.run("edit_canvas", { path: "Map.canvas", remove_cards: ["b"] });
+		const canvas = parse(h, "Map.canvas");
+		assert.deepEqual(canvas.nodes.map(node => node.id), ["a"]);
+		assert.deepEqual(canvas.edges, []);
+	});
+
+	it("creates a canvas that does not exist, as a creation", async () => {
+		const h = harness();
+		const result = await h.run("edit_canvas", { path: "New/Map.canvas", add_cards: [{ id: "n", text: "First" }] });
+		assert.equal(result.isError, false);
+		assert.equal(h.proposed[0].kind, "create");
+		assert.equal(parse(h, "New/Map.canvas").nodes.length, 1);
+		assert.deepEqual(h.tools.log.changed, [{ kind: "create", path: "New/Map.canvas" }]);
+	});
+
+	it("writes nothing when declined, and nothing when any part of the request is wrong", async () => {
+		const declined = harness({ files: { "Map.canvas": CANVAS }, approve: false });
+		await declined.run("edit_canvas", { path: "Map.canvas", remove_cards: ["a"] });
+		assert.equal(declined.files.get("Map.canvas"), CANVAS);
+
+		const h = harness({ files: { "Map.canvas": CANVAS } });
+		const bad: unknown[] = [
+			{ path: "Map.canvas" },
+			{ path: "Map.canvas", update_cards: [{ id: "zzz", text: "x" }] },
+			{ path: "Map.canvas", update_cards: [{ id: "b", text: "x" }] },
+			{ path: "Map.canvas", remove_cards: ["zzz"] },
+			{ path: "Map.canvas", add_cards: [{ id: "n", text: "ok" }], add_connections: [{ from: "n", to: "zzz", label: "" }] },
+			{ path: "Map.canvas", add_cards: [{ id: "a", text: "clash" }] },
+			{ path: "Map.canvas", add_cards: [{ id: "n" }] },
+			{ path: "Map.canvas", add_cards: "n" },
+			{ path: "Map.canvas", remove_cards: [1] },
+			{ path: "Map.canvas", add_connections: [{ from: "a", to: "a", label: "" }] },
+		];
+		for (const input of bad) assert.equal((await h.run("edit_canvas", input)).isError, true, JSON.stringify(input));
+		assert.equal(h.proposed.length, 0);
+		assert.equal(h.files.get("Map.canvas"), CANVAS);
+	});
+
+	it("never overwrites a file that is not a valid canvas", async () => {
+		const h = harness({ files: { "Broken.canvas": "{not json", "List.canvas": "[1,2]" } });
+		for (const path of ["Broken.canvas", "List.canvas"]) {
+			assert.equal((await h.run("edit_canvas", { path, add_cards: [{ id: "n", text: "x" }] })).isError, true, path);
+			assert.equal((await h.run("read_canvas", { path })).isError, true, path);
+		}
+		assert.equal(h.files.get("Broken.canvas"), "{not json");
+		assert.equal(h.proposed.length, 0);
+	});
+
+	it("obeys exclusions, hidden folders and marks like the note tools", async () => {
+		const h = harness({
+			files:    { "Private/Map.canvas": CANVAS, "Map.canvas": CANVAS },
+			ignored:  path => path.startsWith("Private/"),
+			mayWrite: () => false,
+		});
+		assert.equal((await h.run("read_canvas", { path: "Private/Map.canvas" })).isError, true);
+		assert.equal((await h.run("read_canvas", { path: ".obsidian/x.canvas" })).isError, true);
+		assert.equal((await h.run("read_canvas", { path: "../Map.canvas" })).isError, true);
+
+		const edit = await h.run("edit_canvas", { path: "Map.canvas", remove_cards: ["a"] });
+		assert.match(edit.content, /has not marked this note/);
+		assert.equal(h.files.get("Map.canvas"), CANVAS);
+		assert.equal(h.proposed.length, 0);
+	});
+
+	it("lists canvases in search", async () => {
+		const h = harness({ files: { "Map.canvas": CANVAS, "Map notes.md": "" } });
+		const result = await h.run("search_notes", { query: "map" });
+		assert.match(result.content, /- Map\.canvas/);
+		assert.match(result.content, /- Map notes\.md/);
 	});
 });

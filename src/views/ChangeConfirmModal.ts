@@ -36,7 +36,9 @@ export class ChangeConfirmModal extends Modal {
 		contentEl.createDiv({ cls: "gpt-change-path", text: change.path });
 
 		const diffEl = contentEl.createDiv({ cls: "gpt-change-diff" });
-		const rows   = collapseDiff(diffLines(change.before, change.after));
+		// A canvas is reviewed as its cards and connections, not as raw JSON.
+		const shown  = change.preview ?? change;
+		const rows   = collapseDiff(diffLines(shown.before, shown.after));
 		if (!rows.length) diffEl.createDiv({ cls: "gpt-change-gap", text: t("edit_modal_empty") });
 
 		for (const row of rows) {

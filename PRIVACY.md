@@ -128,7 +128,7 @@ including existing installs, and a notice says so once.
 
 Note editing is off by default. It needs the master switch in the settings and,
 for each conversation, the Edit button in the chat view. While both are on, the
-request also carries the definitions of five tools, and the model can ask the
+request also carries the definitions of seven tools, and the model can ask the
 plugin to run them:
 
 - `search_notes` — the paths of notes whose name or folder matches the model's
@@ -136,7 +136,11 @@ plugin to run them:
   1 500 characters each. With semantic search on, the query is also sent to
   OpenAI for embedding, like any RAG question.
 - `read_note` — the text of one Markdown note, up to 40 000 characters.
+- `read_canvas` — the cards of one canvas as text (their ids, text, linked files
+  and URLs) and its connections, up to 40 000 characters.
 - `edit_note`, `append_to_note`, `create_note` — change a note or create one.
+- `edit_canvas` — add text cards, change the text of text cards, remove cards and
+  add connections in a canvas, or create a canvas.
 
 **What this sends.** Whatever a tool returns goes to the selected provider in the
 next request of the same exchange: note paths, fragments and the text of every
@@ -145,7 +149,7 @@ be more than RAG would have attached. Every note read this way is listed under
 the answer as a source. The tool calls and their results are not saved in the
 conversation history and are not sent again with later messages; the answer is.
 
-**What stays out of reach.** Only `.md` files inside the vault, as Obsidian
+**What stays out of reach.** Only `.md` and `.canvas` files inside the vault, as Obsidian
 shows it: a folder you linked into the vault (a symlink or junction) is part of
 the vault, so exclude it with the ignored RAG paths if the model should not reach
 it. Not hidden
@@ -154,7 +158,10 @@ live), not paths matching your ignored RAG paths. There is no tool to delete,
 rename or move a file, and none to run a command or open a URL.
 
 **Which notes can be changed.** By default only notes you marked in a message
-typed into the conversation — `#Name`, `#Folder/Name` or `#[[Name with spaces]]`.
+typed into the conversation — `#Name` or `#Folder/Name`, with spaces written as
+hyphens (`#My-note`) or in brackets (`#[[My note]]`), optionally with `.md` or
+`.canvas`. A hyphen in a mark matches a space or a hyphen in the name; when that
+fits more than one file, none of them can be changed.
 The list is built from what you type in the chat box, never from note text, web
 pages, model replies, text sent by a command, or a conversation reopened from the
 history. A change to any other note is refused before it reaches the confirmation
@@ -163,7 +170,11 @@ on by default and is switched back on whenever the master switch is switched off
 Marks do not limit what the model can read.
 
 **What is written.** Each change is shown to you as a diff and is written only
-after you press Apply. The setting "Apply changes without asking" removes that
+after you press Apply. For a canvas the dialog shows its cards and connections
+as text, before and after; positions, sizes and colours are not shown. A canvas
+is never rewritten as free text: the plugin applies the requested card changes
+to the parsed file and keeps everything else, and a file that is not a valid
+canvas is refused, not overwritten. The setting "Apply changes without asking" removes that
 step; it is off by default, and switching the master switch off switches it off
 too. Changes are written with Obsidian's Vault API, and only if the note still
 has the text you were shown. Switching either switch off, or pressing Stop, ends

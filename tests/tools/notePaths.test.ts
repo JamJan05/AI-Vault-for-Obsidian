@@ -77,3 +77,24 @@ describe("resolveNotePath", () => {
 		if (!result.ok) assert.ok(result.reason.length > 0);
 	});
 });
+
+describe("resolveNotePath — canvases", () => {
+	it("accepts only .canvas files when a canvas is asked for", () => {
+		assert.deepEqual(resolveNotePath("Maps/Plan.canvas", ".obsidian", ".canvas"), { ok: true, path: "Maps/Plan.canvas" });
+		for (const path of ["Plan.md", "Plan", "Plan.canvas.json", ".canvas", "Maps/.canvas"]) {
+			assert.equal(resolveNotePath(path, ".obsidian", ".canvas").ok, false, path);
+		}
+	});
+
+	it("applies the same containment rules as for notes", () => {
+		for (const path of ["../Plan.canvas", "/Plan.canvas", ".obsidian/Plan.canvas", ".hidden/Plan.canvas", "a\\Plan.canvas"]) {
+			assert.equal(resolveNotePath(path, ".obsidian", ".canvas").ok, false, path);
+		}
+	});
+
+	it("does not accept a canvas where a note is asked for", () => {
+		const result = resolveNotePath("Plan.canvas", ".obsidian");
+		assert.equal(result.ok, false);
+		if (!result.ok) assert.match(result.reason, /read_canvas/);
+	});
+});

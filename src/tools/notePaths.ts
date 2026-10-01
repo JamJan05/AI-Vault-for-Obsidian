@@ -12,6 +12,8 @@ const MAX_PATH_CHARS = 1024;
 /** Characters Obsidian does not allow in a file name. */
 const FORBIDDEN_CHARS = /[*"<>:|?]/;
 
+export type NoteExtension = ".md" | ".canvas";
+
 export type NotePathResult =
 	| { ok: true;  path: string }
 	| { ok: false; reason: string };
@@ -21,10 +23,11 @@ function refuse(reason: string): NotePathResult {
 }
 
 /**
- * Turns a path given by a model into a vault-relative path of a Markdown note.
+ * Turns a path given by a model into a vault-relative path of a Markdown note,
+ * or of a canvas when `extension` says so.
  * @param configDir Obsidian's configuration folder (`vault.configDir`)
  */
-export function resolveNotePath(raw: unknown, configDir: string): NotePathResult {
+export function resolveNotePath(raw: unknown, configDir: string, extension: NoteExtension = ".md"): NotePathResult {
 	if (typeof raw !== "string") return refuse("The path must be a string.");
 
 	const trimmed = raw.trim();
@@ -45,10 +48,12 @@ export function resolveNotePath(raw: unknown, configDir: string): NotePathResult
 		if (segment !== segment.trim()) return refuse("A path segment starts or ends with a space.");
 	}
 
-	if (!/\.md$/i.test(trimmed)) {
-		return refuse("Only Markdown notes can be used. The path must end with .md.");
+	if (!trimmed.toLowerCase().endsWith(extension)) {
+		return refuse(extension === ".md"
+			? "Only Markdown notes can be used here. The path must end with .md. For a canvas, use read_canvas and edit_canvas."
+			: "Only canvases can be used here. The path must end with .canvas. For a note, use the note tools.");
 	}
-	if (segments[segments.length - 1].length <= ".md".length) return refuse("The note has no name.");
+	if (segments[segments.length - 1].length <= extension.length) return refuse("The file has no name.");
 
 	const config = (configDir ?? "").trim().replace(/^\/+|\/+$/g, "").toLowerCase();
 	if (config) {

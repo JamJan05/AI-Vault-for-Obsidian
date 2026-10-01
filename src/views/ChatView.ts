@@ -93,7 +93,7 @@ interface PreparedPrompt {
 
 /** A note's name without its folders and extension, as shown on a chip. */
 function noteLabel(path: string): string {
-	return path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/i, "");
+	return path.slice(path.lastIndexOf("/") + 1).replace(/\.(md|canvas)$/i, "");
 }
 
 /** The notes an exchange changed, one entry per note. */
@@ -949,8 +949,7 @@ export class GPTChatView extends ItemView {
 	 * user has turned the marking requirement off.
 	 */
 	private resolveWriteTargets(): WriteTargets {
-		const notes = this.plugin.app.vault.getMarkdownFiles()
-			.map(file => file.path)
+		const notes = createNoteVault(this.plugin.app).listNotes()
 			.filter(path => !this.rag.isIgnoredPath(path));
 		const targets = resolveWriteTargets(this.noteMarks, notes);
 		if (this.markRequired && targets.ambiguous.length) {

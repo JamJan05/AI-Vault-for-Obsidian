@@ -5,10 +5,26 @@
  * whether to run it; nothing here executes anything.
  */
 
-export interface ToolParameter {
+export interface ToolStringParameter {
 	type:        "string";
 	description: string;
 }
+
+/** A list of strings, or of objects whose fields are all required strings. */
+export interface ToolArrayParameter {
+	type:        "array";
+	description: string;
+	items:
+		| { type: "string" }
+		| {
+			type:                 "object";
+			properties:           Record<string, ToolStringParameter>;
+			required:             string[];
+			additionalProperties: false;
+		};
+}
+
+export type ToolParameter = ToolStringParameter | ToolArrayParameter;
 
 export interface ToolDefinition {
 	name:        string;

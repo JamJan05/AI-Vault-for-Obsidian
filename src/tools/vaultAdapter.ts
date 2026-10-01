@@ -12,7 +12,9 @@ export function createNoteVault(app: App): NoteVault {
 		configDir: vault.configDir,
 
 		// Only reached from a tool call, which needs the user's switch in the chat view.
-		listNotes: () => vault.getMarkdownFiles().map(file => file.path),
+		listNotes: () => vault.getFiles()
+			.filter(file => file.extension === "md" || file.extension === "canvas")
+			.map(file => file.path),
 
 		async read(path: string): Promise<string | null> {
 			const file = vault.getFileByPath(path);

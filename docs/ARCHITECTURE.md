@@ -494,10 +494,11 @@ and `stop_reason: "pause_turn"` is resumed up to three times. The extractor conc
 
 ### 5.5a Note tools (`src/tools/`)
 
-Opt-in tools that let a model read and change Markdown notes. `noteTools.ts` holds the five
+Opt-in tools that let a model read and change Markdown notes. `noteTools.ts` holds the tool
 definitions and the code that runs a call; it reaches the vault only through the `NoteVault`
 interface (`vaultAdapter.ts` implements it with Obsidian's Vault API), so it is unit tested against
-an in-memory vault. `notePaths.ts` validates every path a model names, `diff.ts` builds the diff
+an in-memory vault. `canvas.ts` parses a `.canvas` file and applies card changes to it, `writeTargets.ts` resolves the
+`#name` marks that decide which files may be written. `notePaths.ts` validates every path a model names, `diff.ts` builds the diff
 shown in `ChangeConfirmModal`. The provider side is in `src/api/`: `requests.ts` adds the
 definitions to a request and builds the follow-up body with the results, `contracts.ts` reads the
 calls from a reply, `toolLoop.ts` runs them one after another and caps the rounds. `ChatView`

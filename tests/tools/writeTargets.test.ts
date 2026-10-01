@@ -18,8 +18,8 @@ describe("parseNoteMarks", () => {
 		assert.deepEqual(parseNoteMarks("#Plan dopisz\n#Lista"), ["plan", "lista"]);
 	});
 
-	it("drops trailing punctuation and the .md extension", () => {
-		assert.deepEqual(parseNoteMarks("zmień #Plan, potem #Lista.md. A #Trzy!"), ["plan", "lista", "trzy"]);
+	it("drops trailing punctuation and keeps an extension", () => {
+		assert.deepEqual(parseNoteMarks("zmień #Plan, potem #Lista.md. A #Mapa.canvas!"), ["plan", "lista.md", "mapa.canvas"]);
 	});
 
 	it("takes only the note from a wikilink with a heading or an alias", () => {
@@ -27,7 +27,7 @@ describe("parseNoteMarks", () => {
 	});
 
 	it("does not repeat a mark", () => {
-		assert.deepEqual(parseNoteMarks("#Plan #plan #PLAN.md"), ["plan"]);
+		assert.deepEqual(parseNoteMarks("#Plan #plan #PLAN"), ["plan"]);
 	});
 
 	it("ignores headings, anchors inside words and URLs", () => {
@@ -73,6 +73,29 @@ describe("resolveWriteTargets", () => {
 		assert.deepEqual(resolveWriteTargets(["projekty/plan"], ["Plan.md", "Projekty/Plan.md"]).paths, ["Projekty/Plan.md"]);
 	});
 
+	it("reads a hyphen as a space, so a name with spaces needs no brackets", () => {
+		const files = ["Omówienie darksouls.md", "Gry/Lista do ogrania.md", "a-b.md"];
+		assert.deepEqual(resolveWriteTargets(parseNoteMarks("#omówienie-darksouls"), files).paths, ["Omówienie darksouls.md"]);
+		assert.deepEqual(resolveWriteTargets(parseNoteMarks("#Gry/lista-do-ogrania"), files).paths, ["Gry/Lista do ogrania.md"]);
+		assert.deepEqual(resolveWriteTargets(parseNoteMarks("#[[Omówienie darksouls]]"), files).paths, ["Omówienie darksouls.md"]);
+		assert.deepEqual(resolveWriteTargets(parseNoteMarks("#a-b"), files).paths, ["a-b.md"]);
+	});
+
+	it("allows neither of two notes that differ only by hyphen and space", () => {
+		const targets = resolveWriteTargets(["moja-notatka"], ["Moja notatka.md", "Moja-notatka.md"]);
+		assert.deepEqual(targets.paths, []);
+		assert.deepEqual(targets.ambiguous, ["moja-notatka"]);
+	});
+
+	it("tells a note from a canvas of the same name by the extension", () => {
+		const files = ["Plan.md", "Plan.canvas", "Mapa.canvas"];
+		assert.deepEqual(resolveWriteTargets(["plan"], files).ambiguous, ["plan"]);
+		assert.deepEqual(resolveWriteTargets(["plan.md"], files).paths, ["Plan.md"]);
+		assert.deepEqual(resolveWriteTargets(["plan.canvas"], files).paths, ["Plan.canvas"]);
+		assert.deepEqual(resolveWriteTargets(["mapa"], files).paths, ["Mapa.canvas"]);
+		assert.deepEqual(resolveWriteTargets(["mapa.md"], files).newNames, ["mapa.md"]);
+	});
+
 	it("treats a name that matches no note as a note that may be created", () => {
 		const targets = resolve("#Nowa #Projekty/Nowa");
 		assert.deepEqual(targets.paths, []);
@@ -107,6 +130,15 @@ describe("mayWrite", () => {
 		assert.equal(mayWrite(targets, "Raport.md", "create"), false);
 		assert.equal(mayWrite(targets, "Inne/Raport.md", "create"), false);
 		assert.equal(mayWrite(targets, "Sneaky.md", "create"), false);
+	});
+
+	it("lets a new name be a note or a canvas, unless the mark says which", () => {
+		const open = resolveWriteTargets(parseNoteMarks("#Nowa-mapa #Tylko.canvas"), notes);
+		assert.equal(mayWrite(open, "Nowa mapa.md", "create"), true);
+		assert.equal(mayWrite(open, "Nowa mapa.canvas", "create"), true);
+		assert.equal(mayWrite(open, "Nowa-mapa.canvas", "create"), true);
+		assert.equal(mayWrite(open, "Tylko.canvas", "create"), true);
+		assert.equal(mayWrite(open, "Tylko.md", "create"), false);
 	});
 
 	it("does not let a mark for an existing note create another note of that name", () => {
