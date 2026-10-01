@@ -6,12 +6,15 @@ import type { ProposedChange } from "../tools/noteTools";
 
 const MARKERS = { same: " ", removed: "−", added: "+" } as const;
 
+export type ChangeDecision = "apply" | "apply-all" | "reject";
+
 /**
  * Shows a change the model wants to make and asks whether to write it.
- * Closing the dialog in any other way than the Apply button declines the change.
+ * Closing the dialog in any other way than an Apply button declines the change.
+ * "Apply all" also accepts the changes still to come in the same answer.
  */
 export class ChangeConfirmModal extends Modal {
-	private accepted = false;
+	private decision: ChangeDecision = "reject";
 	private decided  = false;
 	private readonly onAbort = (): void => this.close();
 
@@ -19,7 +22,7 @@ export class ChangeConfirmModal extends Modal {
 		app: App,
 		private readonly change: ProposedChange,
 		private readonly signal: AbortSignal | null,
-		private readonly onDecision: (accepted: boolean) => void,
+		private readonly onDecision: (decision: ChangeDecision) => void,
 	) {
 		super(app);
 	}
@@ -59,9 +62,15 @@ export class ChangeConfirmModal extends Modal {
 			.createEl("button", { text: t("edit_modal_reject") })
 			.addEventListener("click", () => this.close());
 		buttons
+			.createEl("button", { text: t("edit_modal_apply_all"), attr: { title: t("edit_modal_apply_all_tip") } })
+			.addEventListener("click", () => {
+				this.decision = "apply-all";
+				this.close();
+			});
+		buttons
 			.createEl("button", { text: t("edit_modal_apply"), cls: "mod-cta" })
 			.addEventListener("click", () => {
-				this.accepted = true;
+				this.decision = "apply";
 				this.close();
 			});
 	}
@@ -71,6 +80,6 @@ export class ChangeConfirmModal extends Modal {
 		this.contentEl.empty();
 		if (this.decided) return;
 		this.decided = true;
-		this.onDecision(this.accepted && !this.signal?.aborted);
+		this.onDecision(this.signal?.aborted ? "reject" : this.decision);
 	}
 }

@@ -8,7 +8,8 @@
   or add, change, remove and connect the cards of a canvas. It needs two
   switches — "Let the model read and edit notes" in the settings, and the Edit button in the chat
   view, which is off again in every new or reopened conversation. Each change is shown as a diff
-  and written only after you press Apply; "Apply changes without asking" is a separate setting,
+  and written only after you press Apply — or "Apply all in this answer", which also accepts the
+  remaining changes of the same answer; "Apply changes without asking" is a separate setting,
   off by default. By default the model can change only notes you named in a message as `#Name`,
   `#Folder/Name`, `#Name-with-spaces` or `#[[Name with spaces]]`. An optional setting extends a
   mark to the notes the marked note links to. Changed notes are listed under the answer, and notes the model read are listed

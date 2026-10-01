@@ -41,6 +41,7 @@ import { createNoteVault } from "../tools/vaultAdapter";
 import { resolveNotePath } from "../tools/notePaths";
 import { addLinkedTargets, mayWrite, parseNoteMarks, resolveWriteTargets } from "../tools/writeTargets";
 import { ChangeConfirmModal } from "./ChangeConfirmModal";
+import type { ChangeDecision } from "./ChangeConfirmModal";
 import { ConfirmModal } from "./ConfirmModal";
 import { FallbackModal } from "./FallbackModal";
 import { ModelPicker } from "./ModelPicker";
@@ -987,6 +988,20 @@ export class GPTChatView extends ItemView {
 		const allowed = (): boolean =>
 			!signal.aborted && conversation === this.conversation && this.noteToolsUsable;
 
+		// Set by "Apply all" in the dialog. It belongs to this answer only: the next
+		// message gets a new tool set and asks again.
+		let applyRest = false;
+		const confirm = async (change: ProposedChange): Promise<boolean> => {
+			if (!allowed()) return false;
+			if (applyRest || this.settings.noteEditingAutoApply) return true;
+
+			const decision = await new Promise<ChangeDecision>(resolve => {
+				new ChangeConfirmModal(this.plugin.app, change, signal, resolve).open();
+			});
+			if (decision === "apply-all") applyRest = true;
+			return decision !== "reject";
+		};
+
 		return createNoteTools({
 			vault:     createNoteVault(this.plugin.app),
 			// Live, not a snapshot: either switch going off, or Stop, ends tool use at once.
@@ -1002,16 +1017,8 @@ export class GPTChatView extends ItemView {
 				if (kind === "create" && !targets.paths.includes(path)) targets.paths.push(path);
 				return true;
 			},
-			confirm:    change => allowed() ? this.confirmChange(change, signal) : Promise.resolve(false),
+			confirm,
 			onActivity: (activity, detail) => this.showToolActivity(bubble, activity, detail),
-		});
-	}
-
-	private confirmChange(change: ProposedChange, signal: AbortSignal): Promise<boolean> {
-		if (this.settings.noteEditingAutoApply) return Promise.resolve(true);
-
-		return new Promise<boolean>(resolve => {
-			new ChangeConfirmModal(this.plugin.app, change, signal, resolve).open();
 		});
 	}
 

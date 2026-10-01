@@ -176,7 +176,10 @@ Marks do not limit what the model can read.
 
 **What is written.** Each change is shown to you as a diff and is written only
 after you press Apply. For a canvas the dialog shows its cards and connections
-as text, before and after; positions, sizes and colours are not shown. A canvas
+as text, before and after; positions, sizes and colours are not shown. The
+button "Apply all in this answer" accepts the change shown and every later change
+of the same answer without showing them; they are still limited to the notes you
+marked, and are listed under the answer. The next message asks again. A canvas
 is never rewritten as free text: the plugin applies the requested card changes
 to the parsed file and keeps everything else, and a file that is not a valid
 canvas is refused, not overwritten. The setting "Apply changes without asking" removes that
