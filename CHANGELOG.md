@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.6.1] - 2026-10-02
+
+A maintenance release with corrected texts. Nothing changes in what the plugin sends or stores.
+
+### Fixed
+- English interface texts: missing articles ("outside the vault"), setting names in sentence case
+  ("OpenAI API key", "Chat history"), one name for the Think mode in the chat and the settings,
+  "1 chat" instead of "1 chats" when a project is deleted, a clearer hint for writing `#name`
+  marks with spaces, and notices that point to the developer console instead of "F12".
+- Polish interface: the right word form for the number of chats unlinked when a project is
+  deleted ("1 rozmowę", "2 rozmowy", "5 rozmów").
+
+### Changed
+- The README opens with what the plugin does, that the AI can fill in notes (GPT and Claude
+  only, for now), and a table of what leaves your computer in each setup — local model, OpenAI or
+  Claude, and semantic search.
+
 ## [1.6.0] - 2026-10-01
 
 ### Added
