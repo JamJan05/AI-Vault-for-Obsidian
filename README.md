@@ -1,19 +1,36 @@
 # ✨ AI-Vault for Obsidian
 
-Chat with **OpenAI GPT**, **Anthropic Claude** and **local models** inside Obsidian. AI-Vault can use your notes and canvases as context, and — only if you switch it on — change them with your approval. History, projects and the search index stay on your machine.
+**Talk to your notes.** Ask a question and get an answer built from what you have already written — with links back to the exact fragments it used. Use **OpenAI GPT**, **Anthropic Claude** or a **model running on your own computer**, all from one chat panel inside Obsidian.
+
+**Let it write, too.** Switch on note editing and the AI can fill in your notes and canvases — add a section, fix a passage, create a new note. By default you see every change as a diff and nothing is saved until you approve it. For now this works with GPT and Claude models; local models can chat but not edit.
+
+**You decide how private it is.** AI-Vault has no server, no account and no telemetry: it does not collect analytics, crash reports or any identifier. It only talks to the AI services you set up, and only when you do something. Run a local model with semantic search off and nothing leaves your machine at all.
+
+---
+
+## 🔒 You choose the privacy level
+
+| Setup | What leaves your computer |
+| --- | --- |
+| 🖥️ **Local model** (LM Studio, Ollama, … running on your computer) | Nothing, as long as semantic search is off. The chat, the vault search and the history all stay on your machine, and it works offline. |
+| ☁️ **OpenAI or Claude** | Your message, the conversation, and the note fragments used as context — sent only to the provider you chose, with your own API key. |
+| 🧠 **+ Semantic search** (opt-in) | The text of every indexed note and each question you ask with RAG on, sent to OpenAI for embeddings — whichever chat model you use, a local one included. Off by default; turning it on asks you to confirm. |
+
+Whichever you pick, the plugin itself never phones home. Conversation history, projects and the search index are stored on your disk — by default outside the vault, so Obsidian Sync does not copy them unless you choose otherwise. Notes you want to keep private can be kept out of the index, automatic context and note editing with [ignored paths](#-ignored-rag-paths); a note you attach yourself with the paperclip is still sent. Details: [Privacy and storage](#-privacy-and-storage) and [`PRIVACY.md`](PRIVACY.md).
 
 ---
 
 ## 🚀 Highlights
 
 - 🤖 **One chat, three providers** — OpenAI, Anthropic, or a local server (LM Studio, Ollama and other OpenAI-compatible servers), picked from one list.
-- 📚 **Vault context** — RAG finds the relevant fragments of your notes and canvases; you can also attach notes by hand. Sources are listed under each answer and open the note at the fragment that was used.
-- ✏️ **Note editing (opt-in)** — the model can read notes and canvases and propose changes, which you approve as a diff.
+- 📚 **Answers from your vault** — RAG finds the relevant fragments of your notes and canvases; you can also attach notes by hand. Sources are listed under each answer and open the note at the fragment that was used.
+- ✏️ **Note editing (opt-in)** — the model can read notes and canvases and propose changes, which you approve as a diff. Off until you switch it on; for now GPT and Claude only.
 - 🗂️ **Projects and history** — conversations are saved automatically; a project groups chats and gives them their own system prompt.
 - 🧠 **Modes** — Fast, Normal or Think; Chat, Learn (with quizzes) or Code.
 - 🌐 **Web search** — run by OpenAI or Anthropic on their side.
 - 👀 **No surprises** — a line above the input says what the next message will send, and to whom.
 - 🌍 **English and Polish** interface.
+- 💸 **Free and open source** (MIT). You pay only your AI provider, if you use one.
 
 ---
 
